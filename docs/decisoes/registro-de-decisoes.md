@@ -98,11 +98,11 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 
 ## D. Perguntas bloqueantes
 
-Uma pergunta bloqueia o início da Etapa 1: a aprovação da Etapa 0 e da stack proposta. As demais pendências bloqueiam marcos posteriores e serão perguntadas quando o marco se aproximar.
+A Etapa 0 e a stack foram validadas pelo responsável em 28/09/2026 ("Pode seguir em frente"). Os parâmetros da seção B seguem adotados provisoriamente com os valores propostos até validação individual. As demais pendências bloqueiam marcos posteriores e serão perguntadas quando o marco se aproximar.
 
 | Pergunta | Bloqueia | Necessária até |
 |---|---|---|
-| Aprovação da Etapa 0 e da stack proposta | Etapa 1 | Agora |
+| Aprovação da Etapa 0 e da stack proposta | Etapa 1 | Recebida em 28/09/2026 |
 | Domínio de email corporativo dos colaboradores e provedor de email (Microsoft 365, Google Workspace ou outro) | Envio de convites reais e decisão sobre SSO e calendário | Fim da Etapa 1 |
 | Nome e email do primeiro administrador | Bootstrap em homologação | Fim da Etapa 1 |
 | Upload do resultado da pesquisa | Painel com dados históricos | Etapa 4 |
@@ -119,4 +119,5 @@ Uma pergunta bloqueia o início da Etapa 1: a aprovação da Etapa 0 e da stack 
 | 28/09/2026 | Revisão independente 1 (cobertura de requisitos): aceito com correções, 24 achados, 12 obrigatórios; todos aplicados na mesma data | Executor |
 | 28/09/2026 | Revisão independente 2 (adversarial técnica): aceito com correções, 30 achados, 1 bloqueante e 9 de alta severidade; todos incorporados ao modelo de dados, à política DIR, à arquitetura e à matriz de permissões na mesma data; itens 1, 3, 4, 6 e 9 reapresentados para nova revisão | Executor |
 | 28/09/2026 | Reapresentação dos itens críticos a terceiro revisor: aprovado com ajustes, cinco grupos verificados em banco e no código do Better Auth; todos incorporados na mesma data | Executor |
+| 28/09/2026 | Etapa 0 e stack validadas pelo responsável; parâmetros propostos adotados provisoriamente; Etapa 1 iniciada | Responsável e Executor |
 | 28/09/2026 | Planta recebida e extraída; inventário preliminar de 84 mesas, 3 salas, 2 booths, 4 cabines, 1 mesa aberta, marcado como não validado; PDF mantido fora do repositório | Executor |

@@ -12,7 +12,7 @@ Atualizado em 28/09/2026. Branch de trabalho: `claude/new-session-0rzo0n`.
 
 ## Etapa 0 (definição)
 
-Status: entregue pelo Executor em 28/09/2026. Duas revisões independentes concluídas na mesma data, ambas com veredito "aceito com correções"; os 54 achados foram aplicados. Reapresentação dos cinco itens críticos a um terceiro revisor: aprovado com ajustes, verificados em banco e no código do Better Auth; ajustes aplicados. Registro completo em `testes/aceite.md`. Aguarda validação do responsável para iniciar a Etapa 1.
+Status: entregue pelo Executor em 28/09/2026. Duas revisões independentes concluídas na mesma data, ambas com veredito "aceito com correções"; os 54 achados foram aplicados. Reapresentação dos cinco itens críticos a um terceiro revisor: aprovado com ajustes, verificados em banco e no código do Better Auth; ajustes aplicados. Registro completo em `testes/aceite.md`. Validada pelo responsável em 28/09/2026.
 
 Entregue: toda a documentação listada em `docs/README.md` e o `CLAUDE.md` com invariantes.
 
@@ -30,7 +30,6 @@ Não há código, portanto não há testes de software. Verificações realizada
 
 | Pendência | Bloqueia | Não bloqueia |
 |---|---|---|
-| Validação da Etapa 0 pelo responsável | Início da Etapa 1 | |
 | Validação da planta por Facilities e RH (84 ou 90 mesas, códigos, capacidades, atributos) | Mapa definitivo e publicação do inventário (Etapa 2, aceite final) | Motor de reservas, mesas exclusivas e testes de concorrência, que usam o inventário preliminar marcado como não validado |
 | Domínio de email corporativo e provedor de envio | Envio de convites reais (Etapa 1, homologação) | Desenvolvimento do fluxo de convite com envio simulado |
 | Hospedagem, região e banco gerenciado | Homologação e produção (Etapa 5) | Etapas 1 a 4 em ambiente local |
@@ -39,6 +38,10 @@ Não há código, portanto não há testes de software. Verificações realizada
 
 Registro completo em `decisoes/registro-de-decisoes.md`.
 
+## Etapa 1 (fundação)
+
+Status: iniciada em 28/09/2026. Escopo e aceite em `operacao/plano-de-entregas.md`. O progresso é registrado nesta seção a cada entrega parcial.
+
 ## Próximo passo
 
-Validação da Etapa 0. Após validação, Etapa 1 (fundação): projeto, autenticação, permissões, colaboradores, proteção do CPF, identidade visual e ambientes.
+Concluir a Etapa 1 com testes executados, revisão independente e aceite registrado.
