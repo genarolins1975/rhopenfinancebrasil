@@ -1,0 +1,27 @@
+# Portal do Colaborador da Associação Open Finance Brasil
+
+Domínio adquirido: rhopenfinancebrasil.com. Repositório iniciado em 2026 09 28 na Etapa 0 (definição). Ainda não há código de aplicação.
+
+## Estado atual
+Consulte `docs/00-estado-do-projeto.md` antes de qualquer ação. Ele registra o que foi feito, testado, revisado e o que falta.
+
+## Comandos reais
+Nenhum comando de aplicação existe ainda. Serão registrados aqui na Etapa 1, junto com o projeto. Não invente comandos.
+
+## Invariantes do projeto (não negociáveis)
+1. Toda regra de autorização e disponibilidade vive no servidor. A interface só reflete o que o servidor decidiu.
+2. Mesa com política exclusiva nunca aparece como disponível, recomendada, oferecida pela fila ou reservável para quem não é titular ou integrante autorizado, salvo exceção vigente registrada. Ausência do titular não libera a mesa.
+3. Política de acesso, situação operacional e reserva são dimensões separadas. Nenhum campo único representa as três.
+4. Toda mutação que envolve mesa (reserva, cancelamento, atribuição exclusiva, exceção, bloqueio, manutenção) serializa por recurso na mesma transação e revalida antes de confirmar. Ordem de locks documentada em `docs/dados/modelo-de-dados.md`.
+5. Conflito nunca é resolvido em silêncio: reservas incompatíveis são exibidas e tratadas com decisão explícita, motivo e trilha de auditoria.
+6. CPF é dado separado, cifrado em repouso, mascarado por padrão, ausente de logs, URLs, analytics, erros, notificações, exportações comuns e dados de demonstração.
+7. Cadastro fechado. Não existe autorregistro. Convite individual, expirável e de uso único.
+8. Instantes em UTC; datas e regras em `America/Sao_Paulo`; relógio do servidor.
+9. Dados dos PDFs históricos são referências agregadas, nunca base de usuários ou séries individuais.
+10. Nenhuma publicação em produção, alteração de DNS, envio em massa ou contratação sem autorização explícita registrada em `docs/decisoes/registro-de-decisoes.md`.
+
+## Regras de execução
+Executor e Revisor são papéis separados. Cada entrega: especificar, implementar, testar, revisar, corrigir, testar novamente, registrar aceite em `docs/testes/aceite.md`. Reportar apenas testes realmente executados.
+
+## Mapa da documentação
+`docs/README.md`

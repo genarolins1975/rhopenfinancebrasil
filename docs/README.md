@@ -1,0 +1,18 @@
+# Documentação do Portal do Colaborador
+
+| Arquivo | Conteúdo |
+|---|---|
+| `00-estado-do-projeto.md` | Estado consolidado: feito, testado, revisado, pendente |
+| `fontes/base-documental.md` | Fontes disponíveis, fontes ausentes e integridade dos dados de pesquisa e planta |
+| `produto/mapa-do-produto.md` | Objetivo, escopo, arquitetura de informação, navegação e estados de tela |
+| `arquitetura/arquitetura.md` | Stack recomendada com versões verificadas, módulos, ambientes, custos e dependências |
+| `dados/modelo-de-dados.md` | Entidades, constraints, índices, transações, ordem de locks, retenção |
+| `permissoes/matriz-de-permissoes.md` | Perfis, permissões nomeadas, separação de atribuições, acesso emergencial |
+| `mesas-exclusivas/politica-dir.md` | Regras `DIR-001` em diante, ordem de cálculo de disponibilidade, fluxos administrativos e conflitos |
+| `telas/telas-prioritarias.md` | Telas prioritárias com estados obrigatórios, com destaque para Exclusividade da diretoria |
+| `decisoes/registro-de-decisoes.md` | Requisitos aprovados, parâmetros propostos pendentes e perguntas bloqueantes |
+| `decisoes/riscos.md` | Riscos com evidência, inferência e mitigação |
+| `testes/matriz-requisito-implementacao-teste.md` | Rastreabilidade requisito, implementação e teste |
+| `testes/aceite.md` | Registro de aceite por entrega, incluindo revisão independente |
+| `operacao/plano-de-entregas.md` | Etapas, critérios de aceite e sequência |
+| `operacao/privacidade-e-protecao-de-dados.md` | Finalidade, acesso, retenção e decisões pendentes de base legal |
