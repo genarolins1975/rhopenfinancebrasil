@@ -19,6 +19,9 @@ Nenhum comando de aplicação existe ainda. Serão registrados aqui na Etapa 1, 
 8. Instantes em UTC; datas e regras em `America/Sao_Paulo`; relógio do servidor.
 9. Dados dos PDFs históricos são referências agregadas, nunca base de usuários ou séries individuais.
 10. Nenhuma publicação em produção, alteração de DNS, envio em massa ou contratação sem autorização explícita registrada em `docs/decisoes/registro-de-decisoes.md`.
+11. Verificar formato e dígitos do CPF não verifica identidade. CPF nunca é chave pública, nome de usuário, componente de senha ou resposta de recuperação. Nenhuma senha deriva de CPF ou de sufixo fixo.
+12. O sistema jamais exibe senhas atuais a ninguém, ADM incluído. Registra eventos de segurança, não senhas nem tokens.
+13. Intenção presencial não garante mesa. Ausência de reserva não indica falta ao trabalho. Confirmação de uso não é presença física, ponto nem produtividade.
 
 ## Regras de execução
 Executor e Revisor são papéis separados. Cada entrega: especificar, implementar, testar, revisar, corrigir, testar novamente, registrar aceite em `docs/testes/aceite.md`. Reportar apenas testes realmente executados.

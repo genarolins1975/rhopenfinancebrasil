@@ -12,7 +12,7 @@ Atualizado em 28/09/2026. Branch de trabalho: `claude/new-session-0rzo0n`.
 
 ## Etapa 0 (definição)
 
-Status: entregue pelo Executor em 28/09/2026 e submetida ao Revisor independente na mesma data. Resultado e correções em `testes/aceite.md`.
+Status: entregue pelo Executor em 28/09/2026. Duas revisões independentes concluídas na mesma data, ambas com veredito "aceito com correções"; os 54 achados foram aplicados. Reapresentação dos cinco itens críticos do modelo transacional e da fronteira de autenticação em curso. Registro em `testes/aceite.md`. Aguarda validação do responsável.
 
 Entregue: toda a documentação listada em `docs/README.md` e o `CLAUDE.md` com invariantes.
 
@@ -24,7 +24,7 @@ Não há código, portanto não há testes de software. Verificações realizada
 
 * Versões de pacotes consultadas no registro npm em 28/09/2026 (tabela em `arquitetura/arquitetura.md`).
 * Documentação oficial consultada em 28/09/2026: cronograma de releases do Node.js, política de versões do PostgreSQL, instalação do Next.js, opções e plugins do Better Auth, cheat sheet OWASP de armazenamento de senhas, páginas de preços de Vercel, Neon, Railway e Supabase.
-* Revisão independente de coerência entre documentos e requisitos do prompt (registro em `testes/aceite.md`).
+* Revisão independente 1 (cobertura de requisitos) e revisão independente 2 (adversarial técnica, com cenários SQL executados pelo revisor no PostgreSQL 16 local), ambas concluídas em 28/09/2026; registro em `testes/aceite.md`.
 
 ## Pendências e o que cada uma bloqueia
 

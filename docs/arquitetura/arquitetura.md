@@ -4,25 +4,25 @@ Referência: 28/09/2026. Projeto novo, sem stack anterior a respeitar. Direção
 
 ## Stack proposta com versões verificadas
 
-| Componente | Escolha | Versão verificada | Fonte e data | Observação |
+| Componente | Escolha | Versão verificada | Publicação da versão no registro npm (consulta em 28/09/2026) | Observação |
 |---|---|---|---|---|
-| Runtime | Node.js 24 (Active LTS) | 24 em Active LTS até 20/10/2026, manutenção até 30/04/2028 | nodejs/Release `schedule.json`, 28/09/2026 | Ambiente atual tem 22.22.2 (Maintenance LTS até 30/04/2027), compatível com tudo abaixo |
-| Framework | Next.js (App Router) | 16.3.6 | npm, 27/09/2026; docs exigem Node 20.9 ou superior | Turbopack padrão; lint não roda no build |
-| UI | React | 19.3.0 | npm, 23/09/2026 | |
-| Linguagem | TypeScript | a definir na Etapa 1 entre 5.9 e 7.0.2 conforme compatibilidade do toolchain do Next | npm, 28/09/2026 | |
-| Banco | PostgreSQL 18 | 18.6, suportado até 14/11/2030 | postgresql.org/support/versioning, 28/09/2026 | Se o provedor não oferecer 18, usar 17 (suporte até 08/11/2029). Ambiente local tem 16.13 para testes |
-| Acesso a dados | Drizzle ORM com driver `pg` | `drizzle-orm` 0.45.3, `drizzle-kit` 0.31.11, `pg` 8.23.0 | npm, 21/09/2026 e 08/08/2026 | 1.0 está em release candidate; ficar na linha estável |
-| Autenticação | Better Auth | 1.7.6 | npm, 24/09/2026 | Plugins: two factor, admin, have i been pwned; SSO depois |
-| Hash de senha | Argon2id via `@node-rs/argon2` | 2.2.1 | npm, 10/09/2026 | Better Auth usa scrypt por padrão; será substituído por `password.hash` e `password.verify` |
-| Fila e agendamento | `pg-boss` | 12.35.0, exige Node 22.12 ou superior | npm, 26/09/2026 | Roda sobre o próprio PostgreSQL |
-| Validação | zod | 4.6.5 | npm, 25/09/2026 | |
-| Datas | `date-fns` e `@date-fns/tz` | 4.4.0 e 1.5.0 | npm, 29/05/2026 e 21/05/2026 | Interpretação em `America/Sao_Paulo` |
-| Estilo | Tailwind CSS com tokens em variáveis CSS | 4.3.3 | npm, 25/09/2026 | |
-| Testes | Vitest, Playwright, axe | 5.0.2, 1.63.0, `@axe-core/playwright` 4.13.0 | npm, 25/09/2026, 28/09/2026, 02/09/2026 | Integração com PostgreSQL real |
-| Logs | pino com redação de campos | 10.3.1 | npm, 15/08/2026 | |
-| Email | nodemailer (SMTP) atrás de interface própria | 10.0.12 | npm, 28/09/2026 | Provedor pendente de decisão |
+| Runtime | Node.js 24 (Active LTS) | 24 em Active LTS até 20/10/2026, manutenção até 30/04/2028 | Cronograma oficial nodejs/Release, consultado em 28/09/2026 | Ambiente atual tem 22.22.2 (Maintenance LTS até 30/04/2027), compatível com tudo abaixo |
+| Framework | Next.js (App Router) | 16.3.6 | 22/09/2026; a documentação exige Node 20.9 ou superior | Turbopack padrão; lint não roda no build |
+| UI | React | 19.3.0 | 09/09/2026 | |
+| Linguagem | TypeScript | a definir na Etapa 1 entre a linha 5.9 e a 7.0.2 conforme compatibilidade do toolchain do Next | 7.0.2 publicada em 08/07/2026 | |
+| Banco | PostgreSQL 18 | 18.6, suportado até 14/11/2030 | Política de versões em postgresql.org, consultada em 28/09/2026 | Se o provedor não oferecer 18, usar 17 (suporte até 08/11/2029). Ambiente local tem 16.13 para testes |
+| Acesso a dados | Drizzle ORM com driver `pg` | `drizzle-orm` 0.45.3, `drizzle-kit` 0.31.11, `pg` 8.23.0 | 21/09/2026, 21/09/2026 e 08/08/2026 | 1.0 está em release candidate; ficar na linha estável |
+| Autenticação | Better Auth | 1.7.6 | 24/09/2026 | Plugins: two factor, admin, have i been pwned; SSO depois. Peer dependencies aceitam Next 16, `drizzle-orm` 0.45 e `pg` 8 |
+| Hash de senha | Argon2id via `@node-rs/argon2` | 2.2.1 | 10/09/2026 | Better Auth usa scrypt por padrão; será substituído por `password.hash` e `password.verify` |
+| Fila e agendamento | `pg-boss` | 12.35.0, exige Node 22.12 ou superior | 26/09/2026 | Roda sobre o próprio PostgreSQL |
+| Validação | zod | 4.6.5 | 13/09/2026 | |
+| Datas | `date-fns` e `@date-fns/tz` | 4.4.0 e 1.5.0 | 29/05/2026 e 21/05/2026 | Interpretação em `America/Sao_Paulo` |
+| Estilo | Tailwind CSS com tokens em variáveis CSS | 4.3.3 | 16/07/2026 | |
+| Testes | Vitest, Playwright, axe | 5.0.2, 1.63.0, `@axe-core/playwright` 4.13.0 | 25/09/2026, 04/09/2026 e 11/08/2026 | Integração com PostgreSQL real |
+| Logs | pino com redação de campos | 10.3.1 | 09/02/2026 | |
+| Email | nodemailer (SMTP) atrás de interface própria | 10.0.12 | 28/09/2026 | Provedor pendente de decisão |
 
-Alternativas avaliadas: Prisma 7.10.0 (Prisma 8 em RC) no lugar do Drizzle; descartada por preferir SQL explícito para constraints de exclusão, locks e triggers. Kysely 0.29.6 como query builder puro; descartado por não trazer migrações integradas. Auth.js e provedores gerenciados (Auth0, Clerk, Keycloak) no lugar do Better Auth; Auth.js não gerencia senha local, os gerenciados implicam contratação e envio de dados de identidade a terceiro sem decisão do encarregado.
+Alternativas avaliadas: Prisma 7.10.0 (publicada em 25/08/2026; Prisma 8 em RC) no lugar do Drizzle; descartada por preferir SQL explícito para constraints de exclusão, locks e triggers. Kysely 0.29.6 (16/09/2026) como query builder puro; descartado por não trazer migrações integradas. Auth.js e provedores gerenciados (Auth0, Clerk, Keycloak) no lugar do Better Auth; Auth.js não gerencia senha local, os gerenciados implicam contratação e envio de dados de identidade a terceiro sem decisão do encarregado.
 
 ## Por que Better Auth atende aos requisitos de acesso
 
@@ -34,7 +34,11 @@ Verificado na documentação oficial em 28/09/2026:
 * `requireEmailVerification`, `revokeSessionsOnPasswordReset`, `resetPasswordTokenExpiresIn` cobrem verificação, revogação e validade de tokens.
 * Limitação de tentativas com armazenamento em banco (não em memória) e regras por rota.
 * Plugin two factor com TOTP e códigos de recuperação; a obrigatoriedade para perfis administrativos será imposta por hook no servidor antes de qualquer rota `/admin`.
-* Plugin admin fornece `createUser`, `banUser`, `revokeUserSessions`, `setUserPassword`. Serão chamados apenas do lado do servidor, depois da verificação de permissão própria do portal. `impersonateUser` não será habilitado.
+* O plugin admin não será montado (`DEC-13`). Montá-lo exporia no handler `/api/auth/*` os endpoints `impersonate-user`, `set-user-password`, `set-role` e `remove-user`, autorizados por um campo `user.role` paralelo à matriz do portal. Criação de `user`, bloqueio de login e revogação de sessões são feitos pelo adaptador interno do Better Auth (`auth.$context.internalAdapter`) dentro do serviço de colaboradores, depois de `can()`, com auditoria. O bloqueio de login é derivado de `employee.status` por hook de sessão, não de um campo `banned`. Não existe impersonação nem interface que defina senha de terceiros; o fluxo padrão é o convite, no qual a própria pessoa define a senha e ninguém, ADM incluído, vê senhas.
+* O handler de autenticação aceita do cliente apenas uma lista explícita de caminhos (entrar, sair, sessão, segundo fator, esqueci e redefinir senha, trocar senha, verificar email, trocar email); qualquer outro caminho responde 404. Teste `AUT-09-T1` comprova para toda sessão humana, `admin` e `tech_admin` incluídos.
+* `session.cookieCache` desativado: toda mutação e toda rota `/admin` revalidam sessão, `employee.status` e concessões no banco; revogação e desativação valem na requisição seguinte (`AUT-12-T1`).
+* `advanced.ipAddress.ipAddressHeaders` restrito ao cabeçalho que a plataforma escolhida garante; além do limitador por IP do Better Auth, contador por conta em tabela própria chaveado por hash do email normalizado, janela deslizante, resposta neutra (`PAR-11`, `AUT-11-T1`).
+* `user.email` só muda pelo fluxo `changeEmail` com confirmação no endereço antigo. Editar o email de pessoa ainda `invited` revoga todos os convites; perfis privilegiados só tomam efeito depois que a pessoa está `active` com segundo fator (`PAR-33`), o que fecha a tomada de conta por reenvio de convite (`AUT-10-T1`).
 * Plugin have i been pwned bloqueia senhas comprometidas enviando apenas os cinco primeiros caracteres do SHA1 (k anonimato). Depende de aceite do encarregado, pois envolve chamada a serviço externo.
 * Plugin SSO (OIDC, SAML) pode ser adicionado depois sem alterar o esquema de usuários, o que prepara a integração com identidade corporativa sem presumir fornecedor.
 
@@ -77,7 +81,7 @@ Regras: componentes não decidem autorização nem disponibilidade; toda mutaç�
 | Homologação | Instância própria | Sintéticos | Provedor em modo restrito a lista de destinatários de teste | RH, Facilities, ADM designados |
 | Produção | Instância própria, backups e teste de restauração | Reais | Provedor com SPF, DKIM e DMARC | Colaboradores |
 
-Segredos fora do repositório, por ambiente. Chave de cifra do CPF e chave do HMAC separadas entre si e do banco.
+Segredos fora do repositório, por ambiente. Chave de cifra do CPF e chave do HMAC separadas entre si e do banco, com custódia própria e versão. Endereço, porta e credenciais de email existem apenas como segredo de ambiente na implantação, nunca em tela: a tela de integrações cobre remetente, modelos e envio de teste, e qualquer alteração de provedor notifica todos os administradores e entra em auditoria. Isso impede que `integration.manage` redirecione convites e recuperações de senha.
 
 ## Domínio e publicação
 
@@ -93,7 +97,7 @@ Bucket privado compatível com S3, provedor pendente. Validação de tipo por as
 
 ## Custo operacional indicativo
 
-Preços de lista consultados nas páginas oficiais em 28/09/2026, em dólares, sem impostos, sem compromisso. Não são cotação.
+Preços de lista consultados nas páginas oficiais em 28/09/2026, em dólares, sem impostos, sem compromisso. Não são cotação. Premissas das faixas: até 150 contas, uso concentrado em horário comercial, banco abaixo de 5 GB no primeiro ano, tráfego da ordem de dezenas de milhares de requisições por dia, anexos pequenos. Fora dessas premissas as faixas não valem.
 
 | Opção | Componentes | Custo mensal de lista |
 |---|---|---|
@@ -102,7 +106,7 @@ Preços de lista consultados nas páginas oficiais em 28/09/2026, em dólares, s
 | C | Supabase Pro (USD 25, banco de 8 GB, backups diários de 7 dias; restauração pontual USD 100 adicionais) mais hospedagem da aplicação em A ou B | Entre USD 45 e USD 130 |
 | D | Servidor virtual com Docker Compose (aplicação, PostgreSQL, `pg-boss`) | Depende do provedor; exige operação própria de backup e atualização |
 
-Pontos a validar antes de escolher: região de dados no Brasil, política de backup e restauração, contrato de tratamento de dados com o provedor, custo de email transacional e de armazenamento privado. Recomendação preliminar: opção A ou B para piloto, por baixo custo e operação simples; decisão registrada como pendente.
+Pontos a validar antes de escolher: região de dados no Brasil, política de backup e restauração, contrato de tratamento de dados com o provedor, disponibilidade da extensão `btree_gist` e da configuração de `timezone` por papel, custo de email transacional e de armazenamento privado. Recomendação preliminar: opção A ou B para piloto, por baixo custo e operação simples; decisão registrada como pendente.
 
 ## Observabilidade e operação
 
@@ -111,7 +115,8 @@ Logs estruturados com redação de CPF, tokens, senhas e conteúdo de atendiment
 ## Testes
 
 * Unitários: regras puras (cálculo de disponibilidade, vigências, supressão de grupos pequenos, normalização de CPF).
-* Integração com PostgreSQL real: constraints, triggers, transações, ordem de locks, idempotência.
+* Integração com PostgreSQL real: existência das constraints e da extensão no catálogo (`DB-01`), triggers de lock e deferidos, transações, ordem de locks, idempotência, expiração preguiçosa de retenções, e um teste que remove o lock da aplicação e comprova que o banco ainda rejeita coexistência (`DIR-024-T2`).
+* Fuso horário: relógio simulado às 21:00, 23:59 e 00:00 de Brasília para vigências, exceções, convites e intervalos de dia inteiro (`DIR-029-T1`).
 * Concorrência: sessões distintas disparando reserva e trava simultâneas com barreira de sincronização; disputa pela última vaga com N clientes.
 * Ponta a ponta: Playwright com axe em cada fluxo prioritário.
 * Sem daemon Docker nesta sessão; a integração usará o cluster PostgreSQL 16 local. Em CI, container oficial do PostgreSQL 18.

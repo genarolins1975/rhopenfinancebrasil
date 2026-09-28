@@ -99,15 +99,41 @@ Atalho permanente "Preciso de ajuda" no cabeçalho, disponível em todas as tela
 | `/admin/configuracoes` | Calendário do escritório, janela de abertura, prazos, categorias, textos |
 | `/admin/auditoria` | Eventos de auditoria com filtros |
 
-## Estados obrigatórios de toda tela
+## Padrão de estados de toda tela
 
-Cada tela documentada em `../telas/telas-prioritarias.md` define comportamento para: carregamento, ausência de dados, sucesso, erro, conflito, indisponibilidade, conexão perdida e permissão insuficiente. Regras gerais:
+Toda tela implementa os oito estados abaixo. `../telas/telas-prioritarias.md` registra apenas o que difere deste padrão.
 
-* Nenhum botão sem função. Ação que não existe ainda não aparece.
-* Confirmação só aparece após persistência confirmada pelo servidor.
-* Conflito mostra o que colidiu e o que o usuário pode fazer.
-* Permissão insuficiente informa que a ação não está disponível para o perfil, sem revelar dados do recurso protegido.
-* Conexão perdida preserva o rascunho local do formulário quando seguro e reenvia com chave de idempotência.
+| Estado | Comportamento padrão |
+|---|---|
+| Carregamento | Esqueleto com a estrutura da tela, ações desabilitadas, anúncio de carregamento para leitor de tela; após 10 segundos, aviso de demora com opção de tentar de novo |
+| Ausência de dados | Mensagem específica do contexto com a ação primária que resolve a ausência; nunca uma tabela vazia sem texto |
+| Sucesso | Confirmação exibida somente após o servidor persistir; o texto diz o que foi feito e o próximo passo; o foco vai para a mensagem |
+| Erro | Mensagem sem detalhes técnicos, com identificador da requisição para suporte; dados do formulário preservados; ação de tentar de novo |
+| Conflito | Lista do que colidiu (data, recurso, pessoa quando permitido) e as opções devolvidas pelo serviço de disponibilidade; nada aplicado parcialmente |
+| Indisponibilidade | Serviço fora ou em manutenção: leitura a partir do último estado carregado, com aviso datado; escrita desabilitada; nada exibido como disponível por padrão |
+| Conexão perdida | Aviso persistente; rascunho preservado localmente quando não contém dado sensível; reenvio com a mesma chave de idempotência ao reconectar |
+| Permissão insuficiente | "Esta ação não está disponível para o seu perfil", sem revelar dados do recurso protegido; caminho para pedir ajuda ao RH |
+
+Regras gerais: nenhum botão sem função; ação inexistente não aparece; nenhuma regra depende somente de cor ou de hover.
+
+## Requisitos de experiência das Etapas 3 e 4
+
+Registrados aqui para não se perderem até a especificação detalhada dessas etapas.
+
+| Área | Requisito | Fonte |
+|---|---|---|
+| Fila | Ao expirar uma oferta, o servidor processa automaticamente a próxima pessoa elegível; a ação manual do ADM é complementar | Prompt §12 |
+| Salas e cabines | Orientação de convivência para reduzir reuniões nas mesas, publicada no guia e no detalhe das cabines | Prompt §13 |
+| Atendimento | O usuário escolhe assunto e local; o encaminhamento para RH, Facilities ou TI é automático, sem exigir conhecimento do organograma | Prompt §14 |
+| Atendimento | Transições de status permitidas com motivos; mensagens ao solicitante separadas de notas internas; reclassificação sem expor conteúdo confidencial à nova equipe | Prompt §14 |
+| Atendimento | Indicadores de tempo de resposta, tempo de resolução, recorrência e satisfação; queda de chamados nunca é lida isoladamente como melhoria | Prompt §19 |
+| Ergonomia e conforto | Solicitações concretas (mouse, apoio para pés, ajuste de cadeira, avaliação da estação); sem pedir diagnósticos; motivos de adaptações individuais nunca publicados | Prompt §15 |
+| Ruído e temperatura | Relatos apresentados como percepções, nunca como medições instrumentais | Prompt §15 |
+| Copa | Relatar indisponibilidade, pedir reposição, responder consultas ocasionais; sem reserva de micro ondas nem vigilância de horários | Prompt §15 |
+| Integração | Atividades voluntárias em fase posterior; sem ranking de felicidade, saúde, engajamento ou assiduidade | Prompt §15 |
+| Benefícios | Só serviços confirmados pela Associação são publicados | Prompt §16 |
+| Conteúdo | Busca, anexos e resultados respeitam o controle de acesso da página original; documentos privados nunca em diretórios públicos | Prompt §16 |
+| Escuta | Respostas nunca conectadas a CPF, reservas ou histórico de utilização para avaliar indivíduos; sem respostas individuais a gestores por padrão | Prompt §17 |
 
 ## Acessibilidade
 

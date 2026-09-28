@@ -21,13 +21,19 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `REQ-13` | Serviço central de disponibilidade; identidade da sessão; unicidade em banco; serialização por recurso com ordem de locks, revalidação e repetição; UTC e `America/Sao_Paulo` | Prompt §11 |
 | `REQ-14` | Liberação temporária por dias inteiros, retorno automático pela vigência, sem contornar manutenção ou fechamento | Prompt §10.5 |
 | `REQ-15` | Confirmação de uso como declaração, nunca prova de presença ou ponto; liberação automática desativada até o piloto e jamais removendo exclusividade | Prompt §12 |
-| `REQ-16` | Pesquisas identificadas e confidenciais; "anônima" só após demonstração técnica; supressão abaixo de dez respondentes como parâmetro inicial; sem entrega de respostas individuais a gestores por padrão | Prompt §17 |
+| `REQ-16` | Pesquisas identificadas e confidenciais; "anônima" só após demonstração técnica; sem entrega de respostas individuais a gestores por padrão; respostas nunca conectadas a CPF, reservas ou histórico para avaliar indivíduos | Prompt §17 |
 | `REQ-17` | Indicadores sem dupla contagem; toda taxa com numerador, denominador, período, fonte e limitações; sem ranking de funcionários | Prompt §19 |
 | `REQ-18` | Notificações via outbox após commit, idempotentes, com visibilidade de falhas | Prompt §20 |
 | `REQ-19` | Sem DNS, produção, envio em massa, contratação ou migração destrutiva sem autorização explícita | Prompt §22 |
 | `REQ-20` | Testes de concorrência com sessões distintas; os 15 casos da tabela de aceite bloqueiam a entrega se falharem | Prompt §23 |
 | `REQ-21` | Nenhuma planta fictícia tratada como definitiva; mapa definitivo só após aprovação de Facilities e RH | Prompt §9 e §24 |
 | `REQ-22` | Integridade dos dados da pesquisa: metodologia preservada, sem NPS, divergência de copa exibida com origem | Prompt §2 |
+| `REQ-23` | Verificar formato e dígitos do CPF não verifica identidade; CPF não é chave pública, nome de usuário, componente de senha nem resposta de recuperação; senha nunca deriva de CPF ou de sufixo fixo | Prompt §6 e §7 |
+| `REQ-24` | Senhas atuais jamais exibidas ao ADM; registro de eventos de segurança, não de senhas ou tokens; primeiro administrador por procedimento controlado, sem credencial fixa no código | Prompt §7 |
+| `REQ-25` | Intenção presencial não garante mesa; ausência de reserva não indica falta ao trabalho; nenhuma presença ou confirmação gerada automaticamente | Prompt §8 |
+| `REQ-26` | Fila processa automaticamente a próxima pessoa elegível ao expirar oferta; encaminhamento de atendimento sem exigir organograma; transições de status com motivos; notas internas separadas; reclassificação sem expor conteúdo confidencial; ocorrências agrupadas sem identidades | Prompt §12 e §14 |
+| `REQ-27` | Relatos de ruído e temperatura como percepções; copa sem reserva de micro ondas nem vigilância; sem diagnósticos nem publicação de motivos de adaptações; integração voluntária; só serviços confirmados pela Associação; indicadores de atendimento sem ler queda de chamados como melhoria; sem ranking | Prompt §15, §16 e §19 |
+| `REQ-28` | Buscas, anexos, exportações e endpoints auxiliares sob o mesmo controle de acesso; documentos privados fora de diretórios públicos | Prompt §5 e §16 |
 
 ## B. Parâmetros propostos (pendentes de validação)
 
@@ -35,7 +41,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 |---|---|---|---|---|
 | `PAR-01` | Abertura de reservas | Quinta às 10h para a semana seguinte | RH e Facilities | Configurável em `office_settings` |
 | `PAR-02` | Unidade de reserva de mesa | Dia inteiro | RH | |
-| `PAR-03` | Limite de reservas de mesa por pessoa e dia | Uma, inclusive para diretor | RH | `DIR-012` |
+| `PAR-03` | Diretor sujeito ao limite de uma reserva efetiva de mesa por dia; a unicidade por pessoa e data no banco é requisito (`REQ-13`), não parâmetro | Sim | RH | `DIR-012` |
 | `PAR-04` | Confirmação atômica da semana | Tudo ou nada, com opção de aceitar seleção menor | RH | |
 | `PAR-05` | Prazo de oferta da fila | 2 horas úteis dentro do calendário do escritório | RH e Facilities | Configurável |
 | `PAR-06` | Liberação automática por falta de confirmação de uso | Desativada | RH | Nunca remove exclusividade |
@@ -47,7 +53,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-12` | Tamanho máximo de anexo | 10 MB, tipos PDF, PNG, JPG, DOCX, XLSX | Facilities, RH e TI | |
 | `PAR-13` | Supressão de resultados de pesquisa | Mínimo 10 respondentes por recorte, mais regra contra diferença entre totais | RH e encarregado | |
 | `PAR-14` | Retenção | Ver `../dados/modelo-de-dados.md` | Encarregado e jurídico | |
-| `PAR-15` | Visibilidade do nome do titular de mesa exclusiva | Somente RH, ADM e o próprio titular | RH e diretoria | `DIR-008` |
+| `PAR-15` | Visibilidade do nome do titular de mesa exclusiva | RH, ADM autorizado e o próprio titular por padrão; Facilities só por concessão de `exclusive.holder.view` | RH e diretoria | `DIR-008` |
 | `PAR-16` | Dupla aprovação para conceder `admin` e `tech_admin` | Exigida | ADM | |
 | `PAR-17` | Categorias de atendimento | Infraestrutura, tecnologia, ergonomia, ruído, temperatura, copa, benefícios, assuntos de RH; assuntos de RH com fluxo restrito | RH, Facilities e TI | |
 | `PAR-18` | Limites de duração e capacidade de salas e cabines | Nenhum fixado; configuração por recurso | Facilities | |
@@ -55,6 +61,20 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-20` | Verificação de senha comprometida por serviço externo com k anonimato | Ativada | Encarregado | Envia cinco caracteres do SHA1 |
 | `PAR-21` | Uso do CPF na importação | Obrigatório por linha, com HMAC para duplicidade | RH e encarregado | |
 | `PAR-22` | Indicador de copa no painel | Consolidado da página 8 (17%) com nota da divergência | Facilities | `REQ-22` |
+| `PAR-23` | Titular de atribuição individual | Somente pessoa ativa com condição organizacional de diretor | RH | Sem exceção prevista |
+| `PAR-24` | Máscara do CPF | Apenas os dois últimos dígitos visíveis | RH e encarregado | |
+| `PAR-25` | Reservas futuras na desativação | Canceladas com notificação ao gestor e às áreas afetadas | RH | Prompt exige regra explícita, não define qual |
+| `PAR-26` | Acesso do titular durante liberação nominal | Titular não reserva a mesa nas datas liberadas a outra pessoa; reservas existentes viram conflito tratado | RH e diretoria | `DIR-031` |
+| `PAR-27` | Campo responsável na atribuição | Distinto do ator da sessão, que é registrado automaticamente | RH | |
+| `PAR-28` | Categoria de atendimento para pedido de liberação de mesa exclusiva | Incluída nas categorias de RH | RH | Complementa `PAR-17` |
+| `PAR-29` | Isenções da janela de abertura | Realocação e cancelamento administrativos isentos; titular de mesa exclusiva sujeito à janela | RH | `DIR-019` passo 2b |
+| `PAR-30` | Inscrição na fila por quem já tem reserva na data | Negada; troca de mesa fica para etapa posterior | RH | |
+| `PAR-31` | Piso de supressão de resultados de pesquisa | 10 respondentes, constante de código, não configurável por nenhum perfil | RH e encarregado | Complementa `PAR-13` |
+| `PAR-32` | Sufixo do CPF gravado em claro para mascarar sem decifrar | Dois últimos dígitos em coluna própria, fora de exportações | Encarregado | |
+| `PAR-33` | Perfis e permissões privilegiados | Só tomam efeito para pessoa ativa com segundo fator ativo | ADM | |
+| `PAR-34` | Tempo máximo de espera por lock em transação de reserva | 3 segundos, com nova tentativa | ADM técnico | |
+| `PAR-35` | Duração máxima de uma liberação temporária | 30 dias corridos | RH | Acima disso, encerrar a atribuição |
+| `PAR-36` | Readmissão e CPF após exclusão | Mesmo cadastro reutilizado; ao apagar o CPF o HMAC permanece para impedir duplicidade | RH e encarregado | |
 
 ## C. Decisões técnicas propostas
 
@@ -72,10 +92,12 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-10` | Armazenamento privado compatível com S3; provedor a definir | | Pendente |
 | `DEC-11` | Executor e Revisor como subagentes independentes desta sessão; quando indisponíveis, ciclos separados declarados | | Adotada na Etapa 0 |
 | `DEC-12` | Lint com ESLint e regras de acessibilidade; formatação com Prettier | Biome | Proposta |
+| `DEC-13` | Plugin admin do Better Auth não montado; operações administrativas de identidade pelo adaptador interno após `can()`; handler de autenticação com lista explícita de caminhos; cache de sessão em cookie desativado | Montar o plugin com `adminRoles` vazio | Proposta |
+| `DEC-14` | Lock por recurso imposto por trigger no banco, além do protocolo da aplicação; estado de atribuição derivado da vigência; expiração preguiçosa de retenções | Confiar só na disciplina do código | Proposta |
 
 ## D. Perguntas bloqueantes
 
-Nenhuma pergunta bloqueia o início da Etapa 1. As pendências abaixo bloqueiam marcos específicos e serão perguntadas quando o marco se aproximar.
+Uma pergunta bloqueia o início da Etapa 1: a aprovação da Etapa 0 e da stack proposta. As demais pendências bloqueiam marcos posteriores e serão perguntadas quando o marco se aproximar.
 
 | Pergunta | Bloqueia | Necessária até |
 |---|---|---|
@@ -93,4 +115,6 @@ Nenhuma pergunta bloqueia o início da Etapa 1. As pendências abaixo bloqueiam 
 |---|---|---|
 | 28/09/2026 | Etapa 0 entregue como documentação no repositório, sem código, para validação antes de implementar | Executor |
 | 28/09/2026 | Inventário sintético com prefixo `DEMO` até a planta oficial | Executor |
+| 28/09/2026 | Revisão independente 1 (cobertura de requisitos): aceito com correções, 24 achados, 12 obrigatórios; todos aplicados na mesma data | Executor |
+| 28/09/2026 | Revisão independente 2 (adversarial técnica): aceito com correções, 30 achados, 1 bloqueante e 9 de alta severidade; todos incorporados ao modelo de dados, à política DIR, à arquitetura e à matriz de permissões na mesma data; itens 1, 3, 4, 6 e 9 reapresentados para nova revisão | Executor |
 | 28/09/2026 | Planta recebida e extraída; inventário preliminar de 84 mesas, 3 salas, 2 booths, 4 cabines, 1 mesa aberta, marcado como não validado; PDF mantido fora do repositório | Executor |

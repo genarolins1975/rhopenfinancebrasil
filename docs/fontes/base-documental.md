@@ -17,9 +17,9 @@ Os valores abaixo são evidência apenas na medida em que o prompt os transcreve
 
 | Item | Valor | Origem declarada |
 |---|---|---|
-| Respostas | 75 | PDF, página 5 |
+| Respostas | 75 | PDF, página não declarada no prompt |
 | Participação | 55,1% | PDF, página 5 |
-| Áreas | 21 | PDF, página 5 |
+| Áreas | 21 | PDF, página não declarada no prompt |
 | Satisfação média | 4,6 em escala de 1 a 5 | PDF, página 5 |
 | Ruído | 32 menções, 43% | PDF, página 8 |
 | Capacidade | 27 menções, 36% | PDF, página 8 |
@@ -33,8 +33,7 @@ Os valores abaixo são evidência apenas na medida em que o prompt os transcreve
 
 * Os percentuais do consolidado são coerentes com denominador 75 respondentes: 32/75 = 42,7%; 27/75 = 36,0%; 14/75 = 18,7%; 13/75 = 17,3%; 9/75 = 12,0%. Logo, o percentual é "respondentes que mencionaram o tema", não "parcela de insatisfeitos".
 * Copa com 19% na página 13 corresponde a 14/75. A divergência provavelmente vem de uma menção contada a mais na página temática. Isso é hipótese; a fonte original decide.
-* Com 55,1% de participação e 75 respostas, a população convidada fica em torno de 136 pessoas (75/0,551 = 136,1). É estimativa derivada, não dado da fonte.
-* Com 90 posições de staff na planta e cerca de 136 pessoas, a relação é de aproximadamente 0,66 mesa por pessoa. Só faz sentido após confirmar os dois números na fonte.
+* População convidada e relação entre mesas e pessoas não serão derivadas da participação. Esses números só entram no produto quando vierem diretamente da fonte.
 
 ## Regras de integridade que a aplicação obedecerá
 

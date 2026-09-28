@@ -46,7 +46,7 @@ Referência: 28/09/2026. Ordem de prioridade de implementação. Estados obrigat
 
 ## 5. Detalhe do recurso
 
-Estado para o usuário na data, razão do estado (primeiro impedimento da ordem de cálculo), atributos verificados, ação permitida. Para o titular: "Sua mesa de uso exclusivo". Para os demais em mesa exclusiva: rótulo sem botão e, quando permitido, nome do titular.
+Estado para o usuário na data, razão do estado (primeiro impedimento da ordem de cálculo), atributos verificados, ação permitida. Para o titular: "Sua mesa de uso exclusivo". Para os demais em mesa exclusiva: rótulo literal `Uso exclusivo — Diretoria` sem botão e, quando permitido, nome do titular.
 
 ## 6. Minhas reservas e fila
 
@@ -80,35 +80,45 @@ Tabela de recursos (ID, tipo, zona, política de uso, beneficiário quando permi
 +==========================================================================+
 | ADM  >  Escritório  >  Mesas  >  Exclusividade da diretoria              |
 +==========================================================================+
+| Abas: [Mesas] [Grupo diretoria] [Conflitos pendentes] [Histórico]        |
 | Filtros: [Compartilhadas] [Exclusivas individuais] [Exclusivas de grupo] |
 |          [Bloqueadas] [Manutenção] [Vínculo a revisar]   Busca: [______] |
 +===============================+==========================================+
 | Tabela (ou mapa)              | Painel da mesa selecionada               |
-| ID  Zona  Política  Benef.    | M045 · Zona B · Exclusiva individual     |
-| M044 B   Compart.   ...       | Titular: [nome se permitido]             |
-| M045 B   Excl. ind. J. Silva  | Vigência: 01/10/2026 até sem término     |
-| M046 B   Excl. grupo Diretoria| Situação: operacional                    |
-| M047 C   Compart.   (manut.)  | Pendências: 2 reservas incompatíveis     |
+| ID    Zona  Política  Benef.  | [cód] · [zona] · Exclusiva individual    |
+| [cód] [z]   Compart.  ...     | Titular: [nome, se permitido]            |
+| [cód] [z]   Excl.ind. [nome]  | Vigência: [início] até sem término       |
+| [cód] [z]   Excl.gr.  [grupo] | Situação: operacional                    |
+| [cód] [z]   Compart. (manut.) | Pendências: [n] reservas incompatíveis   |
 | ...                           |                                          |
-|                               | Ações: [Transferir] [Encerrar]           |
-|                               |        [Liberar temporariamente]         |
-|                               |        [Histórico] [Conflitos]           |
+|                               | Ações (mesa compartilhada):              |
+|                               |   [Travar agora] [Agendar trava]         |
+|                               | Ações (mesa exclusiva):                  |
+|                               |   [Transferir] [Encerrar]                |
+|                               |   [Liberar temporariamente]              |
+|                               |   [Histórico] [Conflitos]                |
 +===============================+==========================================+
-| Seleção em lote: 3 mesas   [Travar para grupo] [Encerrar]  Prévia >      |
+| Seleção em lote: [n] mesas  [Travar para grupo] [Encerrar]  Prévia >     |
 +==========================================================================+
 ```
 
+Ilustrativo: códigos, zonas, nomes, quantidades e datas entre colchetes são marcadores e não vêm da planta nem de pessoas reais. As ações exibidas dependem do estado da mesa selecionada.
+
 ### Formulário de travar e vincular
 
-Campos: mesa (preenchida pela seleção), modalidade, titular (busca por nome entre pessoas ativas com `org_condition = director`, ou qualquer pessoa ativa se o RH justificar) ou grupo, início, término opcional, justificativa obrigatória. Botão "Ver impacto" abre a prévia; "Confirmar" só existe dentro da prévia.
+Campos: mesa (preenchida pela seleção), modalidade, titular (busca por nome somente entre pessoas ativas com `org_condition = director`, `PAR-23`) ou grupo, início, término opcional, justificativa obrigatória, responsável (`PAR-27`). Botão "Ver impacto" abre a prévia; "Confirmar" só existe dentro da prévia.
 
 ### Prévia de impacto
 
-Resumo: "A mesa M045 deixa o conjunto compartilhado a partir de 01/10/2026, sem término definido." Blocos: reservas incompatíveis (tabela com data, pessoa, origem, ação escolhida), sobreposição com outra atribuição (bloqueia), manutenção ou bloqueio vigente (informa), notificações que serão enviadas.
+Resumo: "A mesa [código] deixa o conjunto compartilhado a partir de [data], sem término definido." Blocos: reservas incompatíveis (tabela com data, pessoa, origem, ação escolhida), sobreposição com outra atribuição (bloqueia), manutenção ou bloqueio vigente (informa), notificações que serão enviadas.
 
 ### Diálogo de conflito
 
 Três opções excludentes no topo: "Iniciar em [dia seguinte à última reserva incompatível]", "Escolher outra mesa", "Tratar reservas". A terceira abre a tabela de reservas com decisão por linha (cancelar com motivo e mensagem ao afetado, ou realocar para mesa disponível para a pessoa naquela data, escolhida em lista filtrada pelo serviço de disponibilidade). "Confirmar" fica desabilitado enquanto houver linha sem decisão. Na confirmação o servidor revalida tudo; se algo mudou, a prévia é reaberta com as diferenças destacadas.
+
+### Aba Grupo diretoria
+
+Integrantes com vigência; adicionar com data de início; remover com data de término e motivo; prévia com as reservas futuras do integrante nas mesas do grupo e o diálogo de conflito (`DIR-032`).
 
 ### Estados específicos
 
@@ -121,11 +131,11 @@ Três opções excludentes no topo: "Iniciar em [dia seguinte à última reserva
 | Conflito | Diálogo acima; nunca aplicação parcial |
 | Indisponibilidade | Serviço fora: leitura permitida a partir do último estado carregado com aviso; escrita desabilitada |
 | Conexão perdida | Formulário preservado; reenvio com a mesma chave de idempotência |
-| Permissão insuficiente | Sem `manage_executive_seat_assignments`: tela em modo leitura sem nomes de titulares se faltar `exclusive.holder.view`; sem nenhuma das duas: acesso negado |
+| Permissão insuficiente | Com `exclusive.view` e sem `manage_executive_seat_assignments`: modo leitura; nomes de titulares só com `exclusive.holder.view`; sem `exclusive.view`: acesso negado |
 
 ## 13. Admin: reservas e fila
 
-Reservas por data e recurso; reserva em nome de (permissão própria, confirmação, ator registrado, notificação); cancelamento administrativo com motivo e comunicação; fila por data com ofertas, prazos e expirações; ação manual de processar próxima pessoa elegível.
+Reservas por data e recurso; reserva em nome de (permissão própria, confirmação, ator registrado, notificação); cancelamento administrativo com motivo e comunicação; fila por data com ofertas, prazos e expirações; processamento automático da próxima pessoa elegível ao expirar uma oferta, com ação manual complementar do ADM.
 
 ## 14. Admin: atendimentos
 

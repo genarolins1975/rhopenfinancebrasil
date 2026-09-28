@@ -10,7 +10,7 @@ Aceite: revisão independente registrada em `../testes/aceite.md` e validação 
 
 ## Etapa 1. Fundação
 
-Escopo: projeto Next.js com tokens de design e primitivas acessíveis; PostgreSQL com migrações; Better Auth com Argon2id, convite, recuperação, limite de tentativas, MFA para admin; módulo de acesso com `can()`; colaboradores com cadastro, importação CSV, CPF protegido, desativação; auditoria e outbox; ambientes de desenvolvimento e homologação com dados sintéticos; bootstrap controlado do primeiro administrador.
+Escopo: projeto Next.js com tokens de design e primitivas acessíveis; PostgreSQL com migrações, extensão `btree_gist`, `timezone` por papel e funções `local_today()` e `local_day_range()`; Better Auth com Argon2id, convite, recuperação, troca de email com confirmação, limite de tentativas por IP e por conta, MFA para admin, sem plugin admin e sem cache de sessão em cookie; módulo de acesso com `can()` lendo sempre o banco; colaboradores com cadastro, importação CSV sem oráculo de CPF, CPF cifrado com nonce, AAD e versão de chave, suspensão, desativação e readmissão; auditoria e outbox; ambientes de desenvolvimento e homologação com dados sintéticos; bootstrap controlado do primeiro administrador.
 
 Aceite: testes `AUT-*`, `CPF-*`, `ACC-01`, `IMP-01` verdes; varredura de CPF em logs e respostas; axe nos fluxos de entrada; revisão independente.
 
@@ -18,9 +18,9 @@ Dependências: validação da Etapa 0. Envio real de convites depende do provedo
 
 ## Etapa 2. Núcleo do escritório (primeiro fluxo completo)
 
-Escopo: inventário e planta (versões, publicação, inventário sintético `DEMO` até a planta oficial); mapa e lista; serviço de disponibilidade; reserva diária e semanal atômica; mesas exclusivas individuais e de grupo; bloqueios, manutenção e exceções; tela de exclusividade com prévia, conflitos e lote; triggers deferidos; testes transacionais e de concorrência.
+Escopo: inventário e planta (versões, publicação, inventário preliminar da planta oficial marcado como não validado); mapa e lista com resposta sem identificadores de titular; serviço de disponibilidade com janela de abertura; reserva diária e semanal atômica com chave por requisição; mesas exclusivas individuais e de grupo com estado derivado; bloqueios, manutenção, fechamento e exceções com diálogo de conflito; tela de exclusividade com prévia, conflitos, grupo e lote; triggers de lock e deferidos; expiração preguiçosa de retenções; testes transacionais, de concorrência e de virada de dia.
 
-Aceite: os 15 casos obrigatórios da matriz verdes, incluindo `DIR-024-T1` com sessões concorrentes; revisão independente com testes adversos; nenhuma regra apenas no frontend.
+Aceite: os 15 casos obrigatórios da matriz verdes no nível do serviço de disponibilidade e do banco, incluindo `DIR-024-T1` com sessões concorrentes e `DIR-026-T1` de capacidade; o caso da fila é coberto nesta etapa por `DIR-025-T0` (serviço nunca lista mesa exclusiva como ofertável) e pelo fluxo completo `DIR-025-T1` na Etapa 3; revisão independente com testes adversos; nenhuma regra apenas no frontend.
 
 Dependências: planta oficial para o mapa definitivo; composição do grupo diretoria.
 
