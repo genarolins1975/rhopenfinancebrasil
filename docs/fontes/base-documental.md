@@ -8,7 +8,7 @@ Referência: 28/09/2026.
 |---|---|---|
 | Prompt Master v2 | Recebido | Especificação do produto e das regras |
 | `Resultado NPS.pdf` (pesquisa de infraestrutura, julho de 2026, apresentada por Facilities em agosto de 2026) | Não recebido. Não localizado nos uploads nem no Google Drive | Somente os números transcritos no prompt, com a marcação "conforme prompt" |
-| `571-4CP-100-OPENFINANCE-LAYOUT-R00.pdf` (planta, uma página) | Não recebido | Nenhum. O mapa definitivo espera o arquivo e a validação de Facilities e RH |
+| `571-4CP-100-OPENFINANCE-LAYOUT-R00.pdf` (planta, uma página) | Recebido em 28/09/2026, lido e extraído; ver `planta-oficial.md` | Inventário preliminar marcado como não validado; mapa definitivo só após validação de Facilities e RH |
 | Manual de marca | Não recebido | Tokens provisórios, sem logotipo |
 
 ## Evidência transcrita do prompt sobre a pesquisa
@@ -43,10 +43,10 @@ Os valores abaixo são evidência apenas na medida em que o prompt os transcreve
 3. A satisfação média de 4,6 não será convertida em NPS ou eNPS. O nome do arquivo não altera o instrumento.
 4. Uma futura pesquisa com outra pergunta criará uma série distinta, nunca continuará esta.
 5. A divergência de copa (17% no consolidado, 19% na página temática) será exibida com as duas origens. O indicador escolhido para o painel será o do consolidado da página 8, com nota de origem. O documento original não será alterado.
-6. A planta identifica 90 posições de staff, salas Reunião 1, 2 e 3 e ambientes Booth 1 e Booth 2. Isso não é inventário operacional validado. Recursos, capacidade das salas, atributos das mesas e a contagem de cabines serão conferidos com Facilities e RH.
+6. A planta declara 90 posições de staff e mostra salas Reunião 1, 2 e 3, Booth 1 e Booth 2, além de quatro cabines acústicas (MN08) e uma mesa de reunião aberta (ME10). A extração de 28/09/2026 localizou 84 mesas rotuladas individualmente. Isso não é inventário operacional validado. Contagem, códigos, capacidade das salas e atributos das mesas serão conferidos com Facilities e RH (`planta-oficial.md`).
 7. Os PDFs são referências históricas. Nenhum funcionário, resposta individual ou série histórica será criado a partir das estatísticas agregadas.
 8. Toda demonstração usará dados sintéticos identificados como tais e separados da produção.
 
 ## Recomendação
 
-Subir os dois PDFs e o manual de marca no ambiente do projeto antes da Etapa 2. Até lá, o inventário usado em desenvolvimento será sintético, com nomenclatura que denuncie a natureza sintética (prefixo `DEMO`).
+Subir o resultado da pesquisa e o manual de marca no ambiente do projeto antes da Etapa 2. A planta já foi recebida e lida. Até lá, o inventário usado em desenvolvimento será sintético, com nomenclatura que denuncie a natureza sintética (prefixo `DEMO`).

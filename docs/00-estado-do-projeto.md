@@ -6,7 +6,8 @@ Atualizado em 28/09/2026. Branch de trabalho: `claude/new-session-0rzo0n`.
 
 * Repositório `genarolins1975/rhopenfinancebrasil`: sem commits, sem branches remotas, sem arquivos. Não havia alterações a preservar.
 * Documento recebido: Prompt Master v2 (`Prompt_Claude_RH_Open_Finance_Brasil_v2.md`, 40.172 bytes, enviado em 28/09/2026).
-* Documentos ausentes: `Resultado NPS.pdf` e `571-4CP-100-OPENFINANCE-LAYOUT-R00.pdf`. Não estavam nos uploads da sessão e não foram localizados no Google Drive conectado (busca por título em 28/09/2026). Tudo o que este repositório afirma sobre esses PDFs vem exclusivamente do texto do prompt. Ver `fontes/base-documental.md`.
+* Planta `571-4CP-100-OPENFINANCE-LAYOUT-R00.pdf`: recebida em 28/09/2026 após a primeira entrega, lida e extraída. Leitura e inventário preliminar em `fontes/planta-oficial.md`; o PDF não é versionado no repositório.
+* Documento ausente: `Resultado NPS.pdf`. Não estava nos uploads da sessão e não foi localizado no Google Drive conectado (busca por título em 28/09/2026). Tudo o que este repositório afirma sobre a pesquisa vem exclusivamente do texto do prompt. Ver `fontes/base-documental.md`.
 * Ambiente de execução desta sessão: Node 22.22.2, pnpm 10.33.0, PostgreSQL 16.13 (servidor instalado e parado, cluster `16/main`), Docker cliente 29.3.1 sem daemon ativo, Playwright com Chromium instalado, 4 vCPU, 15 GB RAM.
 
 ## Etapa 0 (definição)
@@ -30,7 +31,7 @@ Não há código, portanto não há testes de software. Verificações realizada
 | Pendência | Bloqueia | Não bloqueia |
 |---|---|---|
 | Validação da Etapa 0 pelo responsável | Início da Etapa 1 | |
-| Planta oficial do escritório (PDF) | Mapa definitivo e inventário validado (Etapa 2, aceite final) | Motor de reservas, mesas exclusivas, testes de concorrência, que usam inventário sintético identificado |
+| Validação da planta por Facilities e RH (84 ou 90 mesas, códigos, capacidades, atributos) | Mapa definitivo e publicação do inventário (Etapa 2, aceite final) | Motor de reservas, mesas exclusivas e testes de concorrência, que usam o inventário preliminar marcado como não validado |
 | Domínio de email corporativo e provedor de envio | Envio de convites reais (Etapa 1, homologação) | Desenvolvimento do fluxo de convite com envio simulado |
 | Hospedagem, região e banco gerenciado | Homologação e produção (Etapa 5) | Etapas 1 a 4 em ambiente local |
 | Primeiro administrador (nome e email corporativo) | Bootstrap em homologação | Desenvolvimento |

@@ -4,6 +4,8 @@
 |---|---|
 | `00-estado-do-projeto.md` | Estado consolidado: feito, testado, revisado, pendente |
 | `fontes/base-documental.md` | Fontes disponíveis, fontes ausentes e integridade dos dados de pesquisa e planta |
+| `fontes/planta-oficial.md` | Leitura da planta recebida, inventário preliminar não validado e pendências com Facilities e RH |
+| `fontes/planta-r00-extracao.json` | Arquivo de trabalho com coordenadas normalizadas extraídas da planta, não validado |
 | `produto/mapa-do-produto.md` | Objetivo, escopo, arquitetura de informação, navegação e estados de tela |
 | `arquitetura/arquitetura.md` | Stack recomendada com versões verificadas, módulos, ambientes, custos e dependências |
 | `dados/modelo-de-dados.md` | Entidades, constraints, índices, transações, ordem de locks, retenção |

@@ -1,0 +1,898 @@
+{
+ "fonte": "571-4CP-100-OPENFINANCE-LAYOUT-R00.pdf, 4CORP Arquitetura, revisão 00, emissão 26/01/2026, etapa as built, escala 1:50, área de intervenção 510 m2",
+ "sha256_pdf": "a3dbabfc6c065812df62d31a966bb70d54c5d9b7857134199deac810eb1d8534",
+ "extraido_em": "2026-09-28",
+ "metodo": "rótulos de texto vetorial do PDF; coordenadas normalizadas de 0 a 1 em relação à página inteira, vista em paisagem, origem no canto superior esquerdo; blocos = zona (superior, principal) e coluna de pares, numerados da esquerda para a direita; fileiras de cima para baixo; lado E ou D dentro do par",
+ "validado": false,
+ "observacao": "IDs provisórios apenas para trabalho. Identidade definitiva, atributos, capacidade e situação operacional dependem de validação de Facilities e RH. O desenho declara 90 posições; 84 mesas ME01 estão rotuladas individualmente.",
+ "totais_desenho": {
+  "mesas_ME01_rotuladas": 84,
+  "posicoes_declaradas_no_desenho": 90,
+  "salas_reuniao": 3,
+  "mesa_reuniao_aberta": 1,
+  "booths": 2,
+  "cabines_MN08": 4
+ },
+ "blocos": [
+  {
+   "bloco": 1,
+   "zona": "superior",
+   "fileiras": 2,
+   "mesas": 4
+  },
+  {
+   "bloco": 2,
+   "zona": "superior",
+   "fileiras": 3,
+   "mesas": 6
+  },
+  {
+   "bloco": 3,
+   "zona": "principal",
+   "fileiras": 7,
+   "mesas": 14
+  },
+  {
+   "bloco": 4,
+   "zona": "principal",
+   "fileiras": 7,
+   "mesas": 14
+  },
+  {
+   "bloco": 5,
+   "zona": "principal",
+   "fileiras": 7,
+   "mesas": 14
+  },
+  {
+   "bloco": 6,
+   "zona": "principal",
+   "fileiras": 6,
+   "mesas": 12
+  },
+  {
+   "bloco": 7,
+   "zona": "principal",
+   "fileiras": 6,
+   "mesas": 12
+  },
+  {
+   "bloco": 8,
+   "zona": "principal",
+   "fileiras": 4,
+   "mesas": 8
+  }
+ ],
+ "mesas": [
+  {
+   "id_provisorio": "M001",
+   "rotulo_planta": "ME01",
+   "bloco": 1,
+   "fileira": 1,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.0983
+  },
+  {
+   "id_provisorio": "M002",
+   "rotulo_planta": "ME01",
+   "bloco": 1,
+   "fileira": 1,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.0983
+  },
+  {
+   "id_provisorio": "M003",
+   "rotulo_planta": "ME01",
+   "bloco": 1,
+   "fileira": 2,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.1387
+  },
+  {
+   "id_provisorio": "M004",
+   "rotulo_planta": "ME01",
+   "bloco": 1,
+   "fileira": 2,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.1387
+  },
+  {
+   "id_provisorio": "M005",
+   "rotulo_planta": "ME01",
+   "bloco": 2,
+   "fileira": 1,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.0579
+  },
+  {
+   "id_provisorio": "M006",
+   "rotulo_planta": "ME01",
+   "bloco": 2,
+   "fileira": 1,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.0579
+  },
+  {
+   "id_provisorio": "M007",
+   "rotulo_planta": "ME01",
+   "bloco": 2,
+   "fileira": 2,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.0983
+  },
+  {
+   "id_provisorio": "M008",
+   "rotulo_planta": "ME01",
+   "bloco": 2,
+   "fileira": 2,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.0983
+  },
+  {
+   "id_provisorio": "M009",
+   "rotulo_planta": "ME01",
+   "bloco": 2,
+   "fileira": 3,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.1387
+  },
+  {
+   "id_provisorio": "M010",
+   "rotulo_planta": "ME01",
+   "bloco": 2,
+   "fileira": 3,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.1387
+  },
+  {
+   "id_provisorio": "M011",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 1,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M012",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 1,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M013",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 2,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M014",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 2,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M015",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 3,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M016",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 3,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M017",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 4,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.3659
+  },
+  {
+   "id_provisorio": "M018",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 4,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.3659
+  },
+  {
+   "id_provisorio": "M019",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 5,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M020",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 5,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M021",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 6,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M022",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 6,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M023",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 7,
+   "lado": "E",
+   "x": 0.0933,
+   "y": 0.4871
+  },
+  {
+   "id_provisorio": "M024",
+   "rotulo_planta": "ME01",
+   "bloco": 3,
+   "fileira": 7,
+   "lado": "D",
+   "x": 0.1138,
+   "y": 0.4871
+  },
+  {
+   "id_provisorio": "M025",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 1,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M026",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 1,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M027",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 2,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M028",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 2,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M029",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 3,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M030",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 3,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M031",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 4,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.3563
+  },
+  {
+   "id_provisorio": "M032",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 4,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.3563
+  },
+  {
+   "id_provisorio": "M033",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 5,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M034",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 5,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M035",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 6,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M036",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 6,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M037",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 7,
+   "lado": "E",
+   "x": 0.1599,
+   "y": 0.4871
+  },
+  {
+   "id_provisorio": "M038",
+   "rotulo_planta": "ME01",
+   "bloco": 4,
+   "fileira": 7,
+   "lado": "D",
+   "x": 0.1804,
+   "y": 0.4871
+  },
+  {
+   "id_provisorio": "M039",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 1,
+   "lado": "E",
+   "x": 0.2265,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M040",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 1,
+   "lado": "D",
+   "x": 0.247,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M041",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 2,
+   "lado": "E",
+   "x": 0.2265,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M042",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 2,
+   "lado": "D",
+   "x": 0.247,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M043",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 3,
+   "lado": "E",
+   "x": 0.2265,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M044",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 3,
+   "lado": "D",
+   "x": 0.247,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M045",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 4,
+   "lado": "E",
+   "x": 0.2265,
+   "y": 0.3659
+  },
+  {
+   "id_provisorio": "M046",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 4,
+   "lado": "D",
+   "x": 0.247,
+   "y": 0.3659
+  },
+  {
+   "id_provisorio": "M047",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 5,
+   "lado": "E",
+   "x": 0.2265,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M048",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 5,
+   "lado": "D",
+   "x": 0.247,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M049",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 6,
+   "lado": "E",
+   "x": 0.2265,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M050",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 6,
+   "lado": "D",
+   "x": 0.247,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M051",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 7,
+   "lado": "E",
+   "x": 0.2265,
+   "y": 0.4871
+  },
+  {
+   "id_provisorio": "M052",
+   "rotulo_planta": "ME01",
+   "bloco": 5,
+   "fileira": 7,
+   "lado": "D",
+   "x": 0.247,
+   "y": 0.4871
+  },
+  {
+   "id_provisorio": "M053",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 1,
+   "lado": "E",
+   "x": 0.2931,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M054",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 1,
+   "lado": "D",
+   "x": 0.3136,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M055",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 2,
+   "lado": "E",
+   "x": 0.2931,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M056",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 2,
+   "lado": "D",
+   "x": 0.3136,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M057",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 3,
+   "lado": "E",
+   "x": 0.2931,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M058",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 3,
+   "lado": "D",
+   "x": 0.3136,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M059",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 4,
+   "lado": "E",
+   "x": 0.2931,
+   "y": 0.3563
+  },
+  {
+   "id_provisorio": "M060",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 4,
+   "lado": "D",
+   "x": 0.3136,
+   "y": 0.3563
+  },
+  {
+   "id_provisorio": "M061",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 5,
+   "lado": "E",
+   "x": 0.2931,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M062",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 5,
+   "lado": "D",
+   "x": 0.3136,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M063",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 6,
+   "lado": "E",
+   "x": 0.2931,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M064",
+   "rotulo_planta": "ME01",
+   "bloco": 6,
+   "fileira": 6,
+   "lado": "D",
+   "x": 0.3136,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M065",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 1,
+   "lado": "E",
+   "x": 0.3596,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M066",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 1,
+   "lado": "D",
+   "x": 0.3802,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M067",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 2,
+   "lado": "E",
+   "x": 0.3596,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M068",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 2,
+   "lado": "D",
+   "x": 0.3802,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M069",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 3,
+   "lado": "E",
+   "x": 0.3596,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M070",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 3,
+   "lado": "D",
+   "x": 0.3802,
+   "y": 0.3154
+  },
+  {
+   "id_provisorio": "M071",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 4,
+   "lado": "E",
+   "x": 0.3596,
+   "y": 0.3659
+  },
+  {
+   "id_provisorio": "M072",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 4,
+   "lado": "D",
+   "x": 0.3802,
+   "y": 0.3659
+  },
+  {
+   "id_provisorio": "M073",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 5,
+   "lado": "E",
+   "x": 0.3596,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M074",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 5,
+   "lado": "D",
+   "x": 0.3802,
+   "y": 0.4063
+  },
+  {
+   "id_provisorio": "M075",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 6,
+   "lado": "E",
+   "x": 0.3596,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M076",
+   "rotulo_planta": "ME01",
+   "bloco": 7,
+   "fileira": 6,
+   "lado": "D",
+   "x": 0.3802,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M077",
+   "rotulo_planta": "ME01",
+   "bloco": 8,
+   "fileira": 1,
+   "lado": "E",
+   "x": 0.4262,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M078",
+   "rotulo_planta": "ME01",
+   "bloco": 8,
+   "fileira": 1,
+   "lado": "D",
+   "x": 0.4467,
+   "y": 0.2346
+  },
+  {
+   "id_provisorio": "M079",
+   "rotulo_planta": "ME01",
+   "bloco": 8,
+   "fileira": 2,
+   "lado": "E",
+   "x": 0.4262,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M080",
+   "rotulo_planta": "ME01",
+   "bloco": 8,
+   "fileira": 2,
+   "lado": "D",
+   "x": 0.4467,
+   "y": 0.275
+  },
+  {
+   "id_provisorio": "M081",
+   "rotulo_planta": "ME01",
+   "bloco": 8,
+   "fileira": 3,
+   "lado": "E",
+   "x": 0.4262,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M082",
+   "rotulo_planta": "ME01",
+   "bloco": 8,
+   "fileira": 3,
+   "lado": "D",
+   "x": 0.4467,
+   "y": 0.4467
+  },
+  {
+   "id_provisorio": "M083",
+   "rotulo_planta": "ME01",
+   "bloco": 8,
+   "fileira": 4,
+   "lado": "E",
+   "x": 0.4262,
+   "y": 0.4871
+  },
+  {
+   "id_provisorio": "M084",
+   "rotulo_planta": "ME01",
+   "bloco": 8,
+   "fileira": 4,
+   "lado": "D",
+   "x": 0.4467,
+   "y": 0.4871
+  }
+ ],
+ "espacos": [
+  {
+   "id_provisorio": "B1",
+   "rotulo_planta": "BOOTH 1",
+   "tipo": "booth",
+   "x": 0.5434,
+   "y": 0.1971
+  },
+  {
+   "id_provisorio": "B2",
+   "rotulo_planta": "BOOTH 2",
+   "tipo": "booth",
+   "x": 0.5434,
+   "y": 0.506
+  },
+  {
+   "id_provisorio": "R1",
+   "rotulo_planta": "REUNIÃO 1",
+   "tipo": "sala",
+   "x": 0.3798,
+   "y": 0.6347
+  },
+  {
+   "id_provisorio": "R2",
+   "rotulo_planta": "REUNIÃO 2",
+   "tipo": "sala",
+   "x": 0.2065,
+   "y": 0.6346
+  },
+  {
+   "id_provisorio": "R3",
+   "rotulo_planta": "REUNIÃO 3",
+   "tipo": "sala",
+   "x": 0.0851,
+   "y": 0.6346
+  },
+  {
+   "id_provisorio": "RA1",
+   "rotulo_planta": "ME10 (mesa de reunião aberta)",
+   "tipo": "sala_aberta",
+   "x": 0.4211,
+   "y": 0.1135
+  }
+ ],
+ "cabines": [
+  {
+   "id_provisorio": "C1",
+   "rotulo_planta": "MN08",
+   "tipo": "cabine",
+   "x": 0.242,
+   "y": 0.0925
+  },
+  {
+   "id_provisorio": "C2",
+   "rotulo_planta": "MN08",
+   "tipo": "cabine",
+   "x": 0.242,
+   "y": 0.1305
+  },
+  {
+   "id_provisorio": "C3",
+   "rotulo_planta": "MN08",
+   "tipo": "cabine",
+   "x": 0.3722,
+   "y": 0.0926
+  },
+  {
+   "id_provisorio": "C4",
+   "rotulo_planta": "MN08",
+   "tipo": "cabine",
+   "x": 0.3722,
+   "y": 0.1306
+  }
+ ]
+}

@@ -82,7 +82,8 @@ Nenhuma pergunta bloqueia o início da Etapa 1. As pendências abaixo bloqueiam 
 | Aprovação da Etapa 0 e da stack proposta | Etapa 1 | Agora |
 | Domínio de email corporativo dos colaboradores e provedor de email (Microsoft 365, Google Workspace ou outro) | Envio de convites reais e decisão sobre SSO e calendário | Fim da Etapa 1 |
 | Nome e email do primeiro administrador | Bootstrap em homologação | Fim da Etapa 1 |
-| Upload da planta e do resultado da pesquisa | Mapa definitivo e painel com dados históricos | Início da Etapa 2 |
+| Upload do resultado da pesquisa | Painel com dados históricos | Etapa 4 |
+| Validação da planta (84 ou 90 mesas, códigos, capacidades, atributos, quais cabines entram nas reservas) | Mapa definitivo | Aceite da Etapa 2 |
 | Hospedagem, região e banco gerenciado | Homologação e produção | Etapa 5 |
 | Composição do grupo "diretoria" e política de visibilidade do titular | Mesas exclusivas de grupo em homologação | Etapa 2 |
 
@@ -92,3 +93,4 @@ Nenhuma pergunta bloqueia o início da Etapa 1. As pendências abaixo bloqueiam 
 |---|---|---|
 | 28/09/2026 | Etapa 0 entregue como documentação no repositório, sem código, para validação antes de implementar | Executor |
 | 28/09/2026 | Inventário sintético com prefixo `DEMO` até a planta oficial | Executor |
+| 28/09/2026 | Planta recebida e extraída; inventário preliminar de 84 mesas, 3 salas, 2 booths, 4 cabines, 1 mesa aberta, marcado como não validado; PDF mantido fora do repositório | Executor |

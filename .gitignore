@@ -1,0 +1,6 @@
+# PDFs de planta e de pesquisa ficam em armazenamento privado, nunca no repositório
+docs/fontes/*.pdf
+*.pdf
+node_modules/
+.env*
+!.env.example
