@@ -46,7 +46,10 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 | `DIR-035` resposta sem identificadores de titular | `availability`, `app` | `DIR-035-T1` (varredura das respostas do mapa, lista, busca e semana) | I, E | pendente (Etapa 2) |
 | `DIR-036` estado derivado; encerrar não contorna a sobreposição | `exclusivity`, `db` | `DIR-036-T1` (encerrar e criar nova atribuição sobreposta é rejeitado), `DIR-036-T2` (anular só antes do início) | I | pendente (Etapa 2) |
 | Modelo: extensão e constraints existem no catálogo | `db` | `DB-01` | I | pendente (Etapa 1) |
-| Modelo: lock imposto por trigger | `db` | `DIR-024-T2` (aplicação sem lock, banco rejeita coexistência) | C | pendente (Etapa 2) |
+| Modelo: lock imposto por trigger | `db` | `DIR-024-T2` (aplicação sem nenhum lock, nem advisory nem de pessoa; pares reserva e trava, reserva e remoção de integrante, reserva e fechamento do dia, reserva em nome e desativação, atribuição de grupo e remoção de integrante; banco serializa e rejeita) | C | pendente (Etapa 2) |
+| Modelo: trigger de vigência da atribuição | `db` | `DIR-036-T3` (reabrir, encerrar no passado, mover início após começar, anular em duas etapas e anular sucessora sem decisão são rejeitados) | I | pendente (Etapa 2) |
+| Modelo: suspensão mantém reservas, desativação exige tratamento | `db`, `employees` | `EMP-02-T1` | I | pendente (Etapa 2) |
+| Fila: entrada e oferta obsoletas expiradas de forma preguiçosa; reserva direta oferece à fila antes | `waitlist`, `booking` | `WL-04-T1`, `WL-04-T2` | I | pendente (Etapa 3) |
 | Modelo: virada de dia local | `db`, `availability` | `DIR-029-T1` às 21:00, 23:59 e 00:00 de Brasília, inclusive `local_day_range` para salas | U, I | pendente (Etapa 2) |
 | Modelo: chave da semana por requisição | `booking` | `BKG-02-T4` (cinco dias com uma chave) | I | pendente (Etapa 2) |
 | Modelo: transferência e anulação com restrições | `exclusivity` | `DIR-017-T3` (mesma mesa, datas contíguas, sem retroagir) | I | pendente (Etapa 2) |
@@ -67,6 +70,8 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 | Troca de email com confirmação no endereço antigo; convite revogado ao editar email de convidado; privilégio só após ativo com segundo fator | `identity`, `employees`, `access` | `AUT-10-T1`, `AUT-10-T2`, `AUT-10-T3` | I, E | pendente (Etapa 1) |
 | Limite por conta com cabeçalho de IP forjado | `identity` | `AUT-11-T1` | I | pendente (Etapa 1) |
 | Revogação vale na requisição seguinte (sem cache de sessão) | `identity`, `access` | `AUT-12-T1` | I | pendente (Etapa 1) |
+| Segundo fator sem dispositivo confiável para perfis administrativos | `identity` | `AUT-13-T1` (`trustDevice` ignorado) | I | pendente (Etapa 1) |
+| Hook global bloqueia sessão emitida antes da desativação, inclusive nas rotas do próprio Better Auth; revogação retentada pela outbox | `identity` | `AUT-14-T1`, `AUT-14-T2` | I | pendente (Etapa 1) |
 | Importação não é oráculo de CPF; detalhe de unicidade redigido; arquivo não persistido | `employees` | `CPF-03-T1`, `CPF-03-T2`, `CPF-03-T3` | I | pendente (Etapa 1) |
 | Cifra com nonce único, AAD por pessoa, versão de chave e rotação em duas fases | `employees` | `CPF-04-T1` (troca de texto cifrado entre linhas falha), `CPF-04-T2` (rotação) | U, I | pendente (Etapa 1) |
 | Readmissão reutiliza cadastro e zera credenciais | `employees`, `identity` | `EMP-01-T1` | I | pendente (Etapa 1) |

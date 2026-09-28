@@ -34,7 +34,17 @@ O revisor 2 pediu reapresentação dos itens 1, 3, 4, 6 e 9. Resultado registrad
 
 ### Reapresentação dos itens críticos
 
-Em execução em 28/09/2026, por terceiro revisor em contexto limpo.
+Terceiro revisor, contexto limpo, 28/09/2026. Método: reproduziu constraints, funções e triggers num banco de teste no PostgreSQL 16 local com duas sessões concorrentes, e leu o código de `better-auth@1.7.6` em vez de responder de memória. Veredito: aprovado com ajustes. Por item:
+
+| Item | Veredito | Ajuste incorporado |
+|---|---|---|
+| 1, duas atribuições vigentes | Parcial: constraint correta, mas a tela prometia regras de vigência que o banco não impunha (reabrir, encerrar no passado, mover o início, anular em duas etapas, anular sucessora) | Trigger de vigência em `exclusive_assignment`, checks de `ended_by` e `end_reason`, transferência atômica com sucessora verificada no commit (`DIR-036`, `DIR-036-T3`) |
+| 3, triggers deferidos como rede independente | Parcial: visibilidade no commit confirmada empiricamente; faltavam locks impostos pelo banco para pessoa, grupo e dia, e a dependência do `for update` contra o `for key share` das chaves estrangeiras não estava declarada | Triggers de lock em `employee`, `access_group_member`, advisory lock do dia dentro dos triggers de reserva e calendário; realocação travando as duas mesas; `DIR-024-T2` removendo todos os locks da aplicação |
+| 4, mutações sem recurso | Parcial: um par (criar atribuição de grupo e remover integrante) confirmava sem lock comum; suspensão contradizia o trigger | Lock do grupo antes de derivar o conjunto e re-derivação até estabilizar; `booking_remains_valid` separada de `is_bookable`; `needs_review` de titular inativo por consulta derivada |
+| 6, retenção vencida | Parcial: o `update` de expiração violava o próprio check; filtro precisava de recurso e pessoa; lock indevido em mesa de terceiros; fila contornada na reserva direta; entrada `offered` eterna | Check ajustado, filtro duplo, trigger de lock ignorando expiração, job com uma oferta por transação, expiração preguiçosa também na fila, fila antes da reserva direta (`PAR-37`) |
+| 9, Better Auth | Parcial: alegações plausíveis, mas `change-email` só confirma no endereço antigo com `sendChangeEmailConfirmation`, hooks de criação de sessão não cobrem sessões existentes, `trustDevice` pulava o segundo fator por 30 dias, nome correto é `deleteUserSessions`, adaptador interno não é API estável | `DEC-13` ampliada: `disabledPaths` com caminhos exatos, hook global conferindo `employee.status`, `trustDevice` neutralizado para perfis administrativos, `emailVerified` no aceite do convite, versão fixada e testes `AUT-13` e `AUT-14`; `RSK-21` e `RSK-22` |
+
+Todos os ajustes foram incorporados em 28/09/2026. O revisor considerou a Etapa 1 liberada com os ajustes do item 9 e a Etapa 2 dependente dos itens 1 a 4, agora incorporados; a comprovação definitiva é a bateria de testes de integração e concorrência da Etapa 2, não a leitura do texto.
 
 ### Verificações executadas
 
@@ -42,4 +52,4 @@ Não há código, portanto não há testes de software. Executadas: consulta ao 
 
 ### Situação do aceite
 
-Executor: entregue. Revisores: aceito com correções; correções aplicadas; reapresentação em curso. Responsável pelo produto: pendente de validação.
+Executor: entregue. Revisores: duas revisões aceitas com correções e reapresentação aprovada com ajustes; todas as correções e ajustes aplicados. Responsável pelo produto: pendente de validação, única pergunta que bloqueia a Etapa 1.

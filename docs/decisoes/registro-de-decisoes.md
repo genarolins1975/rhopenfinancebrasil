@@ -75,6 +75,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-34` | Tempo máximo de espera por lock em transação de reserva | 3 segundos, com nova tentativa | ADM técnico | |
 | `PAR-35` | Duração máxima de uma liberação temporária | 30 dias corridos | RH | Acima disso, encerrar a atribuição |
 | `PAR-36` | Readmissão e CPF após exclusão | Mesmo cadastro reutilizado; ao apagar o CPF o HMAC permanece para impedir duplicidade | RH e encarregado | |
+| `PAR-37` | Prioridade da fila sobre reserva direta | Sempre: cancelamento e reserva direta que expira uma retenção oferecem a mesa à próxima pessoa elegível da fila antes de conceder | RH | `DIR-034` |
 
 ## C. Decisões técnicas propostas
 
@@ -92,7 +93,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-10` | Armazenamento privado compatível com S3; provedor a definir | | Pendente |
 | `DEC-11` | Executor e Revisor como subagentes independentes desta sessão; quando indisponíveis, ciclos separados declarados | | Adotada na Etapa 0 |
 | `DEC-12` | Lint com ESLint e regras de acessibilidade; formatação com Prettier | Biome | Proposta |
-| `DEC-13` | Plugin admin do Better Auth não montado; operações administrativas de identidade pelo adaptador interno após `can()`; handler de autenticação com lista explícita de caminhos; cache de sessão em cookie desativado | Montar o plugin com `adminRoles` vazio | Proposta |
+| `DEC-13` | Plugin admin do Better Auth não montado; operações administrativas de identidade pelo adaptador interno após `can()`; handler com lista explícita de caminhos e `disabledPaths`; cache de sessão em cookie desativado; hook global conferindo `employee.status`; `sendChangeEmailConfirmation`; `trustDevice` neutralizado para perfis administrativos | Montar o plugin com `adminRoles` vazio | Proposta, verificada contra o código de `better-auth@1.7.6` em 28/09/2026 |
 | `DEC-14` | Lock por recurso imposto por trigger no banco, além do protocolo da aplicação; estado de atribuição derivado da vigência; expiração preguiçosa de retenções | Confiar só na disciplina do código | Proposta |
 
 ## D. Perguntas bloqueantes
@@ -117,4 +118,5 @@ Uma pergunta bloqueia o início da Etapa 1: a aprovação da Etapa 0 e da stack 
 | 28/09/2026 | Inventário sintético com prefixo `DEMO` até a planta oficial | Executor |
 | 28/09/2026 | Revisão independente 1 (cobertura de requisitos): aceito com correções, 24 achados, 12 obrigatórios; todos aplicados na mesma data | Executor |
 | 28/09/2026 | Revisão independente 2 (adversarial técnica): aceito com correções, 30 achados, 1 bloqueante e 9 de alta severidade; todos incorporados ao modelo de dados, à política DIR, à arquitetura e à matriz de permissões na mesma data; itens 1, 3, 4, 6 e 9 reapresentados para nova revisão | Executor |
+| 28/09/2026 | Reapresentação dos itens críticos a terceiro revisor: aprovado com ajustes, cinco grupos verificados em banco e no código do Better Auth; todos incorporados na mesma data | Executor |
 | 28/09/2026 | Planta recebida e extraída; inventário preliminar de 84 mesas, 3 salas, 2 booths, 4 cabines, 1 mesa aberta, marcado como não validado; PDF mantido fora do repositório | Executor |

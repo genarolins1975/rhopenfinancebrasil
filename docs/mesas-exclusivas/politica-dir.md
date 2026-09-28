@@ -49,9 +49,9 @@ O estado exibido a uma pessoa em uma data é a combinação das três dimensões
 | `DIR-031` | Uma única função de elegibilidade, com regra literal, é usada pelo serviço de disponibilidade e pelos triggers deferidos do banco. Regra: sem atribuição vigente na data, qualquer conta ativa; com atribuição e exceção `release_to_shared` na data, qualquer conta ativa, titular incluído; com atribuição e exceção `release_to_employee` na data, somente o beneficiário, titular excluído nessa data (`PAR-26`); com atribuição individual sem exceção, somente o titular; com atribuição de grupo sem exceção, somente integrantes ativos do grupo na data. |
 | `DIR-032` | Remover integrante do grupo ou encerrar sua vigência avalia as reservas futuras dele nas mesas do grupo com o mesmo diálogo de conflito de `DIR-016`. A operação trava as mesas do grupo e os triggers verificam no commit. A atribuição de grupo não entra em revisão por isso; grupo sem integrante vigente aparece em "Vínculo a revisar" por consulta derivada. |
 | `DIR-033` | Criar ou estender manutenção, bloqueio administrativo, fechamento do escritório ou desativação de recurso sobre reservas ativas usa o mesmo diálogo de conflito de `DIR-016`: nada é cancelado em silêncio e nada fica confirmado em mesa indisponível. Vale para mesas, salas e cabines. |
-| `DIR-034` | Oferta da fila vencida não trava mesa nem pessoa: a leitura ignora retenção vencida e o caminho de escrita a expira antes de gravar. A oferta seguinte nasce na transação que liberou a mesa; o job de expiração é conveniência, não requisito de correção. |
+| `DIR-034` | Oferta da fila vencida não trava mesa nem pessoa: a leitura ignora retenção vencida e o caminho de escrita a expira antes de gravar. A oferta seguinte nasce na transação que liberou a mesa, seja cancelamento, seja reserva direta que expirou uma retenção (`PAR-37`); o job de expiração é conveniência, não requisito de correção. |
 | `DIR-035` | A resposta do mapa, da lista, da busca e da semana carrega apenas o estado calculado e a marca "é minha"; identificadores ou nomes de titulares só quando o ator tem `exclusive.holder.view`. |
-| `DIR-036` | Estado da atribuição (`agendada`, `ativa`, `encerrada`) é derivado da vigência, nunca gravado. Encerrar grava o término; anular só é possível antes do início. Não existe caminho que retire uma atribuição da regra de sobreposição sem encerramento pela vigência ou anulação antes de vigorar. |
+| `DIR-036` | Estado da atribuição (`agendada`, `ativa`, `encerrada`) é derivado da vigência, nunca gravado. Encerrar grava o término, nunca no passado; anular só é possível antes do início; o início não muda depois de começar; término preenchido nunca volta a nulo; atribuição encerrada fica congelada. Não existe caminho que retire uma atribuição da regra de sobreposição sem encerramento pela vigência ou anulação antes de vigorar, nem caminho que a reabra. Anular a sucessora de uma transferência exige decisão explícita sobre a mesa. |
 
 ## Ordem de cálculo de disponibilidade (`DIR-019`)
 
@@ -162,7 +162,7 @@ Operados por Facilities e ADM na tela de recursos e no calendário, não nesta t
 
 ### Revisar vínculo (`needs_review`)
 
-Lista atribuições individuais cujo titular foi desativado e, por consulta derivada, atribuições de grupo sem integrante vigente. Opções: transferir, encerrar, manter em revisão com nota. Durante a revisão de atribuição individual ninguém é elegível, nem por reserva em nome; a mesa permanece restrita.
+Lista, por consulta derivada, atribuições individuais cujo titular não está ativo e atribuições de grupo sem integrante vigente, além das marcadas manualmente. Opções: transferir, encerrar, manter em revisão com nota. Durante a revisão de atribuição individual ninguém é elegível, nem por reserva em nome; a mesa permanece restrita.
 
 ### Gerir integrantes do grupo
 
