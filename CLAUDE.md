@@ -1,6 +1,6 @@
 # Portal do Colaborador da Associação Open Finance Brasil
 
-Domínio adquirido: rhopenfinancebrasil.com. Etapa 0 (definição) validada em 28/09/2026. Etapa 1 (fundação) validada em 29/09/2026. Etapa 2 (núcleo do escritório) em andamento desde 29/09/2026.
+Domínio adquirido: rhopenfinancebrasil.com. Etapa 0 (definição) validada em 28/09/2026. Etapa 1 (fundação) validada em 29/09/2026. Etapa 2 (núcleo do escritório) validada em 29/09/2026. Etapa 3 (operação) em andamento desde 29/09/2026.
 
 ## Estado atual
 Consulte `docs/00-estado-do-projeto.md` antes de qualquer ação. Ele registra o que foi feito, testado, revisado e o que falta. Mapa da documentação em `docs/README.md`.
@@ -25,7 +25,7 @@ pnpm db:generate                # nova migração a partir do esquema Drizzle
 Banco local: cluster PostgreSQL 16 com papéis `rh_owner` (migrações) e `rh_app` (aplicação), bancos `rh_dev` e `rh_test`, ambos com `timezone = America/Sao_Paulo`.
 
 ## Onde as coisas vivem
-`src/modules/<módulo>` tem a regra de negócio (identity, access, employees, audit, notifications, admin, workplace, availability, booking, exclusivity, office). `src/app` só orquestra e renderiza. `src/db/schema` e `src/db/migrations` são a única fonte do esquema; funções, triggers e constraints de exclusão do escritório vivem na migração manual `0004`. `src/components` não decide autorização. Toda mutação do escritório passa por `withOfficeTx` (locks, revalidação, tradução de erro) e pelo diálogo de conflito de `office/conflicts.ts`.
+`src/modules/<módulo>` tem a regra de negócio (identity, access, employees, audit, notifications, admin, workplace, availability, booking, exclusivity, office). `src/app` só orquestra e renderiza. `src/db/schema` e `src/db/migrations` são a única fonte do esquema; funções, triggers e constraints de exclusão do escritório vivem nas migrações manuais `0004` a `0006`. `src/components` não decide autorização. Toda mutação do escritório passa por `withOfficeTx` (locks, revalidação, tradução de erro) e pelo diálogo de conflito de `office/conflicts.ts`.
 
 ## Invariantes do projeto (não negociáveis)
 1. Toda regra de autorização e disponibilidade vive no servidor. A interface só reflete o que o servidor decidiu.

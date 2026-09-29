@@ -219,4 +219,4 @@ Testes executados após as correções, no mesmo ambiente: 53 de unidade; 136 de
 
 ### Situação do aceite da Etapa 2
 
-Executor: entregue com as correções das três rodadas aplicadas e testadas. Revisores: aceita com correções nas três rodadas; todas as correções aplicadas; as da terceira rodada verificadas pelas baterias do Executor (integração em três execuções consecutivas, como exigido pelo Revisor), sem quarta rodada independente. Responsável pelo produto: pendente de validação.
+Executor: entregue com as correções das três rodadas aplicadas e testadas. Revisores: aceita com correções nas três rodadas; todas as correções aplicadas; as da terceira rodada verificadas pelas baterias do Executor (integração em três execuções consecutivas, como exigido pelo Revisor), sem quarta rodada independente. Responsável pelo produto: validada em 29/09/2026.

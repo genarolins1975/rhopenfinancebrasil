@@ -65,7 +65,7 @@ Fora da Etapa 1, por desenho ou pendência: verificação manual com leitor de t
 
 ## Etapa 2 (núcleo do escritório)
 
-Status: implementada pelo Executor em 29/09/2026; aceita com correções pelo primeiro Revisor (15 achados), pelo segundo (7 residuais) e pelo terceiro (4 residuais); todas as correções aplicadas e testadas na mesma data, as da última rodada verificadas pelas baterias do Executor em três execuções consecutivas, sem quarta rodada independente. Aguarda validação do responsável. Registro completo em `testes/aceite.md`.
+Status: implementada pelo Executor em 29/09/2026; aceita com correções pelo primeiro Revisor (15 achados), pelo segundo (7 residuais) e pelo terceiro (4 residuais); todas as correções aplicadas e testadas na mesma data, as da última rodada verificadas pelas baterias do Executor em três execuções consecutivas, sem quarta rodada independente. Validada pelo responsável em 29/09/2026 ("Vamos em frente"). Registro completo em `testes/aceite.md`.
 
 Entregue em código:
 
@@ -88,6 +88,10 @@ Testes executados em 29/09/2026 no ambiente desta sessão:
 
 Fora da Etapa 2, por desenho ou pendência: fila de espera e ofertas (`DIR-025-T1`, `DIR-034-T2`, Etapa 3), confirmação de uso (`DIR-006-T2`, Etapa 3), salas e cabines por intervalo (Etapa 3), `DIR-030-T1`, validação do inventário por Facilities e RH (`RSK-26`), leitor de tela manual.
 
+## Etapa 3 (operação)
+
+Status: iniciada pelo Executor em 29/09/2026. Escopo e aceite em `operacao/plano-de-entregas.md`.
+
 ## Próximo passo
 
-Validação da Etapa 2 pelo responsável; depois Etapa 3 (operação: fila de espera com retenção e ofertas, confirmação de uso, salas e cabines por intervalo, Meu time, painel de reservas e fila, indicadores).
+Etapa 3: fila de espera com retenção transacional e ofertas, confirmação de uso, salas e cabines por intervalo, Meu time, painel de reservas e fila, indicadores; testes e revisão independente.
