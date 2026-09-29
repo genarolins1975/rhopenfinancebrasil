@@ -142,4 +142,22 @@ Observação do Revisor sem número: o servidor de produção registra "The dest
 
 ### Situação do aceite da Etapa 1
 
-Executor: entregue com as correções das três rodadas aplicadas e testadas (contagem final: 17 de unidade, 53 de integração, 30 de ponta a ponta; tipos, lint e build sem erros). Revisores: rejeitada na primeira revisão, aceita com correções na reapresentação e na terceira verificação; todas as correções aplicadas; as da terceira rodada foram verificadas pelos testes do Executor, sem quarta rodada independente. Responsável pelo produto: pendente de validação.
+Executor: entregue com as correções das três rodadas aplicadas e testadas (contagem final: 17 de unidade, 53 de integração, 30 de ponta a ponta; tipos, lint e build sem erros). Revisores: rejeitada na primeira revisão, aceita com correções na reapresentação e na terceira verificação; todas as correções aplicadas; as da terceira rodada foram verificadas pelos testes do Executor, sem quarta rodada independente. Responsável pelo produto: validada em 29/09/2026.
+
+## Etapa 2 (núcleo do escritório)
+
+Data: 29/09/2026. Executor: sessão principal. Revisor: subagente independente com contexto limpo, com acesso ao código, ao banco de teste e às baterias.
+
+### Relato do Executor
+
+Escopo entregue conforme `operacao/plano-de-entregas.md` e `00-estado-do-projeto.md`: banco do escritório (migrações `0003` gerada e `0004` manual: 15 tabelas, constraints de exclusão com `btree_gist`, 7 funções compartilhadas, triggers de lock, de validação e deferidos), serviços de disponibilidade, reserva, exclusividade, conflitos e escritório, telas do portal (escritório com mapa SVG e lista, detalhe, minhas reservas, semana, início) e administrativas (recursos, calendário, configurações, planta, exclusividade da diretoria, reservas), notificações e auditoria.
+
+Testes executados no ambiente da sessão (PostgreSQL 16 local, Chromium pré-instalado), todos aprovados: 53 de unidade (36 novos: tabela de elegibilidade `DIR-031`, ordem de cálculo `DIR-019`, classe da mesa `DIR-026`, janela `PAR-01` e virada de dia `DIR-029`), 128 de integração (75 novos em `office-db`, `booking`, `exclusivity` e `office-concurrency`, entre eles `DIR-024-T1` com 50 repetições da corrida entre reserva e trava, `DIR-024-T2` sem lock da aplicação, `DIR-023-T1` com dez sessões e `DIR-033-T3` com fechamento em voo) e 42 de ponta a ponta com axe nos projetos desktop e celular (12 novos em `office.spec.ts`: rótulo literal sem botão nem nome do titular, reserva e cancelamento, mesa habitual do titular, prévia com conflito explícito, decisão por reserva, confirmação e histórico, telas administrativas sem rolagem horizontal, autorização por perfil). Tipos, lint e build sem erros; `.log-test.ndjson` sem "Failed query" nem "params".
+
+Os 15 casos obrigatórios da seção 23 do prompt estão testados no nível do serviço e do banco, com dois parciais por desenho: `DIR-006-T2` (confirmação de uso) e `DIR-025-T1` (fluxo completo da fila) ficam para a Etapa 3, cobertos nesta etapa por `DIR-006-T1` e `DIR-025-T0`. Pendentes declarados: `DIR-030-T1` (reposicionamento sem troca de identidade, implementado sem teste), `DIR-026-T4` e `T5` (indicadores com períodos sobrepostos e titular fora do numerador), `DIR-034-T2` (oferta nascida no cancelamento, Etapa 3), salas e cabines por intervalo (tabela criada, serviço na Etapa 3), verificação manual com leitor de tela.
+
+Limitações declaradas: inventário da planta não validado por Facilities e RH (`RSK-26`); capacidades de salas inferidas pelas cadeiras (`DEC-20`); mapa gerado das coordenadas da extração, sem o desenho arquitetônico de fundo; rótulo "Uso exclusivo — Diretoria" mantido literal como no prompt, sujeito ao manual de marca.
+
+### Revisão independente
+
+Em execução em 29/09/2026.

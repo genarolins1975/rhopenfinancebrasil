@@ -9,6 +9,9 @@ export default async function PortalLayout({ children }: { children: React.React
   const admin = canEnterAdminArea(current.access) || current.access.mfaRequired;
   const items = [
     { href: "/inicio", label: "Início" },
+    { href: "/semana", label: "Minha semana" },
+    { href: "/escritorio", label: "Escritório" },
+    { href: "/escritorio/minhas-reservas", label: "Minhas reservas" },
     { href: "/perfil", label: "Perfil" },
   ];
   return (

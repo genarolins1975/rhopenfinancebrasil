@@ -9,6 +9,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const items = [{ href: "/admin", label: "Visão geral" }];
   if (p.has("employee.manage") || p.has("employee.read.full")) items.push({ href: "/admin/colaboradores", label: "Colaboradores" });
   if (p.has("role.assign.standard") || p.has("role.assign.privileged") || p.has("audit.view")) items.push({ href: "/admin/acessos", label: "Acessos" });
+  if (p.has("resource.manage") || p.has("resource.status.manage") || p.has("floorplan.edit") || p.has("settings.manage")) items.push({ href: "/admin/escritorio/recursos", label: "Recursos" });
+  if (p.has("floorplan.edit") || p.has("floorplan.publish")) items.push({ href: "/admin/escritorio/planta", label: "Planta" });
+  if (p.has("exclusive.view") || p.has("manage_executive_seat_assignments")) items.push({ href: "/admin/escritorio/mesas/exclusividade", label: "Exclusividade" });
+  if (p.has("booking.admin.manage") || p.has("booking.on_behalf.create")) items.push({ href: "/admin/reservas", label: "Reservas" });
   if (p.has("audit.view")) items.push({ href: "/admin/auditoria", label: "Auditoria" });
   return (
     <div className="flex min-h-screen flex-col md:flex-row">

@@ -1,0 +1,174 @@
+import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
+import type { Db, DbOrTx, Tx } from "@/db/client";
+import { deskBooking, employee, officeSettings, resource } from "@/db/schema";
+import { loadAccess } from "@/modules/access/can";
+import type { Permission } from "@/modules/access/permissions";
+import { pgErrorOf } from "@/modules/shared/db-errors";
+import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
+import { logger } from "@/modules/shared/logger";
+
+export type Actor = { employeeId: string; userId: string; requestId?: string };
+
+export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function assertIsoDate(value: string, label = "Data"): string {
+  if (!ISO_DATE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new ValidationError(`${label} inválida.`);
+  return value;
+}
+
+export function assertUuid(value: string, label = "Identificador"): string {
+  if (!UUID_RE.test(value)) throw new ValidationError(`${label} inválido.`);
+  return value;
+}
+
+/** Mensagens de domínio para as exceções levantadas pelas funções e triggers do banco (código P0001). */
+const DB_RULE_MESSAGES: Record<string, string> = {
+  booking_conflict: "Existem reservas incompatíveis com esta operação. Trate cada uma antes de confirmar.",
+  booking_not_allowed: "A reserva não é permitida para esta pessoa, mesa e data.",
+  assignment_starts_in_past: "A vigência de uma atribuição começa hoje ou depois.",
+  assignment_created_closed: "Atribuição nova não nasce encerrada nem anulada.",
+  assignment_cancelled_frozen: "Atribuição anulada não muda mais.",
+  assignment_ended_frozen: "Atribuição encerrada não muda mais. Para reabrir, crie uma nova.",
+  assignment_start_immutable: "O início não muda depois que a atribuição começou.",
+  assignment_start_in_past: "O início não pode ficar no passado.",
+  assignment_reopen_forbidden: "Término preenchido não volta a ficar em aberto. Para reabrir, crie uma nova atribuição.",
+  assignment_end_in_past: "O término não pode ficar no passado.",
+  assignment_cancel_only_before_start: "Só atribuição agendada, ainda não iniciada, pode ser anulada. Para as demais, encerre.",
+  exception_outside_assignment: "A liberação precisa caber inteira na vigência da atribuição.",
+  exception_resource_mismatch: "A liberação precisa ser da mesma mesa da atribuição.",
+  exception_on_cancelled_assignment: "Atribuição anulada não recebe liberação.",
+  exception_too_long: "A liberação temporária excede a duração máxima configurada. Acima disso, encerre a atribuição.",
+  exception_starts_in_past: "A liberação começa hoje ou depois.",
+  beneficiary_is_holder: "O titular não precisa de liberação para a própria mesa.",
+  assignment_not_found: "Atribuição não encontrada.",
+  assignment_not_active: "Só atribuição vigente ou agendada pode ser transferida.",
+  transfer_requires_individual: "Só atribuição individual é transferida.",
+  transfer_in_past: "A transferência começa hoje ou depois.",
+  transfer_before_start: "A transferência precisa começar depois do início da atribuição.",
+  transfer_after_end: "A transferência não pode começar depois do término da atribuição.",
+  transfer_same_holder: "O novo titular precisa ser outra pessoa.",
+  transfer_without_successor: "Transferência sem sucessora contígua. Nada foi aplicado.",
+  successor_cancel_needs_decision: "Anular a sucessora de uma transferência exige decisão explícita sobre a mesa.",
+};
+
+/** Converte erro do banco em erro de domínio: regra de trigger, exclusão, unicidade, deadlock ou tempo de lock. */
+export function translateOfficeDbError(e: unknown): Error | null {
+  const pg = pgErrorOf(e);
+  if (!pg) return null;
+  if (pg.code === "P0001" || pg.code === "P0002") {
+    const key = String((pg as { message?: string }).message ?? "").trim();
+    const known = DB_RULE_MESSAGES[key];
+    if (known) return new ConflictError(known);
+    return new ConflictError("A operação foi recusada por uma regra do banco. Nada foi aplicado.");
+  }
+  if (pg.code === "23P01") return new ConflictError("Já existe um registro vigente que se sobrepõe a este período.");
+  if (pg.code === "23505") return new ConflictError("Já existe reserva ou registro equivalente para esta combinação.");
+  if (pg.code === "40P01" || pg.code === "55P03") return new ConflictError("Outra operação está em andamento sobre o mesmo recurso. Tente de novo.");
+  return null;
+}
+
+function isRetryable(e: unknown): boolean {
+  const pg = pgErrorOf(e);
+  return !!pg && (pg.code === "40P01" || pg.code === "55P03");
+}
+
+/**
+ * Protocolo transacional do escritório: read committed, lock_timeout e statement_timeout locais (PAR-34),
+ * até três tentativas em deadlock ou tempo de lock, erro de banco traduzido para domínio.
+ */
+export async function withOfficeTx<T>(db: Db, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
+    try {
+      return await db.transaction(async (tx) => {
+        await tx.execute(sql`set local lock_timeout = '3s'`);
+        await tx.execute(sql`set local statement_timeout = '15s'`);
+        return fn(tx);
+      });
+    } catch (e) {
+      if (isRetryable(e) && attempt < 3) {
+        logger.warn({ attempt }, "nova tentativa da transação do escritório");
+        await new Promise((r) => setTimeout(r, 50 * attempt));
+        continue;
+      }
+      const translated = translateOfficeDbError(e);
+      if (translated) throw translated;
+      throw e;
+    }
+  }
+}
+
+/** Lock dos recursos em ordem crescente de id, em instrução separada (passo 5 do protocolo). */
+export async function lockResources(tx: Tx, ids: string[]): Promise<void> {
+  const unique = [...new Set(ids)].sort();
+  if (unique.length === 0) return;
+  for (const id of unique) assertUuid(id, "Recurso");
+  await tx.select({ id: resource.id }).from(resource).where(inArray(resource.id, unique)).orderBy(asc(resource.id)).for("update");
+}
+
+/** `for share` na pessoa: serializa contra desativação e suspensão, que tomam `for update`. */
+export async function shareLockEmployee(tx: Tx, employeeId: string): Promise<{ id: string; status: string; fullName: string }> {
+  const rows = await tx.execute(sql`select id, status, full_name from employee where id = ${employeeId} for share`);
+  const row = (rows.rows as Array<{ id: string; status: string; full_name: string }>)[0];
+  if (!row) throw new ValidationError("Pessoa não encontrada.");
+  return { id: row.id, status: row.status, fullName: row.full_name };
+}
+
+export async function advisoryShareDay(tx: Tx, date: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtext(${"office_day:" + date}))`);
+}
+
+export async function advisoryExclusiveDay(tx: Tx, date: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"office_day:" + date}))`);
+}
+
+/** Expiração preguiçosa de retenções vencidas da mesa e da pessoa na data (passo 6). Sem job. */
+export async function expireHolds(tx: DbOrTx, filter: { resourceId?: string; employeeId?: string; date: string }): Promise<number> {
+  const conds = [];
+  if (filter.resourceId) conds.push(and(eq(deskBooking.resourceId, filter.resourceId), eq(deskBooking.bookingDate, filter.date)));
+  if (filter.employeeId) conds.push(and(eq(deskBooking.employeeId, filter.employeeId), eq(deskBooking.bookingDate, filter.date)));
+  if (conds.length === 0) return 0;
+  const rows = await tx
+    .update(deskBooking)
+    .set({ status: "expired" })
+    .where(and(eq(deskBooking.status, "held"), lte(deskBooking.holdExpiresAt, sql`now()`), or(...conds)))
+    .returning({ id: deskBooking.id });
+  return rows.length;
+}
+
+export async function assertPermission(db: DbOrTx, actor: Actor, permission: Permission): Promise<void> {
+  const access = await loadAccess(db, actor.employeeId);
+  if (!access.permissions.has(permission)) throw new ForbiddenError("Esta ação não está disponível para o seu perfil.");
+}
+
+export async function assertAnyPermission(db: DbOrTx, actor: Actor, permissions: Permission[]): Promise<Set<Permission>> {
+  const access = await loadAccess(db, actor.employeeId);
+  if (!permissions.some((p) => access.permissions.has(p))) throw new ForbiddenError("Esta ação não está disponível para o seu perfil.");
+  return access.permissions;
+}
+
+export type OfficeSettings = { bookingOpenWeekday: number; bookingOpenTime: string; bookingHorizonWeeks: number; exceptionMaxDays: number };
+
+export async function readSettings(db: DbOrTx): Promise<OfficeSettings> {
+  const rows = await db.select().from(officeSettings);
+  const map = Object.fromEntries(rows.map((r) => [r.key, r.value])) as Record<string, unknown>;
+  return {
+    bookingOpenWeekday: Number(map.booking_open_weekday ?? 4),
+    bookingOpenTime: String(map.booking_open_time ?? "10:00"),
+    bookingHorizonWeeks: Number(map.booking_horizon_weeks ?? 4),
+    exceptionMaxDays: Number(map.exception_max_days ?? 30),
+  };
+}
+
+export async function resourceIdsByCodes(db: DbOrTx, codes: string[]): Promise<Map<string, string>> {
+  if (codes.length === 0) return new Map();
+  const rows = await db.select({ id: resource.id, code: resource.code }).from(resource).where(inArray(resource.code, codes));
+  return new Map(rows.map((r) => [r.code, r.id]));
+}
+
+export async function employeeSummary(db: DbOrTx, id: string) {
+  const [row] = await db.select({ id: employee.id, fullName: employee.fullName, status: employee.status, orgCondition: employee.orgCondition }).from(employee).where(eq(employee.id, id));
+  return row ?? null;
+}

@@ -1,6 +1,6 @@
 # Estado do projeto
 
-Atualizado em 29/09/2026. Branch de trabalho: `claude/new-session-0rzo0n`.
+Atualizado em 29/09/2026 (Etapa 2). Branch de trabalho: `claude/new-session-0rzo0n`.
 
 ## Situação encontrada em 28/09/2026
 
@@ -40,7 +40,7 @@ Registro completo em `decisoes/registro-de-decisoes.md`.
 
 ## Etapa 1 (fundação)
 
-Status: implementada pelo Executor entre 28/09/2026 e 29/09/2026; rejeitada pelo primeiro Revisor com 26 achados; reapresentada e aceita com correções pelo segundo Revisor (11 achados) e pelo terceiro (8 achados residuais); todas as correções aplicadas e testadas em 29/09/2026, as da última rodada sem nova rodada independente. Aguarda validação do responsável. Registro completo em `testes/aceite.md`. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
+Status: implementada pelo Executor entre 28/09/2026 e 29/09/2026; rejeitada pelo primeiro Revisor com 26 achados; reapresentada e aceita com correções pelo segundo Revisor (11 achados) e pelo terceiro (8 achados residuais); todas as correções aplicadas e testadas em 29/09/2026, as da última rodada sem nova rodada independente. Validada pelo responsável em 29/09/2026 ("Pode continuar"). Registro completo em `testes/aceite.md`. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
 
 Entregue em código:
 
@@ -63,6 +63,31 @@ Testes executados em 29/09/2026 após as correções das três rodadas de revis�
 
 Fora da Etapa 1, por desenho ou pendência: verificação manual com leitor de tela (`A11Y-02`), rotação automatizada de chaves (`CPF-04-T2`), reenfileiramento de revogação falha (`AUT-14-T2`), backoff progressivo e limite de reenvio (`RSK-24`), CSP com nonce (`RSK-25`), token de recuperação em claro por 60 minutos no Better Auth (`RSK-23`), provedor real de email, hospedagem.
 
+## Etapa 2 (núcleo do escritório)
+
+Status: implementada pelo Executor em 29/09/2026; submetida ao Revisor independente na mesma data. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
+
+Entregue em código:
+
+* Banco: migração `0003` (gerada: planta, zonas, recursos, períodos operacionais, calendário, configurações, grupo e integrantes, atribuições exclusivas, exceções, reservas de mesa e de espaço, intenção e requisição de semana) e migração `0004` (manual: constraints de exclusão, `is_eligible`, `is_bookable`, `booking_remains_valid`, `desk_class`, `booking_window_open`, `transfer_assignment`, triggers de lock por recurso, dia, pessoa e grupo, trigger de vigência da atribuição, validação de exceção, verificações deferidas no commit, grants, grupo `diretoria` e parâmetros iniciais).
+* Disponibilidade: regra pura com a ordem fixa de `DIR-019` e a elegibilidade literal de `DIR-031`, testada contra as funções SQL; carregadores por data para mapa, lista, detalhe, semana e escrita; capacidade por classe sem dupla contagem (`DIR-026`).
+* Reservas: reserva própria e em nome (`DIR-011`), cancelamento próprio e administrativo com comunicação, semana atômica e idempotente por chave de requisição (`BKG-02`), expiração preguiçosa de retenções (`DIR-034`), protocolo transacional com `lock_timeout`, novas tentativas e tradução de erro do banco em resposta de conflito.
+* Exclusividade: travar, agendar, transferir, encerrar, anular (com decisão sobre sucessora), liberar temporariamente ao compartilhado ou a pessoa, revogar liberação, grupo com vigência, revisão de vínculo, lote atômico, prévia de impacto com diálogo de conflito (cancelar com comunicação ou realocar validando a mesa de destino), auditoria e notificação por outbox (`DIR-028`), histórico por mesa, painel de conflitos por consulta dinâmica.
+* Escritório: inventário e atributos verificados, manutenção e bloqueio com diálogo de conflito, liberação de período, calendário com fechamento de dia, parâmetros auditados, versões da planta (rascunho a partir da extração, aprovação, publicação única) e mapa SVG acessível gerado das posições publicadas.
+* Desativação de pessoa cancela reservas futuras com comunicação e marca vínculos exclusivos para revisão (`DIR-018`, `PAR-25`); suspensão mantém reservas.
+* Telas: escritório (mapa e lista com filtros e data), detalhe da mesa, minhas reservas, planejar a semana, início com semana, mesa habitual e próximas reservas; administrativas: recursos (inventário, períodos, calendário, configurações), planta, exclusividade da diretoria (abas Mesas, Grupo, Conflitos, Histórico; filtros; painel da mesa; lote) e reservas (em nome e cancelamento administrativo). Visão geral com capacidade do dia.
+
+Testes executados em 29/09/2026 no ambiente desta sessão:
+
+| Bateria | Comando | Resultado |
+|---|---|---|
+| Unidade | `pnpm test:unit` | 53 testes, 53 aprovados |
+| Integração com banco | `pnpm test:integration` | 128 testes, 128 aprovados |
+| Ponta a ponta com axe (desktop e celular) | `pnpm build && pnpm test:e2e` | 42 testes, 42 aprovados |
+| Tipos, lint e build | `pnpm typecheck && pnpm lint && pnpm build` | sem erros |
+
+Fora da Etapa 2, por desenho ou pendência: fila de espera e ofertas (`DIR-025-T1`, `DIR-034-T2`, Etapa 3), confirmação de uso (`DIR-006-T2`, Etapa 3), salas e cabines por intervalo (Etapa 3), `DIR-030-T1`, `DIR-026-T4` e `T5`, validação do inventário por Facilities e RH (`RSK-26`), leitor de tela manual.
+
 ## Próximo passo
 
-Validação da Etapa 1 pelo responsável; depois Etapa 2 (núcleo do escritório).
+Revisão independente da Etapa 2, correções, aceite do responsável; depois Etapa 3 (operação: fila, confirmação de uso, salas e cabines, Meu time, painel de reservas).

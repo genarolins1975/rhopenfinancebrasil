@@ -14,16 +14,16 @@ const PASSWORD = "correto cavalo bateria grampo";
 async function reset() {
   const pool = new Pool({ connectionString: process.env.DATABASE_OWNER_URL, max: 1 });
   await pool.query(
-    'truncate table "audit_event","outbox_event","login_attempt","import_batch","invitation","employee_permission","employee_role","employee_sensitive","employment_period","employee_org_assignment","employee","area","auth_two_factor","auth_rate_limit","auth_verification","auth_account","auth_session","auth_user" restart identity cascade',
+    'truncate table "desk_booking","space_booking","presence_intent","week_plan_request","access_exception","exclusive_assignment","access_group_member","resource_status_period","office_calendar","floor_plan_placement","resource","zone","floor_plan_version","audit_event","outbox_event","login_attempt","import_batch","invitation","employee_permission","employee_role","employee_sensitive","employment_period","employee_org_assignment","employee","area","auth_two_factor","auth_rate_limit","auth_verification","auth_account","auth_session","auth_user" restart identity cascade',
   );
   await pool.end();
 }
 
-async function person(name: string, email: string, seed: number, roles: string[], permissions: string[]) {
-  const [emp] = await db.insert(employee).values({ fullName: name, corporateEmail: email, status: "invited" }).returning({ id: employee.id });
+async function person(name: string, email: string, seed: number, roles: string[], permissions: string[], orgCondition: "standard" | "director" = "standard") {
+  const [emp] = await db.insert(employee).values({ fullName: name, corporateEmail: email, status: "invited", orgCondition }).returning({ id: employee.id });
   await db.insert(employeeSensitive).values({ employeeId: emp.id, ...protectCpf(syntheticCpf(seed), emp.id) });
   await db.insert(employmentPeriod).values({ employeeId: emp.id, hireDate: localToday() });
-  await db.insert(employeeOrgAssignment).values({ employeeId: emp.id, validFrom: localToday() });
+  await db.insert(employeeOrgAssignment).values({ employeeId: emp.id, validFrom: localToday(), orgCondition });
   for (const r of roles) await db.insert(employeeRole).values({ employeeId: emp.id, roleCode: r, validFrom: localToday(), reason: "e2e" });
   for (const p of permissions) await db.insert(employeePermission).values({ employeeId: emp.id, permissionCode: p as never, validFrom: localToday(), reason: "e2e" });
   const inv = await db.transaction((tx) => createInvitation(tx, { employeeId: null, userId: null }, emp.id));
@@ -36,7 +36,9 @@ async function main() {
   await reset();
   const comum = await person("Colaborador Exemplo", "colaborador@teste.invalid", 9001, ["employee"], []);
   const gestor = await person("Gestor Exemplo", "gestor@teste.invalid", 9004, ["manager"], []);
-  const adm = await person("Administradora Exemplo", "admin@teste.invalid", 9002, ["admin", "hr"], ["role.assign.privileged", "audit.view", "cpf.reveal"]);
+  const adm = await person("Administradora Exemplo", "admin@teste.invalid", 9002, ["admin", "hr", "facilities"], ["role.assign.privileged", "audit.view", "cpf.reveal", "booking.on_behalf.create", "floorplan.publish"]);
+  const diretora = await person("Diretora Exemplo", "diretora@teste.invalid", 9005, ["employee"], [], "director");
+  const diretor2 = await person("Diretor Segundo", "diretor2@teste.invalid", 9006, ["employee"], [], "director");
   // Segundo fator do admin ativado por API, guardando o URI para o teste gerar códigos.
   const signIn = await auth.api.signInEmail({ body: { email: adm.email, password: PASSWORD }, asResponse: true });
   const cookies = signIn.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
@@ -52,7 +54,22 @@ async function main() {
   const invitedNoInvite = await db.insert(employee).values({ fullName: "Pessoa Convidada", corporateEmail: "convidada@teste.invalid", status: "invited" }).returning({ id: employee.id });
   await db.insert(employeeSensitive).values({ employeeId: invitedNoInvite[0].id, ...protectCpf(syntheticCpf(9003), invitedNoInvite[0].id) });
   const inv = await db.transaction((tx) => createInvitation(tx, { employeeId: adm.id, userId: adm.userId }, invitedNoInvite[0].id));
-  writeFileSync(".e2e-state.json", JSON.stringify({ password: PASSWORD, comum, gestor, adm, totpURI: enabled.totpURI, inviteToken: inv.token }));
+  // Escritório: rascunho a partir da extração, aprovado e publicado; mesa M001 exclusiva da diretora; diretor2 no grupo.
+  const { createDraftFromExtraction, approvePlan, publishPlan } = await import("@/modules/workplace/service");
+  const { createAssignment, addGroupMember } = await import("@/modules/exclusivity/service");
+  const { accessGroup } = await import("@/db/schema");
+  const { readFileSync } = await import("node:fs");
+  const admActor = { employeeId: adm.id, userId: adm.userId };
+  const file = JSON.parse(readFileSync("docs/fontes/planta-r00-extracao.json", "utf8"));
+  const draft = await createDraftFromExtraction(db, admActor, file, "Planta R00 (extração, não validada)");
+  await approvePlan(db, admActor, draft.planId, "seed do ponta a ponta");
+  await publishPlan(db, admActor, draft.planId);
+  const { resource } = await import("@/db/schema");
+  const [m001] = await db.select({ id: resource.id }).from(resource).where(eq(resource.code, "M001"));
+  await createAssignment(db, admActor, { resourceId: m001.id, mode: "individual", holderEmployeeId: diretora.id, validFrom: localToday(), reason: "seed", responsible: "Diretoria executiva" });
+  const [g] = await db.select({ id: accessGroup.id }).from(accessGroup).where(eq(accessGroup.code, "diretoria"));
+  await addGroupMember(db, admActor, { groupId: g.id, employeeId: diretor2.id, validFrom: localToday(), reason: "seed" });
+  writeFileSync(".e2e-state.json", JSON.stringify({ password: PASSWORD, comum, gestor, adm, diretora, diretor2, totpURI: enabled.totpURI, inviteToken: inv.token }));
   console.log("seed do ponta a ponta concluído");
   process.exit(0);
 }

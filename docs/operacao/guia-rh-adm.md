@@ -37,7 +37,7 @@ Colaboradores, Importar CSV.
 ## Suspender, desativar e readmitir
 
 * Suspender: bloqueia o login e encerra as sessões. Cadastro e perfis ficam. Use para afastamentos.
-* Desativar: encerra sessões, convites, perfis e permissões, fecha o período de vínculo com a data de saída. O histórico fica. Reservas e mesas vinculadas terão regra própria na Etapa 2.
+* Desativar: encerra sessões, convites, perfis e permissões, fecha o período de vínculo com a data de saída, cancela as reservas futuras com comunicação (PAR-25) e marca as mesas exclusivas da pessoa como "vínculo a revisar" (DIR-018). O histórico fica.
 * Readmitir: reutiliza o mesmo cadastro, abre novo período, envia novo convite e zera senha e segundo fator. Perfis antigos continuam encerrados.
 * Ninguém altera a própria situação nem os próprios perfis.
 
@@ -72,3 +72,36 @@ Procedimento de linha de comando no servidor, executado pelo administrador técn
 Na página da pessoa, cada convite mostra enfileirado, enviado em data e hora, ou bloqueado (destinatário fora da lista permitida do ambiente), além de válido, usado, revogado ou expirado. "Enviado" só aparece depois que o worker entregou de fato. A visão geral conta as notificações bloqueadas. Revogar um convite exige motivo, que fica na auditoria.
 
 Pessoa com perfil privilegiado (RH, Facilities, Administrador, Administrador técnico ou permissão sensível), vigente ou agendado, só é alterada por quem tem `role.assign.privileged`: isso vale para suspender, desativar, reativar, trocar o email de convidada, reenviar e revogar convite. Nome e cargo continuam editáveis pelo RH. Convite cuja entrega esgotou as tentativas aparece como "Falha na entrega" e pede reenvio.
+
+## Planta e inventário
+
+Em Planta, crie o rascunho a partir da extração da planta R00: zonas por bloco, 84 mesas, 4 cabines, 3 salas, a mesa aberta e 2 booths com códigos provisórios (M001 a M084, C1 a C4, R1 a R3, RA1, B1, B2). O inventário nasce marcado como não validado; Facilities e RH conferem contagem, códigos, capacidades e atributos antes de aprovar. Só versão aprovada é publicada; publicar não apaga reservas nem troca a identidade de mesa. Sem versão publicada, o portal mostra "Mapa em preparação" e a lista.
+
+## Recursos, manutenção e bloqueio
+
+Em Recursos, cada mesa tem atributos com marcação "verificado por, em". Manutenção e bloqueio administrativo são períodos com início, término opcional e motivo (o motivo público aparece no mapa). Criar um período sobre reservas ativas abre a prévia com as pessoas afetadas: cada reserva recebe decisão (cancelar com comunicação ou realocar para mesa disponível para a pessoa); sem decisão, nada é aplicado. Liberar um período faz a mesa voltar a partir do dia informado, sem depender de rotina. Manutenção impede uso inclusive pelo titular de mesa exclusiva.
+
+## Calendário e parâmetros
+
+Fechar um dia trava a data e trata as reservas ativas apenas por cancelamento com comunicação. Os parâmetros ficam em Configurações: dia e hora de abertura das reservas da semana seguinte (PAR-01, padrão quinta às 10h), horizonte em semanas e duração máxima de liberação temporária (PAR-35, 30 dias). Toda alteração é auditada.
+
+## Exclusividade da diretoria
+
+Tela Exclusividade, aba Mesas. Selecione a mesa e escolha a ação:
+
+* Travar e vincular: titular (pessoa ativa com condição de diretor), início (padrão hoje; início futuro agenda), término opcional, justificativa e responsável pela decisão. "Ver impacto" mostra desde quando a mesa sai do conjunto compartilhado, dias afetados, reservas incompatíveis, sobreposição com outra atribuição (impede) e manutenção ou bloqueio vigente (informa). "Confirmar" só existe dentro da prévia e exige decisão por reserva incompatível: cancelar com motivo e mensagem, ou realocar para mesa disponível. Se algo mudou entre a prévia e a confirmação, a confirmação é recusada e a prévia precisa ser refeita.
+* Travar para o grupo: mesma prévia, para integrantes ativos do grupo da diretoria. Lote: marque várias mesas, "Selecionar para lote", uma ação para todas, prévia consolidada, aplicação atômica.
+* Transferir: novo titular e data; as reservas do titular anterior a partir da data entram no diálogo de conflito; reservas do novo titular em outras mesas são informadas, não canceladas.
+* Encerrar: grava só o término; a mesa volta ao conjunto compartilhado no dia seguinte; nenhuma reserva é cancelada.
+* Anular: só atribuição agendada. Sucessora de transferência exige decidir: liberar a mesa ou reabrir para o titular anterior.
+* Liberar temporariamente: ao conjunto compartilhado (reservas do titular continuam válidas) ou a pessoa específica (o titular não reserva nas datas liberadas e as reservas dele no período entram no diálogo de conflito). Fim obrigatório, no máximo o parâmetro configurado. A exclusividade volta sozinha.
+* Revogar liberação: reservas feitas sob a liberação entram no diálogo de conflito.
+* Revisão do vínculo: durante a revisão ninguém reserva a mesa, nem por reserva em nome.
+
+Aba Grupo diretoria: integrantes com vigência; remover mostra as reservas futuras da pessoa nas mesas do grupo. Aba Conflitos pendentes: consulta dinâmica; o normal é vazia. Aba Histórico: atribuições, liberações e eventos de auditoria da mesa, inclusive decisões de conflito.
+
+O nome do titular aparece só para quem tem `exclusive.holder.view`; o colaborador vê o rótulo "Uso exclusivo — Diretoria" sem botão. O diretor não remove a própria exclusividade; pede ao RH.
+
+## Reservas administrativas
+
+Em Reservas: reservas ativas por data; reservar em nome de alguém exige a permissão própria, confirmação de ciência, registra quem fez e notifica a pessoa; cancelar reserva alheia exige motivo e envia comunicação. Cancelar reserva de titular nunca altera a exclusividade.

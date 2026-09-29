@@ -34,6 +34,9 @@ export function outboxHandlers(): Record<string, OutboxHandler> {
     "email.password_reset": async (e) => ({ blocked: (await sendEmailFromPayload(e.payload)).blocked }),
     "email.change_confirmation": async (e) => ({ blocked: (await sendEmailFromPayload(e.payload)).blocked }),
     "email.verification": async (e) => ({ blocked: (await sendEmailFromPayload(e.payload)).blocked }),
+    "email.booking_changed": async (e) => ({ blocked: (await sendEmailFromPayload(e.payload)).blocked }),
+    "email.booking_on_behalf": async (e) => ({ blocked: (await sendEmailFromPayload(e.payload)).blocked }),
+    "email.exclusivity": async (e) => ({ blocked: (await sendEmailFromPayload(e.payload)).blocked }),
     "identity.revoke_sessions": async (e) => {
       const { authContext } = await import("@/modules/identity/auth");
       const ctx = await authContext();

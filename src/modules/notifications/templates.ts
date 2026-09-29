@@ -60,3 +60,30 @@ export function maskEmail(email: string): string {
   const visible = local.slice(0, 2);
   return `${visible}${"*".repeat(Math.max(1, local.length - 2))}@${domain}`;
 }
+
+/** Aviso de reserva alterada por decisão administrativa: sem CPF, sem detalhes de terceiros. */
+export function bookingChangedEmail(to: string, name: string, text: string): EmailMessage {
+  return {
+    to,
+    subject: "Sua reserva no escritório mudou",
+    text: [`Olá, ${name}.`, "", text, "", "Veja suas reservas no Portal do Colaborador."].join("\n"),
+  };
+}
+
+/** Aviso de reserva feita em nome da pessoa, com registro de quem fez (DIR-011). */
+export function bookingOnBehalfEmail(to: string, name: string, code: string, dateLocal: string, actorName: string): EmailMessage {
+  return {
+    to,
+    subject: "Reserva feita para você",
+    text: [`Olá, ${name}.`, "", `${actorName} reservou a mesa ${code} para você em ${dateLocal}.`, "Se não estiver de acordo, cancele a reserva no Portal do Colaborador ou fale com o RH."].join("\n"),
+  };
+}
+
+/** Aviso de alteração de política de mesa exclusiva ao titular ou beneficiário (DIR-028). */
+export function exclusivityEmail(to: string, name: string, text: string): EmailMessage {
+  return {
+    to,
+    subject: "Mesa de uso exclusivo",
+    text: [`Olá, ${name}.`, "", text, "", "Detalhes no Portal do Colaborador."].join("\n"),
+  };
+}

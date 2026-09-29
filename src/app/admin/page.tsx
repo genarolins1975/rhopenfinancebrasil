@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui";
 import { db } from "@/db/client";
+import { capacityOn } from "@/modules/availability/service";
+import { localToday } from "@/modules/shared/dates";
 import { adminOverview } from "@/modules/admin/overview";
 import { requireAdminArea } from "@/modules/identity/session";
 
@@ -17,6 +19,7 @@ function Stat({ label, value, help }: { label: string; value: number; help: stri
 export default async function AdminHome() {
   await requireAdminArea();
   const o = await adminOverview(db);
+  const cap = await capacityOn(db, localToday());
   return (
     <>
       <PageHeader title="O que precisa de atenção hoje" lead="Números do cadastro e das notificações. Reservas, fila e atendimentos chegam nas próximas etapas." />
@@ -30,6 +33,10 @@ export default async function AdminHome() {
         <Stat label="Notificações bloqueadas" value={o.outbox.blocked} help="Destinatário fora da lista permitida deste ambiente." />
         <Stat label="Desativadas" value={o.employees.deactivated} help="Sem acesso; histórico preservado." />
         <Stat label="Eventos de auditoria em 24h" value={o.auditLast24h} help="Alterações administrativas registradas." />
+        <Stat label="Capacidade compartilhada hoje" value={cap.desks.shared} help="Mesas sem exclusividade vigente e operacionais. Exclusiva em manutenção conta uma vez." />
+        <Stat label="Confirmadas no compartilhado" value={cap.sharedConfirmed} help="Reservas confirmadas hoje. Retenções fora. Não é presença física." />
+        <Stat label="Mesas exclusivas hoje" value={cap.desks.exclusive} help="Sem reserva não é vaga compartilhada nem ocupação." />
+        <Stat label="Indisponíveis hoje" value={cap.desks.maintenance + cap.desks.blocked + cap.desks.retired} help="Manutenção, bloqueio e desativadas." />
       </div>
       <div className="mt-6">
         <Card title="Atalhos">

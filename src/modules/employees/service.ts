@@ -299,6 +299,9 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
     const [open] = await tx.select({ hireDate: employmentPeriod.hireDate }).from(employmentPeriod).where(and(eq(employmentPeriod.employeeId, employeeId), isNull(employmentPeriod.exitDate)));
     if (open && exitDate < open.hireDate) throw new ValidationError("A data de saída não pode ser anterior à admissão.");
     await tx.update(employee).set({ status: "deactivated", deactivatedAt: new Date(), deactivatedBy: actor.employeeId, updatedAt: new Date() }).where(eq(employee.id, employeeId));
+    // Escritório (DIR-018, PAR-25): reservas futuras canceladas com comunicação; vínculos exclusivos marcados para revisão.
+    const { applyDeactivationEffects } = await import("@/modules/exclusivity/service");
+    const office = await applyDeactivationEffects(tx, actor, employeeId, input.reason);
     await revokeActiveInvitations(tx, employeeId);
     await revokeAllGrants(tx, employeeId, actor.employeeId);
     await tx
@@ -309,7 +312,7 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
       .update(employeeOrgAssignment)
       .set({ validTo: exitDate })
       .where(and(eq(employeeOrgAssignment.employeeId, employeeId), isNull(employeeOrgAssignment.validTo)));
-    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "employee.deactivated", entityType: "employee", entityId: employeeId, before: { status: current.status }, after: { status: "deactivated", exitDate }, reason: input.reason, requestId: actor.requestId });
+    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "employee.deactivated", entityType: "employee", entityId: employeeId, before: { status: current.status }, after: { status: "deactivated", exitDate, ...office }, reason: input.reason, requestId: actor.requestId });
     return current.userId;
   });
   await revokeSessionsAfterCommit(db, employeeId, userId);

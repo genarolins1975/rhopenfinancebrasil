@@ -6,53 +6,53 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 
 | Caso | Requisito | Implementação prevista | Teste | Tipo | Resultado obrigatório | Status |
 |---|---|---|---|---|---|---|
-| Colaborador tenta reservar mesa individual da diretoria | `DIR-008`, `DIR-021`, `DIR-022` | `availability`, `booking` | `DIR-008-T1` por API, `DIR-008-T2` por semana, `DIR-008-T3` por fila | I, E | Negação no servidor, por qualquer rota. | pendente (Etapa 2) |
-| Usuário altera IDs no pedido | `DIR-022` | `booking`, `access` | `DIR-022-T1` | I | Sem acesso à mesa, reserva ou pessoa não autorizada. | pendente (Etapa 2) |
-| Diretor titular reserva sua mesa | `DIR-009` | `booking` | `DIR-009-T1` | I, E | Permitido se operacional e sem conflito. | pendente (Etapa 2) |
-| Outro diretor tenta essa mesma mesa | `DIR-002` | `availability` | `DIR-002-T1` | I | Negado sem exceção específica. | pendente (Etapa 2) |
-| Integrante autorizado reserva mesa exclusiva de grupo | `DIR-010` | `availability`, `booking` | `DIR-010-T1`, `DIR-010-T2` (integrante inativo negado) | I | Permitido conforme política e disponibilidade. | pendente (Etapa 2) |
-| RH trava mesa sem reservas incompatíveis | `DIR-004`, `DIR-021` | `exclusivity` | `DIR-004-T1` (mapa, lista, busca, semana, fila refletem) | I, E | Restrição aplicada de forma consistente a todos os canais. | pendente (Etapa 2) |
-| RH trava mesa com reservas incompatíveis | `DIR-016` | `exclusivity` | `DIR-016-T1` (conflito explícito), `DIR-016-T2` (opções), `DIR-016-T3` (revalidação na confirmação) | I, E | Conflito explícito; nenhuma exclusão silenciosa. | pendente (Etapa 2) |
-| RH trava enquanto colaborador reserva | `DIR-024` | `exclusivity`, `booking` | `DIR-024-T1` (barreira de sincronização, 50 repetições), `DIR-024-T2` (trigger deferido sem lock) | C, I | Apenas um resultado serializável e coerente; sem reserva proibida coexistente. | pendente (Etapa 2) |
-| Diretor cancela ou não faz check-in | `DIR-006` | `booking`, `checkin` | `DIR-006-T1`, `DIR-006-T2` | I | Exclusividade permanece. | pendente (Etapa 2) |
-| Fila procura vaga para funcionário comum | `DIR-025` | `availability`, `waitlist` | `DIR-025-T0` (serviço nunca lista mesa exclusiva como ofertável), `DIR-025-T1` (fluxo completo da fila) | I, C | Mesa exclusiva não é oferecida sem exceção válida. | pendente (T0 na Etapa 2; T1 na Etapa 3) |
-| Liberação temporária expira | `DIR-013` | `availability` | `DIR-013-T1` (relógio simulado, sem job) | U, I | Política exclusiva volta pela vigência, mesmo sem execução de job. | pendente (Etapa 2) |
-| Mesa exclusiva entra em manutenção | `DIR-020` | `availability` | `DIR-020-T1` (titular negado), `DIR-020-T2` (exceção não anula) | I | Reserva impedida também para o titular. | pendente (Etapa 2) |
-| Titular é desativado | `DIR-018` | `employees`, `exclusivity` | `DIR-018-T1` | I, E | Acesso revogado e vínculo sinalizado para RH; mesa não liberada automaticamente. | pendente (Etapa 2) |
-| Usuários disputam a última vaga | `DIR-023`, `DIR-024` | `booking` | `DIR-023-T1` (N sessões, uma confirmação) | C | Uma confirmação; demais recebem conflito correto. | pendente (Etapa 2) |
-| Capacidade combina exclusividade e manutenção | `DIR-026` | `availability` (cálculo de capacidade) | `DIR-026-T1` (união de restrições), `DIR-026-T2` (vínculo não vira utilização) | U | Sem dupla contagem ou indicador de presença fictício. | pendente (Etapa 2) |
+| Colaborador tenta reservar mesa individual da diretoria | `DIR-008`, `DIR-021`, `DIR-022` | `src/modules/availability/rules.ts`, `booking/service.ts` | `DIR-008-T1` em `booking.test.ts`; `DIR-008-T2` (semana) em `booking.test.ts` BKG-02; `DIR-008-T3` por fila na Etapa 3; `office.spec.ts` | I, E | Negação no servidor, por qualquer rota. | testado (29/09/2026) |
+| Usuário altera IDs no pedido | `DIR-022` | `booking/service.ts`, `office/shared.ts` | `DIR-022-T1` em `booking.test.ts` | I | Sem acesso à mesa, reserva ou pessoa não autorizada. | testado (29/09/2026) |
+| Diretor titular reserva sua mesa | `DIR-009` | `booking/service.ts` | `DIR-009-T1` em `booking.test.ts`; `office.spec.ts` | I, E | Permitido se operacional e sem conflito. | testado (29/09/2026) |
+| Outro diretor tenta essa mesma mesa | `DIR-002` | `availability/rules.ts` | `DIR-002-T1` em `booking.test.ts`; `office.spec.ts` | I | Negado sem exceção específica. | testado (29/09/2026) |
+| Integrante autorizado reserva mesa exclusiva de grupo | `DIR-010` | `availability/rules.ts`, `booking/service.ts` | `DIR-010-T1` e `T2` em `booking.test.ts` | I | Permitido conforme política e disponibilidade. | testado (29/09/2026) |
+| RH trava mesa sem reservas incompatíveis | `DIR-004`, `DIR-021` | `exclusivity/service.ts` | `DIR-004-T1` em `exclusivity.test.ts` (mapa, lista e reserva refletem); `office.spec.ts` | I, E | Restrição aplicada de forma consistente a todos os canais. | testado (29/09/2026) |
+| RH trava mesa com reservas incompatíveis | `DIR-016` | `exclusivity/service.ts`, `office/conflicts.ts` | `DIR-016-T1` a `T3` em `exclusivity.test.ts`; `office.spec.ts` (prévia, decisão e histórico) | I, E | Conflito explícito; nenhuma exclusão silenciosa. | testado (29/09/2026) |
+| RH trava enquanto colaborador reserva | `DIR-024` | `office/shared.ts`, migração `0004` (triggers) | `DIR-024-T1` (50 repetições) em `office-concurrency.test.ts`; `DIR-024-T2` em `office-db.test.ts` | C, I | Apenas um resultado serializável e coerente; sem reserva proibida coexistente. | testado (29/09/2026) |
+| Diretor cancela ou não faz check-in | `DIR-006` | `booking/service.ts` | `DIR-006-T1` em `booking.test.ts`; `DIR-006-T2` (Etapa 3) | I | Exclusividade permanece. | parcial: T1 testado (29/09/2026); T2 na Etapa 3 (confirmação de uso) |
+| Fila procura vaga para funcionário comum | `DIR-025` | `availability/service.ts` | `DIR-025-T0` em `booking.test.ts`; `DIR-025-T1` (Etapa 3) | I, C | Mesa exclusiva não é oferecida sem exceção válida. | parcial: T0 testado (29/09/2026); T1 na Etapa 3 |
+| Liberação temporária expira | `DIR-013` | `availability/rules.ts`, funções SQL | `DIR-013-T1` em `booking.test.ts` e `office-db.test.ts` (vigência, sem job) | U, I | Política exclusiva volta pela vigência, mesmo sem execução de job. | testado (29/09/2026) |
+| Mesa exclusiva entra em manutenção | `DIR-020` | `availability/rules.ts` | `DIR-020-T1` e `T2` em `booking.test.ts`; `DIR-003-T1` em `exclusivity.test.ts` | I | Reserva impedida também para o titular. | testado (29/09/2026) |
+| Titular é desativado | `DIR-018` | `employees/service.ts`, `exclusivity/service.ts` | `DIR-018-T1` em `exclusivity.test.ts` | I, E | Acesso revogado e vínculo sinalizado para RH; mesa não liberada automaticamente. | testado (29/09/2026) |
+| Usuários disputam a última vaga | `DIR-023`, `DIR-024` | `booking/service.ts`, índices únicos | `DIR-023-T1` (10 sessões) em `office-concurrency.test.ts` | C | Uma confirmação; demais recebem conflito correto. | testado (29/09/2026) |
+| Capacidade combina exclusividade e manutenção | `DIR-026` | `availability/rules.ts` (`deskClass`), `capacityOn` | `DIR-026-T1` e `T2` em `tests/unit/availability.test.ts` | U | Sem dupla contagem ou indicador de presença fictício. | testado (29/09/2026) |
 
 ## Demais regras DIR
 
 | Requisito | Implementação prevista | Teste | Tipo | Status |
 |---|---|---|---|---|
-| `DIR-003` dimensões separadas | `workplace`, `exclusivity` | `DIR-003-T1` (mesa exclusiva em manutenção mantém as duas informações) | I | pendente (Etapa 2) |
-| `DIR-005` vínculo não é reserva | `availability` | `DIR-005-T1` | U | pendente (Etapa 2) |
+| `DIR-003` dimensões separadas | `workplace`, `exclusivity` | `db/schema/office.ts` | `DIR-003-T1` em `exclusivity.test.ts` | testado (29/09/2026) |
+| `DIR-005` vínculo não é reserva | `availability` | `availability/rules.ts` | `DIR-005-T1` em `tests/unit/availability.test.ts` | testado (29/09/2026) |
 | `DIR-007` sem recomendação | `availability` | `DIR-007-T1` | I | pendente (Etapa 3) |
-| `DIR-011` reserva em nome | `booking`, `access` | `DIR-011-T1` (permissão), `DIR-011-T2` (ator e notificação) | I, E | pendente (Etapa 2) |
-| `DIR-012` uma reserva por dia | `booking` | `DIR-012-T1` | I | pendente (Etapa 2) |
-| `DIR-014` reserva fora da janela | `availability` | `DIR-014-T1` | I | pendente (Etapa 2) |
-| `DIR-015` diretor não remove | `exclusivity`, `access` | `DIR-015-T1` | I | pendente (Etapa 2) |
-| `DIR-017` transferência e revogação | `exclusivity` | `DIR-017-T1`, `DIR-017-T2` | I, E | pendente (Etapa 2) |
-| `DIR-019` ordem de cálculo | `availability` | `DIR-019-T1` (tabela de casos com razão esperada) | U | pendente (Etapa 2) |
-| `DIR-027` lote atômico | `exclusivity` | `DIR-027-T1` | I | pendente (Etapa 2) |
-| `DIR-028` auditoria e notificação | `audit`, `notifications` | `DIR-028-T1` | I | pendente (Etapa 2) |
-| `DIR-029` datas locais | `availability`, `booking` | `DIR-029-T1` (virada de dia em UTC e horário de Brasília) | U, I | pendente (Etapa 2) |
-| `DIR-030` planta não altera identidade | `workplace` | `DIR-030-T1` | I | pendente (Etapa 2) |
-| `DIR-031` função única de elegibilidade | `availability`, `db` (triggers) | `DIR-031-T1` (mesma tabela de casos no serviço e no banco), `DIR-031-T2` (titular durante liberação nominal) | U, I | pendente (Etapa 2) |
-| `DIR-032` remoção de integrante do grupo | `exclusivity` | `DIR-032-T1` (prévia e conflito), `DIR-032-T2` (trigger no commit) | I | pendente (Etapa 2) |
-| `DIR-033` manutenção, bloqueio, fechamento e desativação sobre reservas | `workplace`, `availability` | `DIR-033-T1` (prévia e decisão), `DIR-033-T2` (trigger rejeita reserva em período indisponível), `DIR-033-T3` (calendário fechado com reserva em voo) | I, C | pendente (Etapa 2) |
-| `DIR-034` retenção vencida não trava mesa nem pessoa; oferta nasce no cancelamento | `booking`, `waitlist` | `DIR-034-T1` (sem job, nova reserva entra), `DIR-034-T2` (oferta criada na transação do cancelamento) | I | pendente (T1 Etapa 2; T2 Etapa 3) |
-| `DIR-035` resposta sem identificadores de titular | `availability`, `app` | `DIR-035-T1` (varredura das respostas do mapa, lista, busca e semana) | I, E | pendente (Etapa 2) |
-| `DIR-036` estado derivado; encerrar não contorna a sobreposição | `exclusivity`, `db` | `DIR-036-T1` (encerrar e criar nova atribuição sobreposta é rejeitado), `DIR-036-T2` (anular só antes do início) | I | pendente (Etapa 2) |
-| Modelo: extensão e constraints existem no catálogo | `src/db/migrations` | `DB-01` em `tests/integration/db.test.ts` | I | testado (29/09/2026) para a Etapa 1 |
-| Modelo: lock imposto por trigger | `db` | `DIR-024-T2` (aplicação sem nenhum lock, nem advisory nem de pessoa; pares reserva e trava, reserva e remoção de integrante, reserva e fechamento do dia, reserva em nome e desativação, atribuição de grupo e remoção de integrante; banco serializa e rejeita) | C | pendente (Etapa 2) |
-| Modelo: trigger de vigência da atribuição | `db` | `DIR-036-T3` (reabrir, encerrar no passado, mover início após começar, anular em duas etapas e anular sucessora sem decisão são rejeitados) | I | pendente (Etapa 2) |
-| Modelo: suspensão mantém reservas, desativação exige tratamento | `db`, `employees` | `EMP-02-T1` | I | pendente (Etapa 2) |
+| `DIR-011` reserva em nome | `booking`, `access` | `booking/service.ts` | `DIR-011-T1` e `T2` em `booking.test.ts` | testado (29/09/2026) |
+| `DIR-012` uma reserva por dia | `booking` | índice `desk_booking_employee_day`, `availability/rules.ts` | `DIR-012-T1` em `booking.test.ts` | testado (29/09/2026) |
+| `DIR-014` reserva fora da janela | `availability` | `availability/rules.ts` | `DIR-014-T1` em `booking.test.ts` | testado (29/09/2026) |
+| `DIR-015` diretor não remove | `exclusivity`, `access` | `exclusivity/service.ts` | `DIR-015-T1` em `exclusivity.test.ts` | testado (29/09/2026) |
+| `DIR-017` transferência e revogação | `exclusivity` | `exclusivity/service.ts`, função `transfer_assignment` | `DIR-017-T1` em `exclusivity.test.ts`; `DIR-017-T2` (revogação de grupo) coberto por `DIR-032-T1` | testado (29/09/2026) |
+| `DIR-019` ordem de cálculo | `availability` | `availability/rules.ts` | `DIR-019-T1` em `tests/unit/availability.test.ts` | testado (29/09/2026) |
+| `DIR-027` lote atômico | `exclusivity` | `exclusivity/service.ts` (`batchAssign`) | `DIR-027-T1` em `exclusivity.test.ts` | testado (29/09/2026) |
+| `DIR-028` auditoria e notificação | `audit`, `notifications` | `exclusivity/service.ts`, `office/conflicts.ts` | `DIR-028-T1` em `exclusivity.test.ts` | testado (29/09/2026) |
+| `DIR-029` datas locais | `availability`, `booking` | funções SQL, `availability/rules.ts` | `DIR-029-T1` em `tests/unit/availability.test.ts` e `office-db.test.ts` | testado (29/09/2026) |
+| `DIR-030` planta não altera identidade | `workplace` | `workplace/service.ts` (`publishPlan`, `movePlacement`) | `DIR-030-T1` | implementado (29/09/2026); `DIR-030-T1` pendente |
+| `DIR-031` função única de elegibilidade | `availability`, `db` (triggers) | `availability/rules.ts`, função `is_eligible` | `DIR-031-T1` em `office-db.test.ts` (mesma tabela de casos no serviço e no banco); `DIR-031-T2` em `booking.test.ts` | testado (29/09/2026) |
+| `DIR-032` remoção de integrante do grupo | `exclusivity` | `exclusivity/service.ts` | `DIR-032-T1` em `exclusivity.test.ts`; `DIR-032-T2` em `office-db.test.ts` | testado (29/09/2026) |
+| `DIR-033` manutenção, bloqueio, fechamento e desativação sobre reservas | `workplace`, `availability` | `workplace/service.ts`, triggers deferidos | `DIR-033-T1` em `exclusivity.test.ts`; `DIR-033-T2` em `office-db.test.ts`; `DIR-033-T3` em `office-concurrency.test.ts` | testado (29/09/2026) |
+| `DIR-034` retenção vencida não trava mesa nem pessoa; oferta nasce no cancelamento | `booking`, `waitlist` | `office/shared.ts` (`expireHolds`) | `DIR-034-T1` em `booking.test.ts`; `DIR-034-T2` (Etapa 3) | parcial: T1 testado (29/09/2026); T2 na Etapa 3 |
+| `DIR-035` resposta sem identificadores de titular | `availability`, `app` | `availability/service.ts` | `DIR-035-T1` em `booking.test.ts`; `office.spec.ts` | testado (29/09/2026) |
+| `DIR-036` estado derivado; encerrar não contorna a sobreposição | `exclusivity`, `db` | trigger `exclusive_assignment_validity`, constraint de exclusão | `DIR-036-T1` em `exclusivity.test.ts`; `DIR-036-T2` em `exclusivity.test.ts`; `DIR-036-T3` em `office-db.test.ts` | testado (29/09/2026) |
+| Modelo: extensão e constraints existem no catálogo | `src/db/migrations` | `DB-01` em `tests/integration/db.test.ts` | I | testado (29/09/2026) para as Etapas 1 e 2 |
+| Modelo: lock imposto por trigger | `db` | migração `0004` | `DIR-024-T2` em `office-db.test.ts` (pares reserva e trava, integrante, fechamento, desativação, manutenção, recurso) | testado (29/09/2026) |
+| Modelo: trigger de vigência da atribuição | `db` | migração `0004` | `DIR-036-T3` em `office-db.test.ts` | testado (29/09/2026) |
+| Modelo: suspensão mantém reservas, desativação exige tratamento | `db`, `employees` | triggers, `employees/service.ts` | `EMP-02-T1` em `office-db.test.ts` e `exclusivity.test.ts` | testado (29/09/2026) |
 | Fila: entrada e oferta obsoletas expiradas de forma preguiçosa; reserva direta oferece à fila antes | `waitlist`, `booking` | `WL-04-T1`, `WL-04-T2` | I | pendente (Etapa 3) |
-| Modelo: virada de dia local | `db`, `availability` | `DIR-029-T1` às 21:00, 23:59 e 00:00 de Brasília, inclusive `local_day_range` para salas | U, I | pendente (Etapa 2) |
-| Modelo: chave da semana por requisição | `booking` | `BKG-02-T4` (cinco dias com uma chave) | I | pendente (Etapa 2) |
-| Modelo: transferência e anulação com restrições | `exclusivity` | `DIR-017-T3` (mesma mesa, datas contíguas, sem retroagir) | I | pendente (Etapa 2) |
+| Modelo: virada de dia local | `db`, `availability` | funções SQL | `DIR-029-T1` em `office-db.test.ts` | testado (29/09/2026) |
+| Modelo: chave da semana por requisição | `booking` | `booking/service.ts` (`planWeek`) | `BKG-02-T4` em `booking.test.ts` | testado (29/09/2026) |
+| Modelo: transferência e anulação com restrições | `exclusivity` | função `transfer_assignment`, trigger deferido | `DIR-017-T3` em `office-db.test.ts` | testado (29/09/2026) |
 
 ## Acesso, cadastro e CPF
 
@@ -86,14 +86,14 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 
 | Requisito | Implementação prevista | Teste | Tipo | Status |
 |---|---|---|---|---|
-| Cancelamento reflete disponibilidade imediatamente | `booking` | `BKG-01-T1` | I | pendente (Etapa 2) |
-| Semana atômica e idempotente (`REQ-25` intenção não é reserva) | `booking` | `BKG-02-T1`, `BKG-02-T2`, `BKG-02-T3` (intenção sem reserva não gera presença) | I | pendente (Etapa 2) |
+| Cancelamento reflete disponibilidade imediatamente | `booking` | `booking/service.ts` | `BKG-01-T1` em `booking.test.ts`; `office.spec.ts` | testado (29/09/2026) |
+| Semana atômica e idempotente (`REQ-25` intenção não é reserva) | `booking` | `booking/service.ts` (`planWeek`) | `BKG-02-T1` a `T3` em `booking.test.ts`; `office.spec.ts` | testado (29/09/2026) |
 | Salas sem sobreposição e adjacência permitida | `booking` | `BKG-03-T1` | I | pendente (Etapa 3) |
 | Falha de notificação não corrompe a operação | `outbox.ts` | `NOT-01-T1` em `tests/integration/outbox.test.ts` (carga apagada após a entrega; convite a destinatário fora da lista fica `blocked` na outbox e em `invitation.delivery_status`, sem `sent_at`) | I | testado (29/09/2026) para convites; reservas na Etapa 2 |
 | Fila sem dupla oferta e próxima pessoa elegível automática (`REQ-26`) | `waitlist` | `WL-01-T1`, `WL-02-T1` | C, I | pendente (Etapa 3) |
 | `REQ-15` confirmação de uso não libera nem remove exclusividade; QR resolve a reserva no servidor | `checkin` | `CHK-01-T1`, `CHK-02-T1` (id de reserva alheia rejeitado) | I | pendente (Etapa 3) |
 | Fila nega inscrição com reserva ativa na data | `waitlist` | `WL-03-T1` | I | pendente (Etapa 3) |
-| Indicadores por `desk_class` sem dupla contagem, `held` fora do numerador, exceção contada | `availability`, `reports` | `DIR-026-T3` (exceção ao compartilhado), `DIR-026-T4` (períodos sobrepostos), `DIR-026-T5` (titular fora do numerador compartilhado) | U | pendente (Etapa 2) |
+| Indicadores por `desk_class` sem dupla contagem, `held` fora do numerador, exceção contada | `availability/rules.ts` (`deskClass`), `capacityOn` | `DIR-026-T3` (exceção ao compartilhado) em `tests/unit/availability.test.ts`; `DIR-026-T4` (períodos sobrepostos) e `DIR-026-T5` (titular fora do numerador) pendentes | U | parcial: T3 testado (29/09/2026); T4 e T5 pendentes |
 | Piso de supressão não configurável | `listening` | `ESC-02-T1` | I | pendente (Etapa 4) |
 | Anexo de nota interna não migra na reclassificação | `helpdesk` | `ATD-03-T1` | I | pendente (Etapa 4) |
 | `REQ-26` transições de atendimento com motivo; reclassificação sem expor notas internas | `helpdesk` | `ATD-01-T1`, `ATD-02-T1` | I | pendente (Etapa 4) |

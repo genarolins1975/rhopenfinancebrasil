@@ -7,6 +7,19 @@ import type { Permission, Role } from "@/modules/access/permissions";
 import { localToday } from "@/modules/shared/dates";
 
 const TABLES = [
+  "desk_booking",
+  "space_booking",
+  "presence_intent",
+  "week_plan_request",
+  "access_exception",
+  "exclusive_assignment",
+  "access_group_member",
+  "resource_status_period",
+  "office_calendar",
+  "floor_plan_placement",
+  "resource",
+  "zone",
+  "floor_plan_version",
   "audit_event",
   "outbox_event",
   "login_attempt",
@@ -33,6 +46,35 @@ let ownerPool: Pool | undefined;
 export async function resetDb() {
   ownerPool ??= new Pool({ connectionString: process.env.DATABASE_OWNER_URL, max: 1 });
   await ownerPool.query(`truncate table ${TABLES.map((t) => `"${t}"`).join(", ")} restart identity cascade`);
+  await ownerPool.query(`update office_settings set value = case key when 'booking_open_weekday' then '4'::jsonb when 'booking_open_time' then '"10:00"'::jsonb when 'booking_horizon_weeks' then '4'::jsonb when 'exception_max_days' then '30'::jsonb end`);
+}
+
+/** Pessoa com perfil privilegiado efetivo: usuário de autenticação e segundo fator ativo (PAR-33). */
+export async function privilegedActor(opts: { roles?: Role[]; permissions?: Permission[]; orgCondition?: "standard" | "director" } = {}) {
+  const { authUser } = await import("@/db/schema");
+  const u = await activeUserWithPassword(opts);
+  await db.update(authUser).set({ twoFactorEnabled: true }).where(eq(authUser.id, u.userId));
+  return { ...u, actor: { employeeId: u.id, userId: u.userId, requestId: crypto.randomUUID() } };
+}
+
+let deskSeq = 1;
+
+/** Mesa de teste. */
+export async function seedDesk(code?: string, type: "desk" | "room" | "booth" = "desk") {
+  const { resource } = await import("@/db/schema");
+  const n = deskSeq++;
+  const [row] = await db
+    .insert(resource)
+    .values({ code: code ?? `T${String(n).padStart(3, "0")}`, type, capacity: type === "desk" ? null : 6 })
+    .returning({ id: resource.id, code: resource.code });
+  return row;
+}
+
+/** Grupo da diretoria semeado pela migração. */
+export async function directorsGroupId(): Promise<string> {
+  const { accessGroup } = await import("@/db/schema");
+  const [g] = await db.select({ id: accessGroup.id }).from(accessGroup).where(eq(accessGroup.code, "diretoria"));
+  return g.id;
 }
 
 let seq = 1;
