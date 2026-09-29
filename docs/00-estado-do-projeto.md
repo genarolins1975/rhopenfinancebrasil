@@ -114,7 +114,7 @@ Fora da Etapa 3, por desenho ou pendência: integração de calendário corporat
 
 ## Demonstração do conceito (`DEC-45`)
 
-Preparação pronta no repositório para publicar a demonstração em rhopenfinancebrasil.com na Vercel Pro com Neon, com dados fictícios, email desligado e faixa de demonstração; revisão independente com 16 achados, todos tratados (`testes/aceite.md`). Roteiro em `operacao/demo-vercel.md`. Nada publicado: a publicação, a branch `demo` e o DNS aguardam autorização do responsável.
+Preparação pronta no repositório para publicar a demonstração em rhopenfinancebrasil.com na Vercel Pro com Neon, com dados fictícios, email desligado e faixa de demonstração; revisão independente com 16 achados, todos tratados (`testes/aceite.md`). Roteiro em `operacao/demo-vercel.md`. Publicação autorizada pelo responsável em 29/09/2026 (`DEC-45`); alteração de DNS aguarda confirmação expressa. Feito pelo responsável: projeto do Neon (PostgreSQL 16, São Paulo, plano Free) com papéis e banco `rh_demo`, e branch `demo` no commit `9ad95a4`. Em andamento: projeto na Vercel. Achado na execução do roteiro: `DV-17`, corrigido.
 
 ## Próximo passo
 
