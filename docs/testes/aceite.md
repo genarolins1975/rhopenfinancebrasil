@@ -202,6 +202,21 @@ Segundo Revisor independente, contexto limpo: baterias oficiais (53, 134 e 44 ap
 
 Testes executados após as correções, no mesmo ambiente: 53 de unidade, 136 de integração (dois novos: integrante desativado no grupo com aviso por origem, e reabertura recusada com titular inativo; R9 refeito com prova de ausência de deadlock pelo contador do banco e pelo log) e 44 de ponta a ponta com axe (22 por projeto, nenhum pulado; o desktop confirma a atribuição com realocação pelo navegador e o celular com cancelamento), todos aprovados; tipos, lint e build sem erros; `.log-test.ndjson` sem "Failed query", sem "params" e sem "nova tentativa". Migrações `0005` e `0006` aplicadas em rh_dev e rh_test.
 
-### Terceira verificação
+### Terceira verificação (29/09/2026)
 
-Em execução em 29/09/2026.
+Terceiro Revisor independente, contexto limpo: baterias oficiais em três rodadas, 11 testes de integração e 2 de ponta a ponta temporários, contador de deadlocks do banco e log do servidor. Confirmou corrigidos os achados 2, 3, 4 e 6; encontrou 4 residuais. Veredito: ACEITO COM CORREÇÕES, obrigatórias 1 e 2, com a bateria de integração aprovada em três execuções consecutivas antes do aceite; recomendadas 3 e 4.
+
+| Nº | Severidade | Achado | Tratamento na mesma data |
+|---|---|---|---|
+| 1 | MÉDIA | Duas inversões restantes: o encerramento da vigência no grupo durante a desativação tomava o grupo depois dos recursos; o cancelamento próprio gravava `cancelled_by` (chave da pessoa) depois do recurso; deadlocks reais absorvidos pela nova tentativa; R9 não cobria essas combinações | Corrigido: a desativação toma os grupos da pessoa antes dos recursos; o cancelamento trava a pessoa da reserva e o ator antes do recurso; o ator passa a ser travado antes dos recursos em toda mutação que grava chave dele; R9 ganhou as duas combinações (sete no total) |
+| 2 | MÉDIA | Reabertura conferia a situação do titular anterior antes do lock: com desativação em voo, nascia atribuição vigente para pessoa desativada; R9 reprovava de forma intermitente | Corrigido: lock antes da leitura; a conferência enxerga a desativação concluída e recusa |
+| 3 | BAIXA | Documentação acima do provado (ordem única, R9, rótulos da matriz, acesso direto ao banco, retenção de intenção e semana) | Corrigido nos quatro textos |
+| 4 | BAIXA | `revokeException` conferia a permissão só dentro da transação, depois dos locks | Corrigido |
+
+### Relato do Executor na terceira reapresentação (29/09/2026)
+
+Testes executados após as correções, no mesmo ambiente: 53 de unidade; 136 de integração em três execuções consecutivas, todas aprovadas, com o contador `pg_stat_database.deadlocks` de rh_test inalterado (65 antes e depois em cada execução) e zero linhas de "nova tentativa", "Failed query" ou "params" em `.log-test.ndjson`; 44 de ponta a ponta com axe (22 por projeto, nenhum pulado); tipos, lint e build sem erros. R9 cobre sete combinações em seis rodadas. O banco de teste passa a semear a abertura das reservas na segunda às 00:00 para que as datas relativas dos testes fiquem sempre dentro da janela, qualquer que seja o dia da semana em que a bateria rode; o teste da regra padrão de quinta às 10h fixa os próprios parâmetros.
+
+### Situação do aceite da Etapa 2
+
+Executor: entregue com as correções das três rodadas aplicadas e testadas. Revisores: aceita com correções nas três rodadas; todas as correções aplicadas; as da terceira rodada verificadas pelas baterias do Executor (integração em três execuções consecutivas, como exigido pelo Revisor), sem quarta rodada independente. Responsável pelo produto: pendente de validação.

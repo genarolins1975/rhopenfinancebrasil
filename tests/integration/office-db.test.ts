@@ -76,6 +76,8 @@ describe("funções do escritório", () => {
   });
 
   it("booking_window_open: quinta 10h local abre a semana seguinte; sábado à noite em UTC ainda é sexta local", async () => {
+    // parâmetros padrão do produto (PAR-01); o reset do banco de teste usa segunda às 00:00
+    await raw("update office_settings set value = case key when 'booking_open_weekday' then '4'::jsonb when 'booking_open_time' then '\"10:00\"'::jsonb else value end");
     // 2026-10-08 é quinta. 09:59 local (12:59Z) fechada; 10:00 local aberta; passado fechado.
     const q = (date: string, now: string) => raw<{ ok: boolean }>("select booking_window_open($1::date, $2::timestamptz) as ok", [date, now]).then((r) => r[0].ok);
     expect(await q("2026-10-12", "2026-10-08T12:59:00Z")).toBe(false);

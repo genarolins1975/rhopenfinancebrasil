@@ -216,6 +216,7 @@ Na transação de cancelamento de uma reserva de mesa, após os locks, o servido
 |---|---|---|
 | Auditoria | 5 anos | Somente inserção |
 | Reservas e confirmações de uso | 24 meses em detalhe, agregados depois | |
+| Intenção presencial e requisições de semana | 12 meses | Só a aplicação apaga; a intenção não é reserva |
 | Atendimentos | Enquanto durar o vínculo e 5 anos após | Anexos removidos com o atendimento |
 | Convites e tokens | 30 dias após expiração | |
 | Respostas de pesquisa confidencial | Somente agregados após 12 meses | |
@@ -223,4 +224,4 @@ Na transação de cancelamento de uma reserva de mesa, após os locks, o servido
 
 ## Acesso direto ao banco
 
-O papel da aplicação não é superusuário e não tem `UPDATE` e `DELETE` em `audit_event`. Papéis de operação com acesso direto têm procedimento de acesso emergencial e auditoria de sessão registrados em `../operacao/privacidade-e-protecao-de-dados.md`. Não há promessa de isolamento absoluto contra operador com acesso direto: a cifra do CPF com chave fora do banco e AAD por pessoa reduz, sem eliminar, esse risco. O teste trimestral de restauração inclui a custódia das chaves; restaurar o banco sem a chave não é restauração.
+O papel da aplicação não é superusuário, não tem `UPDATE` e `DELETE` em `audit_event` e não tem `DELETE` em `exclusive_assignment`, `access_exception`, `resource_status_period`, `desk_booking`, `space_booking`, `access_group_member`, `office_calendar`, `floor_plan_version`, `resource`, `zone`, `access_group`, `office_settings` e `floor_plan_placement` (migrações `0005` e `0006`); atribuições e liberações têm identidade imutável por trigger. `presence_intent`, `week_plan_request` e `outbox_event` continuam apagáveis pela aplicação por retenção. Papéis de operação com acesso direto têm procedimento de acesso emergencial e auditoria de sessão registrados em `../operacao/privacidade-e-protecao-de-dados.md`. Não há promessa de isolamento absoluto contra operador com acesso direto: a cifra do CPF com chave fora do banco e AAD por pessoa reduz, sem eliminar, esse risco. O teste trimestral de restauração inclui a custódia das chaves; restaurar o banco sem a chave não é restauração.

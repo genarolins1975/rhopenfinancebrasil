@@ -9,7 +9,7 @@ import { enqueueOutbox } from "@/modules/notifications/outbox";
 import { bookingChangedEmail, bookingOnBehalfEmail } from "@/modules/notifications/templates";
 import { formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
-import { type Actor, advisoryShareDay, assertIsoDate, assertUuid, expireHolds, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
+import { type Actor, advisoryShareDay, assertIsoDate, assertUuid, expireHolds, lockDaysAndPeople, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
 
 /*
  * Reservas de mesa por dia (PAR-02). Toda escrita segue o protocolo de docs/dados/modelo-de-dados.md:
@@ -59,7 +59,9 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
       return { bookingId: existing.id, created: false, resourceCode: r?.code ?? "" };
     }
     await advisoryShareDay(tx, input.date);
+    if (onBehalf) await shareLockEmployee(tx, actor.employeeId < input.employeeId ? actor.employeeId : input.employeeId);
     const beneficiary = await shareLockEmployee(tx, input.employeeId);
+    if (onBehalf && actor.employeeId > input.employeeId) await shareLockEmployee(tx, actor.employeeId);
     await lockResources(tx, [input.resourceId]);
     await expireHolds(tx, { resourceId: input.resourceId, employeeId: input.employeeId, date: input.date });
     const { availability, code } = await revalidate(tx, input.employeeId, input.resourceId, input.date);
@@ -116,6 +118,8 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
     if (b.status !== "confirmed" && b.status !== "held") throw new ConflictError("Esta reserva já não está ativa.");
     if (b.date < localToday()) throw new ConflictError("Reserva de dia passado não é cancelada.");
     await advisoryShareDay(tx, b.date);
+    // cancelled_by e a pessoa da reserva tomam chave da pessoa: antes do recurso, para não inverter contra a desativação.
+    await lockDaysAndPeople(tx, { dates: [], people: [b.employeeId, actor.employeeId] });
     await lockResources(tx, [b.resourceId]);
     await tx
       .update(deskBooking)

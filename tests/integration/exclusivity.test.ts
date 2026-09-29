@@ -317,7 +317,7 @@ describe("exclusividade da diretoria", () => {
 describe("correções da revisão da Etapa 2", () => {
   beforeEach(resetDb);
 
-  it("R4: titular desativado com liberação ao compartilhado e reserva de terceiro: prévia lista a reserva; desativação cancela com comunicação, marca revisão e comunica o gestor (DIR-018, PAR-25)", async () => {
+  it("DIR-018-T1 (R4): titular desativado com liberação ao compartilhado e reserva de terceiro: prévia lista a reserva; desativação cancela com comunicação, marca revisão e comunica o gestor (DIR-018, PAR-25)", async () => {
     const rh = await rhWithMfa();
     const manager = await seedEmployee();
     const holder = await seedEmployee({ orgCondition: "director" });
@@ -452,7 +452,7 @@ describe("correções da revisão da Etapa 2", () => {
     await revokeException(db, rh.actor, { exceptionId: x, reason: "ok" });
   });
 
-  it("integrante desativado deixa de ser vigente no grupo; mesa de grupo sem integrante ativo entra em vínculo a revisar (DIR-032)", async () => {
+  it("DIR-018-T1 e DIR-032: integrante desativado deixa de ser vigente no grupo; mesa de grupo sem integrante ativo entra em vínculo a revisar (DIR-032)", async () => {
     const rh = await rhWithMfa();
     const group = await directorsGroupId();
     const m1 = await seedEmployee({ orgCondition: "director" });

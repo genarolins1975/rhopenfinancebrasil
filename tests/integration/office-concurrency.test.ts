@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db/client";
 import { deskBooking, exclusiveAssignment } from "@/db/schema";
-import { bookDesk } from "@/modules/booking/service";
+import { bookDesk, cancelDesk } from "@/modules/booking/service";
 import { createAssignment } from "@/modules/exclusivity/service";
 import { closeDay, openDay } from "@/modules/workplace/service";
 import { deactivateEmployee } from "@/modules/employees/service";
@@ -196,6 +196,33 @@ describe("concorrência do escritório", () => {
         ]);
         void rm;
         void ba;
+      }
+      // f) desativação de integrante com reserva em mesa do grupo contra remoção de outro integrante com cancelamento
+      {
+        const group = await directorsGroupId();
+        const m1 = await seedEmployee({ orgCondition: "director" });
+        const m2 = await seedEmployee({ orgCondition: "director" });
+        await addGroupMember(db, rh.actor, { groupId: group, employeeId: m1.id, validFrom: today, reason: "x" });
+        const mid2 = await addGroupMember(db, rh.actor, { groupId: group, employeeId: m2.id, validFrom: today, reason: "x" });
+        const g = await seedDesk();
+        await batchAssign(db, rh.actor, [{ resourceId: g.id, mode: "group", accessGroupId: group, validFrom: today, reason: "x", responsible: "RH" }]);
+        await bookDesk(db, actorOf(m1), { employeeId: m1.id, resourceId: g.id, date: d(6), idempotencyKey: randomUUID() });
+        const b2 = await bookDesk(db, actorOf(m2), { employeeId: m2.id, resourceId: g.id, date: d(7), idempotencyKey: randomUUID() });
+        const [dctv, rm] = await Promise.allSettled([
+          deactivateEmployee(db, rh.actor, m1.id, { reason: "desligamento" }),
+          removeGroupMember(db, rh.actor, { memberId: mid2, validTo: d(1), reason: "saiu" }, [{ bookingId: b2.bookingId, action: "cancel", reason: "saída" }]),
+        ]);
+        expect(dctv.status, `rodada ${i} f`).toBe("fulfilled");
+        void rm;
+      }
+      // g) cancelamento próprio contra desativação da mesma pessoa
+      {
+        const p = await seedEmployee();
+        const desk = await seedDesk();
+        const b = await bookDesk(db, actorOf(p), { employeeId: p.id, resourceId: desk.id, date: d(2), idempotencyKey: randomUUID() });
+        const [c, dctv] = await Promise.allSettled([cancelDesk(db, actorOf(p), b.bookingId), deactivateEmployee(db, rh.actor, p.id, { reason: "desligamento" })]);
+        expect(dctv.status, `rodada ${i} g`).toBe("fulfilled");
+        void c;
       }
       expect(await invalidBookings()).toBe(0);
     }

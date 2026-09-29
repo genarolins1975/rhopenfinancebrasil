@@ -4,7 +4,7 @@ import { deskBooking, employee, floorPlanPlacement, floorPlanVersion, officeCale
 import { recordAudit } from "@/modules/audit/audit";
 import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ValidationError } from "@/modules/shared/errors";
-import { type Actor, advisoryExclusiveDay, assertIsoDate, assertPermission, assertUuid, lockDaysAndPeople, lockResources, withOfficeTx } from "@/modules/office/shared";
+import { type Actor, advisoryExclusiveDay, assertIsoDate, assertPermission, assertUuid, lockDaysAndPeople, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
 import { applyConflictDecisions, type ConflictDecision, type IncompatibleBooking, listActiveBookings } from "@/modules/office/conflicts";
 
 /* Inventário. */
@@ -65,6 +65,7 @@ export async function updateResourceAttributes(db: Db, actor: Actor, resourceId:
   await assertPermission(db, actor, "resource.manage");
   assertUuid(resourceId, "Recurso");
   return withOfficeTx(db, async (tx) => {
+    await shareLockEmployee(tx, actor.employeeId);
     const [current] = await tx.select().from(resource).where(eq(resource.id, resourceId)).for("update");
     if (!current) throw new ValidationError("Recurso não encontrado.");
     const set: Partial<typeof resource.$inferInsert> = { attributes: input.attributes, updatedAt: new Date() };
@@ -102,7 +103,7 @@ export async function createStatusPeriod(db: Db, actor: Actor, input: PeriodInpu
   if (!input.reason.trim()) throw new ValidationError("Informe o motivo.");
   return withOfficeTx(db, async (tx) => {
     const known = await listActiveBookings(tx, { resourceIds: [input.resourceId], from: input.startsOn, to: input.endsOn ?? null });
-    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: known.map((k) => k.employeeId) });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: [actor.employeeId, ...known.map((k) => k.employeeId)] });
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [input.resourceId, ...targets]);
     const conflicts = await listActiveBookings(tx, { resourceIds: [input.resourceId], from: input.startsOn, to: input.endsOn ?? null });
@@ -131,6 +132,7 @@ export async function releaseStatusPeriod(db: Db, actor: Actor, periodId: string
     if (!p) throw new ValidationError("Período não encontrado.");
     if (p.releasedOn) throw new ConflictError("Período já liberado.");
     if (releasedOn < p.startsOn) throw new ValidationError("A liberação não pode ser anterior ao início do período.");
+    await shareLockEmployee(tx, actor.employeeId);
     await lockResources(tx, [p.resourceId]);
     await tx.update(resourceStatusPeriod).set({ releasedOn, releasedAt: new Date(), releasedBy: actor.employeeId }).where(eq(resourceStatusPeriod.id, periodId));
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: `resource.${p.status}.released`, entityType: "resource", entityId: p.resourceId, before: { periodId, endsOn: p.endsOn }, after: { releasedOn }, reason: input.reason, requestId: actor.requestId });
@@ -159,7 +161,7 @@ export async function retireResource(db: Db, actor: Actor, resourceId: string, i
   if (!input.reason.trim()) throw new ValidationError("Informe o motivo.");
   return withOfficeTx(db, async (tx) => {
     const known = await listActiveBookings(tx, { resourceIds: [resourceId], from: retiredOn, to: null });
-    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: known.map((k) => k.employeeId) });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: [actor.employeeId, ...known.map((k) => k.employeeId)] });
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [resourceId, ...targets]);
     const [current] = await tx.select().from(resource).where(eq(resource.id, resourceId));
@@ -201,7 +203,7 @@ export async function closeDay(db: Db, actor: Actor, input: { date: string; reas
   return withOfficeTx(db, async (tx) => {
     await advisoryExclusiveDay(tx, input.date);
     const conflicts = await listActiveBookings(tx, { from: input.date, to: input.date });
-    await lockDaysAndPeople(tx, { dates: [], people: conflicts.map((c) => c.employeeId) });
+    await lockDaysAndPeople(tx, { dates: [], people: [actor.employeeId, ...conflicts.map((c) => c.employeeId)] });
     await lockResources(tx, conflicts.map((c) => c.resourceId));
     await applyConflictDecisions(tx, actor, conflicts.map((c) => ({ ...c, why: "escritório fechado" })), decisions, { excludeResourceIds: [], notice: `O escritório estará fechado em ${formatLocalDate(input.date)}.` });
     await tx
@@ -217,6 +219,7 @@ export async function openDay(db: Db, actor: Actor, input: { date: string; reaso
   assertIsoDate(input.date);
   return withOfficeTx(db, async (tx) => {
     await advisoryExclusiveDay(tx, input.date);
+    await shareLockEmployee(tx, actor.employeeId);
     await tx
       .insert(officeCalendar)
       .values({ date: input.date, isOpen: true, reason: input.reason.trim() || null, updatedBy: actor.employeeId })
@@ -242,6 +245,7 @@ export async function updateSetting(db: Db, actor: Actor, key: string, value: st
     parsed = n;
   }
   await withOfficeTx(db, async (tx) => {
+    await shareLockEmployee(tx, actor.employeeId);
     const [before] = await tx.select().from(officeSettings).where(eq(officeSettings.key, key));
     await tx
       .insert(officeSettings)
@@ -324,6 +328,7 @@ export async function approvePlan(db: Db, actor: Actor, planId: string, notes: s
   await assertPermission(db, actor, "floorplan.publish");
   assertUuid(planId, "Versão");
   await withOfficeTx(db, async (tx) => {
+    await shareLockEmployee(tx, actor.employeeId);
     const [p] = await tx.select().from(floorPlanVersion).where(eq(floorPlanVersion.id, planId)).for("update");
     if (!p) throw new ValidationError("Versão não encontrada.");
     if (p.status !== "draft") throw new ConflictError("Só rascunho pode ser aprovado.");
