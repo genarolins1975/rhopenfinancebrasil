@@ -9,6 +9,7 @@ import { authContext } from "@/modules/identity/auth";
 import { createInvitation, revokeActiveInvitations } from "@/modules/identity/invitations";
 import { addDays, localToday } from "@/modules/shared/dates";
 import { safeErrorInfo, withDbErrors } from "@/modules/shared/db-errors";
+import { withOfficeTx } from "@/modules/office/shared";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { logger } from "@/modules/shared/logger";
 import { cpfHmac, formatCpf, normalizeCpf, protectCpf } from "./cpf";
@@ -257,7 +258,7 @@ export async function suspendEmployee(db: Db, actor: Actor, employeeId: string, 
   if (actor.employeeId === employeeId) throw new ForbiddenError("Ninguém altera o próprio status.");
   if (!reason?.trim()) throw new ValidationError("Informe o motivo.");
   await assertMayChangeStatusOf(db, actor, employeeId);
-  const userId = await db.transaction(async (tx) => {
+  const userId = await withOfficeTx(db, async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status !== "active") throw new ValidationError("Só pessoa ativa pode ser suspensa.");
@@ -272,7 +273,7 @@ export async function reactivateEmployee(db: Db, actor: Actor, employeeId: strin
   await assertPermission(db, actor, "employee.manage");
   if (!reason?.trim()) throw new ValidationError("Informe o motivo.");
   await assertMayChangeStatusOf(db, actor, employeeId);
-  await db.transaction(async (tx) => {
+  await withOfficeTx(db, async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status !== "suspended") throw new ValidationError("Só pessoa suspensa pode ser reativada.");
@@ -292,7 +293,7 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
   const exitDate = input.exitDate ?? localToday();
   if (!ISO_DATE.test(exitDate)) throw new ValidationError("Data de saída inválida.");
   await assertMayChangeStatusOf(db, actor, employeeId);
-  const userId = await db.transaction(async (tx) => {
+  const userId = await withOfficeTx(db, async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status === "deactivated") throw new ValidationError("Pessoa já desativada.");
@@ -343,7 +344,7 @@ export async function readmitEmployee(db: Db, actor: Actor, employeeId: string, 
   if (!ISO_DATE.test(input.hireDate)) throw new ValidationError("Informe a data de admissão.");
   // Pessoa desativada não tem concessão vigente (a desativação revogou todas): a readmissão devolve a pessoa sem perfis.
   const ctx = await authContext();
-  await db.transaction(async (tx) => {
+  await withOfficeTx(db, async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status !== "deactivated") throw new ValidationError("Só pessoa desativada pode ser readmitida.");

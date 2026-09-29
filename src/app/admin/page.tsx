@@ -20,9 +20,11 @@ export default async function AdminHome() {
   await requireAdminArea();
   const o = await adminOverview(db);
   const cap = await capacityOn(db, localToday());
+  const { pendingConflicts } = await import("@/modules/office/conflicts");
+  const conflicts = await pendingConflicts(db, localToday());
   return (
     <>
-      <PageHeader title="O que precisa de atenção hoje" lead="Números do cadastro e das notificações. Reservas, fila e atendimentos chegam nas próximas etapas." />
+      <PageHeader title="O que precisa de atenção hoje" lead="Números do cadastro, das notificações e do escritório na data de hoje. Fila e atendimentos chegam nas próximas etapas." />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Pessoas ativas" value={o.employees.active} help="Cadastro com acesso definido e situação ativa." />
         <Stat label="Convidadas sem convite válido" value={o.invitedWithoutActiveInvitation} help="Precisam de reenvio para conseguir entrar." />
@@ -37,7 +39,19 @@ export default async function AdminHome() {
         <Stat label="Confirmadas no compartilhado" value={cap.sharedConfirmed} help="Reservas confirmadas hoje. Retenções fora. Não é presença física." />
         <Stat label="Mesas exclusivas hoje" value={cap.desks.exclusive} help="Sem reserva não é vaga compartilhada nem ocupação." />
         <Stat label="Indisponíveis hoje" value={cap.desks.maintenance + cap.desks.blocked + cap.desks.retired} help="Manutenção, bloqueio e desativadas." />
+        <Stat label="Conflitos pendentes" value={conflicts.length} help="Reservas ativas futuras que deixaram de valer. O normal é zero; qualquer linha é incidente." />
       </div>
+      <details className="mt-4 text-sm">
+        <summary className="cursor-pointer underline">Como ler as taxas do escritório (numerador, denominador, período, fonte, limitações)</summary>
+        <ul className="mt-2 list-disc pl-5">
+          {cap.notes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+          <li>
+            Período: a data de hoje. Fonte: tabelas do escritório e regras vigentes. <Link href="/admin/escritorio/mesas/exclusividade?aba=conflitos" className="underline">Conflitos pendentes</Link>.
+          </li>
+        </ul>
+      </details>
       <div className="mt-6">
         <Card title="Atalhos">
           <ul className="list-disc space-y-1 pl-5 text-sm">

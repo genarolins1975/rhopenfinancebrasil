@@ -16,6 +16,7 @@ async function reset() {
   await pool.query(
     'truncate table "desk_booking","space_booking","presence_intent","week_plan_request","access_exception","exclusive_assignment","access_group_member","resource_status_period","office_calendar","floor_plan_placement","resource","zone","floor_plan_version","audit_event","outbox_event","login_attempt","import_batch","invitation","employee_permission","employee_role","employee_sensitive","employment_period","employee_org_assignment","employee","area","auth_two_factor","auth_rate_limit","auth_verification","auth_account","auth_session","auth_user" restart identity cascade',
   );
+  await pool.query(`insert into office_settings (key, value) values ('booking_open_weekday', '4'), ('booking_open_time', '"10:00"'), ('booking_horizon_weeks', '4'), ('exception_max_days', '30') on conflict (key) do update set value = excluded.value, updated_by = null`);
   await pool.end();
 }
 

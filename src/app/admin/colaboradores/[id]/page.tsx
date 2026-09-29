@@ -18,6 +18,11 @@ export default async function ColaboradorPage({ params, searchParams }: { params
   const p = current.access.permissions;
   const emp = await getEmployee(db, id);
   if (!emp) notFound();
+  const { deactivationOfficePreview } = await import("@/modules/exclusivity/service");
+  const eff = emp.status === "deactivated" ? null : await deactivationOfficePreview(db, id);
+  const officeEffects = eff
+    ? `Escritório: ${eff.ownBookings.length} reserva(s) futura(s) da pessoa cancelada(s) com comunicação; ${eff.assignments.length} mesa(s) exclusiva(s) passa(m) a vínculo em revisão${eff.thirdPartyBookings.length ? `; ${eff.thirdPartyBookings.length} reserva(s) de terceiros sob liberação cancelada(s) com comunicação` : ""}. O gestor direto é comunicado.`
+    : "";
   const grants = await listGrants(db, id);
   const canManage = p.has("employee.manage");
   const canAssign = p.has("role.assign.standard") || p.has("role.assign.privileged");
@@ -119,7 +124,7 @@ export default async function ColaboradorPage({ params, searchParams }: { params
               {current.employee.id === id ? (
                 <p className="text-sm text-text-muted">Você não altera a própria situação.</p>
               ) : (
-                <EmployeeActions id={id} status={emp.status} name={emp.fullName} />
+                <EmployeeActions id={id} status={emp.status} name={emp.fullName} officeEffects={officeEffects} />
               )}
             </Card>
           ) : null}

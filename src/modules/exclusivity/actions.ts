@@ -66,6 +66,9 @@ export async function assignAction(_prev: ActionState, fd: FormData): Promise<Ac
   const actor = actorOf(current);
   const inputs = assignmentInputs(fd);
   const step = str(fd, "step");
+  // Opção "iniciar após a última reserva incompatível": o início é substituído e a prévia refeita.
+  const override = str(fd, "validFromOverride");
+  if (override) for (const i of inputs) i.validFrom = override;
   try {
     if (inputs.length === 0) return { error: "Selecione ao menos uma mesa." };
     if (step !== "confirm") {
@@ -74,7 +77,9 @@ export async function assignAction(_prev: ActionState, fd: FormData): Promise<Ac
         const p = await previewAssignment(db, actor, i);
         previews.push({ ...p, resourceId: i.resourceId, conflicts: await withReallocOptions(db, p.conflicts, inputs.map((x) => x.resourceId)) });
       }
-      return { ok: false, message: "Prévia de impacto gerada. Confira e confirme.", data: { preview: previews, input: Object.fromEntries(fd.entries()) } };
+      const input = Object.fromEntries(fd.entries()) as Record<string, string>;
+      if (override) input.validFrom = override;
+      return { ok: false, message: "Prévia de impacto gerada. Confira e confirme.", data: { preview: previews, input } };
     }
     const ids = await batchAssign(db, actor, inputs, parseDecisions(fd));
     refresh();
@@ -89,9 +94,13 @@ export async function transferAction(_prev: ActionState, fd: FormData): Promise<
   const actor = actorOf(current);
   const input = { assignmentId: str(fd, "assignmentId"), newHolderEmployeeId: str(fd, "newHolderEmployeeId"), from: str(fd, "from"), reason: str(fd, "reason"), responsible: str(fd, "responsible") };
   try {
+    const override = str(fd, "validFromOverride");
+    if (override) input.from = override;
     if (str(fd, "step") !== "confirm") {
       const p = await previewTransfer(db, actor, input);
-      return { ok: false, message: "Prévia da transferência gerada.", data: { preview: { ...p, conflicts: await withReallocOptions(db, p.conflicts, []) }, input: Object.fromEntries(fd.entries()) } };
+      const echo = Object.fromEntries(fd.entries()) as Record<string, string>;
+      if (override) echo.from = override;
+      return { ok: false, message: "Prévia da transferência gerada.", data: { preview: { ...p, conflicts: await withReallocOptions(db, p.conflicts, []) }, input: echo } };
     }
     await transferAssignment(db, actor, input, parseDecisions(fd));
     refresh();

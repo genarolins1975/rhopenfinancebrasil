@@ -105,8 +105,9 @@ describe("reservas de mesa", () => {
     await expect(bookDesk(db, actorOf(guest), { employeeId: guest.id, resourceId: desk.id, date: d(1), idempotencyKey: randomUUID() })).rejects.toThrow(/em manutenção/);
     await expect(bookDesk(db, actorOf(guest), { employeeId: guest.id, resourceId: desk.id, date: d(2), idempotencyKey: randomUUID() })).resolves.toMatchObject({ created: true });
     await expect(bookDesk(db, actorOf(guest), { employeeId: guest.id, resourceId: desk.id, date: d(3), idempotencyKey: randomUUID() })).rejects.toThrow(/uso exclusivo/);
-    // DIR-031-T2: titular não reserva na data liberada a outra pessoa (PAR-26)
-    await expect(bookDesk(db, actorOf(holder), { employeeId: holder.id, resourceId: desk.id, date: d(2), idempotencyKey: randomUUID() })).rejects.toThrow(/uso exclusivo/);
+    // DIR-031-T2: titular não reserva na data liberada a outra pessoa (PAR-26); o texto explica a liberação
+    await expect(bookDesk(db, actorOf(holder), { employeeId: holder.id, resourceId: desk.id, date: d(2), idempotencyKey: randomUUID() })).rejects.toThrow(/liberada a outra pessoa/);
+    expect((await stateForPerson(db, holder.id, d(2))).items.find((i) => i.resource.id === desk.id)?.availability.label).toMatch(/^Liberada a outra pessoa até \d{2}\/\d{2}$/);
     await expect(bookDesk(db, actorOf(holder), { employeeId: holder.id, resourceId: desk.id, date: d(3), idempotencyKey: randomUUID() })).resolves.toMatchObject({ created: true });
   });
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db/client";
 import { auditEvent, deskBooking, exclusiveAssignment, outboxEvent } from "@/db/schema";
@@ -311,5 +311,144 @@ describe("exclusividade da diretoria", () => {
     expect(h.events.every((e) => e.actorName === rh.name && !!e.reason)).toBe(true);
     expect(h.assignments[0].exceptions[0].revokedAt).toBeTruthy();
     expect(new ConflictError("x").message).toBe("x");
+  });
+});
+
+describe("correções da revisão da Etapa 2", () => {
+  beforeEach(resetDb);
+
+  it("R4: titular desativado com liberação ao compartilhado e reserva de terceiro: prévia lista a reserva; desativação cancela com comunicação, marca revisão e comunica o gestor (DIR-018, PAR-25)", async () => {
+    const rh = await rhWithMfa();
+    const manager = await seedEmployee();
+    const holder = await seedEmployee({ orgCondition: "director" });
+    const { employee } = await import("@/db/schema");
+    await db.update(employee).set({ managerEmployeeId: manager.id }).where(eq(employee.id, holder.id));
+    const common = await seedEmployee();
+    const desk = await seedDesk("D1");
+    const id = await createAssignment(db, rh.actor, { resourceId: desk.id, mode: "individual", holderEmployeeId: holder.id, validFrom: today, reason: "x", responsible: "RH" });
+    await createException(db, rh.actor, { assignmentId: id, kind: "release_to_shared", startsOn: d(1), endsOn: d(3), reason: "viagem" });
+    const cb = await book(common, desk.id, d(2));
+    const hb = await book(holder, desk.id, d(5));
+    const { deactivationOfficePreview } = await import("@/modules/exclusivity/service");
+    const preview = await deactivationOfficePreview(db, holder.id);
+    expect(preview.ownBookings.map((b) => b.bookingId)).toEqual([hb.bookingId]);
+    expect(preview.thirdPartyBookings.map((b) => b.bookingId)).toEqual([cb.bookingId]);
+    expect(preview.assignments.map((a) => a.code)).toEqual(["D1"]);
+    await deactivateEmployee(db, rh.actor, holder.id, { reason: "desligamento" });
+    const rows = await db.select({ id: deskBooking.id, status: deskBooking.status }).from(deskBooking);
+    expect(rows.every((r) => r.status === "cancelled")).toBe(true);
+    expect((await needsReviewList(db)).map((r) => r.code)).toEqual(["D1"]);
+    expect((await stateForPerson(db, common.id, d(2))).items[0].availability.code).toBe("exclusive");
+    const mails = await db.select().from(outboxEvent);
+    const texts = mails.map((m) => JSON.stringify(m.payload));
+    expect(texts.some((t) => t.includes(common.email) && t.includes("cancelada"))).toBe(true);
+    expect(texts.some((t) => t.includes(manager.email) && t.includes("desativad"))).toBe(true);
+    const audits = (await db.select({ a: auditEvent.action, e: auditEvent.entityId }).from(auditEvent)).map((x) => x.a);
+    expect(audits.filter((a) => a === "booking.cancelled_by_conflict")).toHaveLength(2);
+    expect(await pendingConflicts(db, today)).toEqual([]);
+  });
+
+  it("realocação com retenção vencida no destino: a retenção é expirada antes de gravar (DIR-034); a prévia oferece mesas livres ignorando a reserva em conflito", async () => {
+    const rh = await rhWithMfa();
+    const holder = await seedEmployee({ orgCondition: "director" });
+    const p = await seedEmployee();
+    const other = await seedEmployee();
+    const desk = await seedDesk("A1");
+    const target = await seedDesk("A2");
+    const b = await book(p, desk.id, d(2));
+    await db.insert(deskBooking).values({ resourceId: target.id, employeeId: other.id, bookingDate: d(2), status: "held", origin: "waitlist_offer", actorEmployeeId: other.id, holdExpiresAt: new Date(Date.now() - 1000) });
+    const { withReallocOptions } = await import("@/modules/office/decisions");
+    const input = { resourceId: desk.id, mode: "individual" as const, holderEmployeeId: holder.id, validFrom: d(1), reason: "x", responsible: "RH" };
+    const preview = await previewAssignment(db, rh.actor, input);
+    const [view] = await withReallocOptions(db, preview.conflicts, [desk.id]);
+    expect(view.options.map((o) => o.code)).toEqual(["A2"]);
+    expect(preview.startAfter).toBe(d(3));
+    await createAssignment(db, rh.actor, input, [{ bookingId: b.bookingId, action: "realloc", reason: "trava", targetResourceId: target.id }]);
+    const rows = await db.select({ resourceId: deskBooking.resourceId, status: deskBooking.status, employeeId: deskBooking.employeeId }).from(deskBooking);
+    expect(rows.find((r) => r.employeeId === other.id)?.status).toBe("expired");
+    expect(rows.find((r) => r.employeeId === p.id && r.status === "confirmed")?.resourceId).toBe(target.id);
+  });
+
+  it("capacidade por classe sem dupla contagem (DIR-026-T1, T2, T4): igual ao desk_class do banco", async () => {
+    const rh = await rhWithMfa();
+    const holder = await seedEmployee({ orgCondition: "director" });
+    const holder2 = await seedEmployee({ orgCondition: "director" });
+    const p = await seedEmployee();
+    const q = await seedEmployee();
+    const exclusiveMaint = await seedDesk("K1");
+    const overlapped = await seedDesk("K2");
+    const exclusiveBooked = await seedDesk("K3");
+    const sharedHeld = await seedDesk("K4");
+    const exclusiveReleased = await seedDesk("K5");
+    await seedDesk("K6");
+    const { resourceStatusPeriod, accessException } = await import("@/db/schema");
+    const a1 = await createAssignment(db, rh.actor, { resourceId: exclusiveMaint.id, mode: "individual", holderEmployeeId: holder.id, validFrom: today, reason: "x", responsible: "RH" });
+    await db.insert(resourceStatusPeriod).values({ resourceId: exclusiveMaint.id, status: "maintenance", startsOn: d(1), endsOn: d(1), reason: "t" });
+    await db.insert(resourceStatusPeriod).values({ resourceId: overlapped.id, status: "maintenance", startsOn: d(1), endsOn: d(2), reason: "t" });
+    await db.insert(resourceStatusPeriod).values({ resourceId: overlapped.id, status: "admin_block", startsOn: today, endsOn: d(3), reason: "t" });
+    await createAssignment(db, rh.actor, { resourceId: exclusiveBooked.id, mode: "individual", holderEmployeeId: holder2.id, validFrom: today, reason: "x", responsible: "RH" });
+    await book(holder2, exclusiveBooked.id, d(1));
+    await db.insert(deskBooking).values({ resourceId: sharedHeld.id, employeeId: q.id, bookingDate: d(1), status: "held", origin: "waitlist_offer", actorEmployeeId: q.id, holdExpiresAt: new Date(Date.now() + 60_000) });
+    const a5 = await createAssignment(db, rh.actor, { resourceId: exclusiveReleased.id, mode: "individual", holderEmployeeId: holder.id, validFrom: d(2), reason: "x", responsible: "RH" });
+    void a1;
+    void a5;
+    await db.insert(accessException).values({ assignmentId: a5, resourceId: exclusiveReleased.id, kind: "release_to_shared", startsOn: d(2), endsOn: d(2), reason: "t" });
+    await book(p, exclusiveReleased.id, d(2));
+    const { capacityOn } = await import("@/modules/availability/service");
+    const c1 = await capacityOn(db, d(1));
+    expect(c1.desks).toEqual({ total: 6, shared: 3, exclusive: 1, maintenance: 2, blocked: 0, retired: 0 });
+    expect(c1).toMatchObject({ sharedConfirmed: 0, exclusiveConfirmed: 1, heldExcluded: 1 });
+    const c2 = await capacityOn(db, d(2));
+    // d+2: K1 volta a exclusiva (manutenção só em d+1); K2 segue em manutenção (vence o bloqueio sobreposto);
+    // K5 liberada ao compartilhado conta como compartilhada, e a reserva do comum como confirmada no compartilhado
+    expect(c2.desks).toEqual({ total: 6, shared: 3, exclusive: 2, maintenance: 1, blocked: 0, retired: 0 });
+    expect(c2.sharedConfirmed).toBe(1);
+    for (const date of [d(1), d(2)]) {
+      const sqlClasses = await db.execute(sql`select code, desk_class(id, ${date}::date) as c from resource order by code`);
+      const { loadResourcesOnDate } = await import("@/modules/availability/service");
+      const { deskClass } = await import("@/modules/availability/rules");
+      const rs = await loadResourcesOnDate(db, date, { types: ["desk"] });
+      expect(rs.map((r) => [r.code, deskClass(r)])).toEqual((sqlClasses.rows as Array<{ code: string; c: string }>).map((r) => [r.code, r.c]));
+    }
+  });
+
+  it("parâmetros configuráveis (DEC-19): updateSetting muda a abertura da semana no SQL e no serviço; só settings.manage altera", async () => {
+    const adm = await privilegedActor({ roles: ["admin"] });
+    const rh = await rhWithMfa();
+    const { updateSetting } = await import("@/modules/workplace/service");
+    await expect(updateSetting(db, rh.actor, "booking_open_weekday", "1")).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(updateSetting(db, adm.actor, "booking_open_time", "25:00")).rejects.toThrow(/inválida/);
+    await expect(updateSetting(db, adm.actor, "chave_estranha", "1")).rejects.toThrow(/desconhecida/);
+    // abertura na segunda às 08:00: a semana seguinte já está aberta na terça
+    await updateSetting(db, adm.actor, "booking_open_weekday", "1");
+    await updateSetting(db, adm.actor, "booking_open_time", "08:00");
+    const { readSettings } = await import("@/modules/office/shared");
+    const { bookingWindow } = await import("@/modules/availability/rules");
+    const s = await readSettings(db);
+    expect(s).toMatchObject({ bookingOpenWeekday: 1, bookingOpenTime: "08:00" });
+    const now = new Date("2026-10-06T12:00:00Z"); // terça 09:00 local
+    expect(bookingWindow("2026-10-14", now, s).open).toBe(true);
+    const r = await db.execute(sql`select booking_window_open('2026-10-14'::date, '2026-10-06T12:00:00Z'::timestamptz) as ok`);
+    expect((r.rows[0] as { ok: boolean }).ok).toBe(true);
+    const audits = (await db.select({ a: auditEvent.action }).from(auditEvent)).map((x) => x.a);
+    expect(audits.filter((a) => a === "settings.updated")).toHaveLength(2);
+  });
+
+  it("identidade da atribuição e da liberação não muda depois de criada; o papel da aplicação não apaga registros do escritório (DEC-14)", async () => {
+    const rh = await rhWithMfa();
+    const holder = await seedEmployee({ orgCondition: "director" });
+    const other = await seedEmployee({ orgCondition: "director" });
+    const desk = await seedDesk();
+    const desk2 = await seedDesk();
+    const id = await createAssignment(db, rh.actor, { resourceId: desk.id, mode: "individual", holderEmployeeId: holder.id, validFrom: today, reason: "x", responsible: "RH" });
+    const rule = (p: Promise<unknown>) => p.then(() => "ok").catch((e) => String((e as { cause?: { message?: string; code?: string } }).cause?.message ?? (e as Error).message));
+    expect(await rule(db.update(exclusiveAssignment).set({ holderEmployeeId: other.id }).where(eq(exclusiveAssignment.id, id)))).toBe("assignment_identity_immutable");
+    expect(await rule(db.update(exclusiveAssignment).set({ resourceId: desk2.id }).where(eq(exclusiveAssignment.id, id)))).toBe("assignment_identity_immutable");
+    expect(await rule(db.delete(exclusiveAssignment).where(eq(exclusiveAssignment.id, id)))).toMatch(/permission denied/);
+    expect(await rule(db.delete(deskBooking))).toMatch(/permission denied/);
+    const x = await createException(db, rh.actor, { assignmentId: id, kind: "release_to_shared", startsOn: d(1), endsOn: d(1), reason: "t" });
+    const { accessException } = await import("@/db/schema");
+    expect(await rule(db.update(accessException).set({ endsOn: d(5) }).where(eq(accessException.id, x)))).toBe("exception_identity_immutable");
+    await revokeException(db, rh.actor, { exceptionId: x, reason: "ok" });
   });
 });

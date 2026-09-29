@@ -7,7 +7,7 @@ import { db } from "@/db/client";
 import { explainFor } from "@/modules/availability/service";
 import { requireCurrent } from "@/modules/identity/session";
 import { ISO_DATE } from "@/modules/office/shared";
-import { formatLocalDate, localToday } from "@/modules/shared/dates";
+import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { activeEmployeesNamed, getResourceByCode } from "@/modules/workplace/service";
 import { BookForm, CancelForm } from "../../book-form";
 
@@ -58,7 +58,7 @@ export default async function RecursoPage({ params, searchParams }: { params: Pr
           ) : (
             <DefinitionList items={attrs.map(([k, v]) => ({ term: k, value: String(v) }))} />
           )}
-          <p className="mt-3 text-xs text-text-muted">{r.attributesVerifiedAt ? `Verificado em ${formatLocalDate(r.attributesVerifiedAt.toISOString().slice(0, 10))}.` : "Inventário preliminar da planta, não validado."}</p>
+          <p className="mt-3 text-xs text-text-muted">{r.attributesVerifiedAt ? `Verificado em ${formatLocal(r.attributesVerifiedAt, "dd/MM/yyyy")}.` : "Inventário preliminar da planta, não validado."}</p>
         </Card>
       </div>
     </>

@@ -89,6 +89,8 @@ export type AssignmentPreview = {
   /** Dias afetados dentro do horizonte visível (quatro semanas). */
   daysAffected: number;
   conflicts: IncompatibleBooking[];
+  /** Dia seguinte à última reserva incompatível: opção "iniciar após" do diálogo de conflito. */
+  startAfter: string | null;
   /** Sobreposição com outra atribuição não anulada impede. */
   overlap: { id: string; validFrom: string; validTo: string | null; mode: string } | null;
   /** Manutenção ou bloqueio vigente no período: informa, não impede. */
@@ -119,12 +121,14 @@ async function previewOne(db: DbOrTx, input: AssignmentInput, members: Array<{ e
   const horizonEnd = addDays(localToday(), settings.bookingHorizonWeeks * 7);
   const end = input.validTo && input.validTo < horizonEnd ? input.validTo : horizonEnd;
   const daysAffected = Math.max(0, Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${input.validFrom}T00:00:00Z`)) / 86_400_000) + 1);
+  const lastConflict = conflicts.reduce<string | null>((m, c) => (m && m > c.date ? m : c.date), null);
   return {
     resourceCode: r.code,
     startsOn: input.validFrom,
     endsOn: input.validTo ?? null,
     daysAffected,
     conflicts,
+    startAfter: lastConflict ? addDays(lastConflict, 1) : null,
     overlap: overlap ?? null,
     periods,
     blockers,
@@ -158,12 +162,13 @@ export async function batchAssign(db: Db, actor: Actor, inputs: AssignmentInput[
     throw new ValidationError("Um titular recebe uma única mesa por lote.");
   }
   return withOfficeTx(db, async (tx) => {
-    const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
-    await lockResources(tx, [...inputs.map((i) => i.resourceId), ...targets]);
+    // Ordem documentada: pessoas e grupos antes dos recursos, recursos em ordem crescente.
     for (const i of inputs) {
       if (i.mode === "individual") await shareLockEmployee(tx, i.holderEmployeeId!);
       else await tx.execute(sql`select 1 from access_group where id = ${i.accessGroupId} for share`);
     }
+    const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
+    await lockResources(tx, [...inputs.map((i) => i.resourceId), ...targets]);
     const ids: string[] = [];
     for (const i of inputs) {
       const members = i.mode === "group" ? await groupMembersAll(tx, i.accessGroupId!) : [];
@@ -209,7 +214,8 @@ export async function previewTransfer(db: DbOrTx, actor: Actor, input: TransferI
   const hypothetical = { ...a, holderEmployeeId: input.newHolderEmployeeId, needsReview: false } as const;
   const conflicts = await findIncompatible(db, { resourceIds: [a.resourceId], from: input.from, to: a.validTo }, () => ({ assignment: hypothetical, exception: null, members: new Set() }), "titular anterior deixa de ser elegível na data da transferência");
   const newHolderElsewhere = (await listActiveBookings(db, { employeeIds: [input.newHolderEmployeeId], from: input.from, to: a.validTo })).map((b) => ({ ...b, why: "reserva do novo titular em outra mesa (informativa, não cancelada)" }));
-  return { resourceCode: r?.code ?? "", startsOn: input.from, endsOn: a.validTo, daysAffected: 0, conflicts, overlap: null, periods: [], blockers, notifications: ["Titular anterior", "Novo titular", "RH"], newHolderElsewhere };
+  const lastConflict = conflicts.reduce<string | null>((m, c) => (m && m > c.date ? m : c.date), null);
+  return { resourceCode: r?.code ?? "", startsOn: input.from, endsOn: a.validTo, daysAffected: 0, conflicts, startAfter: lastConflict ? addDays(lastConflict, 1) : null, overlap: null, periods: [], blockers, notifications: ["Titular anterior", "Novo titular", "RH"], newHolderElsewhere };
 }
 
 export async function transferAssignment(db: Db, actor: Actor, input: TransferInput, decisions: ConflictDecision[] = []): Promise<string> {
@@ -219,9 +225,9 @@ export async function transferAssignment(db: Db, actor: Actor, input: TransferIn
   return withOfficeTx(db, async (tx) => {
     const [a] = await tx.select().from(exclusiveAssignment).where(eq(exclusiveAssignment.id, input.assignmentId));
     if (!a) throw new ValidationError("Atribuição não encontrada.");
+    await shareLockEmployee(tx, input.newHolderEmployeeId);
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [a.resourceId, ...targets]);
-    await shareLockEmployee(tx, input.newHolderEmployeeId);
     const again = await previewTransfer(tx, actor, input);
     await applyConflictDecisions(tx, actor, again.conflicts, decisions, { excludeResourceIds: [a.resourceId], notice: `A mesa ${again.resourceCode} foi transferida a outro titular a partir de ${formatLocalDate(input.from)}.` });
     const res = await tx.execute(sql`select transfer_assignment(${input.assignmentId}::uuid, ${input.newHolderEmployeeId}::uuid, ${input.from}::date, ${input.reason.trim()}, ${input.responsible.trim()}, ${actor.employeeId}::uuid) as id`);
@@ -320,9 +326,9 @@ export async function createException(db: Db, actor: Actor, input: ExceptionInpu
   return withOfficeTx(db, async (tx) => {
     const [a] = await tx.select().from(exclusiveAssignment).where(eq(exclusiveAssignment.id, input.assignmentId));
     if (!a) throw new ValidationError("Atribuição não encontrada.");
+    if (input.beneficiaryEmployeeId) await shareLockEmployee(tx, input.beneficiaryEmployeeId);
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [a.resourceId, ...targets]);
-    if (input.beneficiaryEmployeeId) await shareLockEmployee(tx, input.beneficiaryEmployeeId);
     const again = await previewException(tx, actor, input);
     await applyConflictDecisions(tx, actor, again.conflicts, decisions, { excludeResourceIds: [a.resourceId], notice: "A mesa foi liberada temporariamente a outra pessoa." });
     const [row] = await tx
@@ -348,6 +354,7 @@ export async function previewRevokeException(db: DbOrTx, actor: Actor, exception
 }
 
 export async function revokeException(db: Db, actor: Actor, input: { exceptionId: string; reason: string }, decisions: ConflictDecision[] = []): Promise<void> {
+  assertUuid(input.exceptionId, "Liberação");
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo.");
   await withOfficeTx(db, async (tx) => {
     const [x] = await tx.select().from(accessException).where(eq(accessException.id, input.exceptionId));
@@ -526,26 +533,58 @@ export async function setNeedsReview(db: Db, actor: Actor, input: { assignmentId
  * Efeitos da desativação de uma pessoa no escritório (DIR-018, PAR-25), na mesma transação da desativação:
  * reservas futuras canceladas com comunicação; atribuições individuais marcadas para revisão; a mesa permanece restrita.
  */
-export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId: string, reason: string): Promise<{ bookingsCancelled: number; assignmentsFlagged: number }> {
+export type DeactivationPreview = {
+  ownBookings: IncompatibleBooking[];
+  /** Atribuições individuais da pessoa que passam a "vínculo a revisar". */
+  assignments: Array<{ id: string; resourceId: string; code: string }>;
+  /** Reservas de terceiros nas mesas da pessoa que deixam de valer com a revisão (liberação ao compartilhado ou nominal). */
+  thirdPartyBookings: IncompatibleBooking[];
+};
+
+/** Prévia dos efeitos da desativação no escritório, exibida antes da confirmação (DIR-018, PAR-25). */
+export async function deactivationOfficePreview(db: DbOrTx, employeeId: string): Promise<DeactivationPreview> {
   const today = localToday();
-  const bookings = await listActiveBookings(tx, { employeeIds: [employeeId], from: today, to: null });
-  await lockResources(tx, bookings.map((b) => b.resourceId));
+  const ownBookings = (await listActiveBookings(db, { employeeIds: [employeeId], from: today, to: null })).map((b) => ({ ...b, why: "pessoa desativada" }));
+  const assignments = await db
+    .select({ id: exclusiveAssignment.id, resourceId: exclusiveAssignment.resourceId, code: resource.code })
+    .from(exclusiveAssignment)
+    .innerJoin(resource, eq(resource.id, exclusiveAssignment.resourceId))
+    .where(and(eq(exclusiveAssignment.holderEmployeeId, employeeId), eq(exclusiveAssignment.mode, "individual"), isNull(exclusiveAssignment.cancelledAt), or(isNull(exclusiveAssignment.validTo), gte(exclusiveAssignment.validTo, today))));
+  const thirdPartyBookings = assignments.length
+    ? (await findIncompatible(db, { resourceIds: assignments.map((a) => a.resourceId), from: today, to: null }, (p) => (p.assignment ? { ...p, assignment: { ...p.assignment, needsReview: true } } : p), "mesa do titular desativado entra em revisão; a liberação deixa de valer")).filter((b) => b.employeeId !== employeeId)
+    : [];
+  return { ownBookings, assignments, thirdPartyBookings };
+}
+
+/**
+ * Efeitos da desativação de uma pessoa no escritório (DIR-018, PAR-25), na mesma transação da desativação e depois
+ * do lock da pessoa: reservas futuras da pessoa e de terceiros sob liberação canceladas com comunicação e auditoria;
+ * atribuições individuais marcadas para revisão (a mesa permanece restrita); gestor direto comunicado.
+ */
+export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId: string, reason: string): Promise<{ bookingsCancelled: number; thirdPartyCancelled: number; assignmentsFlagged: number }> {
+  const preview = await deactivationOfficePreview(tx, employeeId);
+  const all = [...preview.ownBookings, ...preview.thirdPartyBookings];
+  await lockResources(tx, [...all.map((b) => b.resourceId), ...preview.assignments.map((a) => a.resourceId)]);
+  // Releitura depois dos locks: o conjunto pode ter mudado.
+  const again = await deactivationOfficePreview(tx, employeeId);
+  const conflicts = [...again.ownBookings, ...again.thirdPartyBookings];
   await applyConflictDecisions(
     tx,
     actor,
-    bookings.map((b) => ({ ...b, why: "pessoa desativada" })),
-    bookings.map((b) => ({ bookingId: b.bookingId, action: "cancel" as const, reason: `desativação: ${reason}` })),
-    { excludeResourceIds: [], notice: "O acesso foi encerrado." },
+    conflicts,
+    conflicts.map((b) => ({ bookingId: b.bookingId, action: "cancel" as const, reason: b.employeeId === employeeId ? `desativação: ${reason}` : `desativação do titular da mesa: ${reason}` })),
+    { excludeResourceIds: [], notice: "A mesa passou a vínculo em revisão pelo RH." },
   );
-  const flagged = await tx
-    .update(exclusiveAssignment)
-    .set({ needsReview: true })
-    .where(and(eq(exclusiveAssignment.holderEmployeeId, employeeId), eq(exclusiveAssignment.mode, "individual"), isNull(exclusiveAssignment.cancelledAt), or(isNull(exclusiveAssignment.validTo), gte(exclusiveAssignment.validTo, today))))
-    .returning({ id: exclusiveAssignment.id });
+  const flagged = again.assignments.length ? await tx.update(exclusiveAssignment).set({ needsReview: true }).where(inArray(exclusiveAssignment.id, again.assignments.map((a) => a.id))).returning({ id: exclusiveAssignment.id }) : [];
   for (const f of flagged) {
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "exclusivity.review_marked", entityType: "exclusive_assignment", entityId: f.id, after: { needsReview: true, why: "titular desativado" }, reason, requestId: actor.requestId });
   }
-  return { bookingsCancelled: bookings.length, assignmentsFlagged: flagged.length };
+  // PAR-25: gestor direto comunicado do tratamento das reservas.
+  const [person] = await tx.select({ name: employee.fullName, managerEmployeeId: employee.managerEmployeeId }).from(employee).where(eq(employee.id, employeeId));
+  if (person?.managerEmployeeId && (conflicts.length || flagged.length)) {
+    await notify(tx, person.managerEmployeeId, employeeId, `deactivation.manager:${employeeId}:${Date.now()}`, `${person.name} foi desativada(o). Reservas futuras canceladas: ${again.ownBookings.length}; reservas de terceiros afetadas: ${again.thirdPartyBookings.length}; mesas exclusivas em revisão: ${flagged.length}.`);
+  }
+  return { bookingsCancelled: again.ownBookings.length, thirdPartyCancelled: again.thirdPartyBookings.length, assignmentsFlagged: flagged.length };
 }
 
 export async function history(db: DbOrTx, resourceId: string) {

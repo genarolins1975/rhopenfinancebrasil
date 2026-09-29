@@ -183,9 +183,9 @@ export default async function ExclusividadePage({ searchParams }: { searchParams
                     <p className="mb-3 text-sm">Agendadas: {selectedAssignments.filter((a) => a.state === "scheduled").map((a) => `${a.mode === "individual" ? (holderView ? a.holderName : "titular") : a.groupName} a partir de ${formatLocalDate(a.validFrom)}`).join("; ")}</p>
                   ) : null}
                   {canManage && group ? (
-                    <div className="grid gap-6">
+                    <div className="grid min-w-0 gap-6">
                       {selectedAssignments.map((a) => (
-                        <details key={a.id} open={a.state === "active"} className="rounded-md border border-border p-3">
+                        <details key={a.id} open={a.state === "active"} className="min-w-0 rounded-md border border-border p-3">
                           <summary className="cursor-pointer font-medium">
                             Atribuição {a.state === "active" ? "vigente" : a.state === "scheduled" ? "agendada" : a.state}: {a.mode === "individual" ? a.holderName : a.groupName}
                           </summary>
@@ -228,7 +228,7 @@ export default async function ExclusividadePage({ searchParams }: { searchParams
                 <tbody>
                   {group.members.map((m) => (
                     <tr key={m.id}>
-                      <td className={td}>{m.name}</td>
+                      <td className={td}>{holderView ? m.name : "integrante (nome restrito)"}</td>
                       <td className={td}>
                         {formatLocalDate(m.validFrom)} {m.validTo ? `até ${formatLocalDate(m.validTo)}` : "em diante"}
                       </td>
@@ -239,7 +239,7 @@ export default async function ExclusividadePage({ searchParams }: { searchParams
               </Table>
               {canManage ? (
                 <div className="mt-6">
-                  <GroupPanel groupId={group.id} directors={dirs.filter((d) => !group.members.some((m) => m.employeeId === d.id && m.state !== "encerrado"))} members={group.members.map((m) => ({ id: m.id, name: m.name, validFrom: m.validFrom, validTo: m.validTo, state: m.state }))} today={today} />
+                  <GroupPanel groupId={group.id} directors={dirs.filter((d) => !group.members.some((m) => m.employeeId === d.id && m.state !== "encerrado"))} members={group.members.map((m) => ({ id: m.id, name: holderView ? m.name : "integrante", validFrom: m.validFrom, validTo: m.validTo, state: m.state }))} today={today} />
                 </div>
               ) : null}
             </>
@@ -266,7 +266,7 @@ export default async function ExclusividadePage({ searchParams }: { searchParams
                   <tr key={c.bookingId}>
                     <td className={td}>{formatLocalDate(c.date)}</td>
                     <td className={td}>{c.resourceCode}</td>
-                    <td className={td}>{c.employeeName}</td>
+                    <td className={td}>{holderView ? c.employeeName : "pessoa (nome restrito)"}</td>
                     <td className={td}>{c.status}</td>
                   </tr>
                 ))}

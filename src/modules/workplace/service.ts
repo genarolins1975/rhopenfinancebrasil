@@ -390,8 +390,8 @@ export async function bookingsOfResource(db: DbOrTx, resourceId: string, from: s
 }
 
 /** Usado por telas que precisam saber se a pessoa pode reservar uma mesa em outra data (realocação). */
-export async function availableDesksFor(db: DbOrTx, employeeId: string, date: string, excludeResourceIds: string[] = []) {
+export async function availableDesksFor(db: DbOrTx, employeeId: string, date: string, excludeResourceIds: string[] = [], ignoreBookingId?: string) {
   const { stateForPerson } = await import("@/modules/availability/service");
-  const { items } = await stateForPerson(db, employeeId, date, { types: ["desk"] });
+  const { items } = await stateForPerson(db, employeeId, date, { types: ["desk"], ignoreBookingId });
   return items.filter((i) => i.availability.canBook && !excludeResourceIds.includes(i.resource.id)).map((i) => ({ id: i.resource.id, code: i.resource.code }));
 }

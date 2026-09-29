@@ -7,7 +7,7 @@ import { bookingChangedEmail } from "@/modules/notifications/templates";
 import { formatLocalDate } from "@/modules/shared/dates";
 import { ConflictError, ValidationError } from "@/modules/shared/errors";
 import { explainFor } from "@/modules/availability/service";
-import type { Actor } from "./shared";
+import { type Actor, expireHolds } from "./shared";
 
 /*
  * Diálogo de conflito (DIR-016, DIR-017, DIR-032, DIR-033): reservas incompatíveis nunca são canceladas em silêncio.
@@ -84,8 +84,10 @@ export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: In
     }
     if (!d.targetResourceId) throw new ValidationError(`Escolha a mesa de destino para a reserva de ${formatLocalDate(c.date)}.`);
     if (opts.excludeResourceIds.includes(d.targetResourceId) || d.targetResourceId === c.resourceId) throw new ValidationError("A mesa de destino precisa ser outra, disponível para a pessoa.");
-    // Antes de mover, a reserva atual sai do caminho para que o limite diário não bloqueie a própria realocação.
+    // Antes de mover, a reserva atual sai do caminho para que o limite diário não bloqueie a própria realocação,
+    // e a retenção vencida no destino é expirada antes de gravar (DIR-034).
     await tx.update(deskBooking).set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: `realocada: ${d.reason.trim()}` }).where(eq(deskBooking.id, c.bookingId));
+    await expireHolds(tx, { resourceId: d.targetResourceId, employeeId: c.employeeId, date: c.date });
     const { availability, resource: target } = await explainFor(tx, c.employeeId, d.targetResourceId, c.date, { windowExempt: true });
     if (!availability.canBook || !target) throw new ConflictError(`A mesa de destino não está disponível para ${emp?.name ?? "a pessoa"} em ${formatLocalDate(c.date)}: ${availability.reason}. A prévia foi refeita.`);
     const [moved] = await tx

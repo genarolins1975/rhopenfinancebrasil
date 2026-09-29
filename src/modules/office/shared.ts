@@ -50,6 +50,8 @@ const DB_RULE_MESSAGES: Record<string, string> = {
   transfer_same_holder: "O novo titular precisa ser outra pessoa.",
   transfer_without_successor: "Transferência sem sucessora contígua. Nada foi aplicado.",
   successor_cancel_needs_decision: "Anular a sucessora de uma transferência exige decisão explícita sobre a mesa.",
+  assignment_identity_immutable: "Mesa, modalidade e titular de uma atribuição não mudam. Transfira ou encerre e crie outra.",
+  exception_identity_immutable: "Uma liberação não é editada: revogue e crie outra.",
 };
 
 /** Converte erro do banco em erro de domínio: regra de trigger, exclusão, unicidade, deadlock ou tempo de lock. */

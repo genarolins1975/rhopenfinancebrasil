@@ -47,6 +47,36 @@ function AssignFields({ input, directors, groupId, mode, today, previewing }: { 
   );
 }
 
+const fmtOrNull = (v: unknown) => (typeof v === "string" && v ? fmt(v) : null);
+
+/** Três opções excludentes do diálogo de conflito (DIR-016). A terceira é a tabela de decisões abaixo. */
+function ConflictAlternatives({ preview, backHref }: { preview: Record<string, unknown>; backHref: string }) {
+  const items = (Array.isArray(preview) ? preview : [preview]) as Array<Record<string, unknown>>;
+  const startAfter = items.map((p) => (typeof p.startAfter === "string" ? p.startAfter : null)).filter((v): v is string => !!v).sort().at(-1) ?? null;
+  return (
+    <fieldset className="min-w-0 rounded-md border border-border bg-surface p-3">
+      <legend className="px-1 text-sm font-semibold">Três opções excludentes</legend>
+      <ol className="grid gap-2 text-sm">
+        <li>
+          {startAfter ? (
+            <button type="submit" name="validFromOverride" value={startAfter} className="rounded-md border border-border bg-surface-muted px-3 py-1.5 underline" formNoValidate>
+              Iniciar em {fmtOrNull(startAfter)} (dia seguinte à última reserva incompatível)
+            </button>
+          ) : (
+            <span>Iniciar após as reservas: não se aplica.</span>
+          )}
+        </li>
+        <li>
+          <a href={backHref} className="underline">
+            Escolher outra mesa
+          </a>
+        </li>
+        <li>Tratar reservas: decida cada linha da tabela abaixo (cancelar com comunicação ou realocar para mesa disponível para a pessoa) e confirme.</li>
+      </ol>
+    </fieldset>
+  );
+}
+
 function assignSummary(preview: Record<string, unknown>) {
   const items = (Array.isArray(preview) ? preview : [preview]) as Array<Record<string, unknown>>;
   return (
@@ -64,19 +94,20 @@ function assignSummary(preview: Record<string, unknown>) {
 }
 
 export function AssignPanel({ desk, directors, groupId, today }: { desk: DeskSummary; directors: Director[]; groupId: string; today: string }) {
+  const backHref = "/admin/escritorio/mesas/exclusividade?aba=mesas";
   return (
-    <div className="grid gap-6">
-      <section aria-labelledby="travar-titulo">
+    <div className="grid min-w-0 gap-6">
+      <section aria-labelledby="travar-titulo" className="min-w-0">
         <h3 id="travar-titulo" className="font-semibold">
           Travar e vincular a um titular (ou agendar com início futuro)
         </h3>
-        <PreviewForm action={assignAction} hidden={{ resourceId: desk.id }} summary={assignSummary} confirmLabel="Confirmar atribuição" fields={(input, previewing) => <AssignFields input={input} directors={directors} groupId={groupId} mode="individual" today={today} previewing={previewing} />} />
+        <PreviewForm action={assignAction} hidden={{ resourceId: desk.id }} summary={assignSummary} confirmLabel="Confirmar atribuição" alternatives={(p) => <ConflictAlternatives preview={p} backHref={backHref} />} fields={(input, previewing) => <AssignFields input={input} directors={directors} groupId={groupId} mode="individual" today={today} previewing={previewing} />} />
       </section>
-      <section aria-labelledby="grupo-titulo">
+      <section aria-labelledby="grupo-titulo" className="min-w-0">
         <h3 id="grupo-titulo" className="font-semibold">
           Travar para o grupo da diretoria
         </h3>
-        <PreviewForm action={assignAction} hidden={{ resourceId: desk.id }} summary={assignSummary} confirmLabel="Confirmar atribuição de grupo" fields={(input, previewing) => <AssignFields input={input} directors={directors} groupId={groupId} mode="group" today={today} previewing={previewing} />} />
+        <PreviewForm action={assignAction} hidden={{ resourceId: desk.id }} summary={assignSummary} confirmLabel="Confirmar atribuição de grupo" alternatives={(p) => <ConflictAlternatives preview={p} backHref={backHref} />} fields={(input, previewing) => <AssignFields input={input} directors={directors} groupId={groupId} mode="group" today={today} previewing={previewing} />} />
       </section>
     </div>
   );
@@ -93,6 +124,7 @@ export function BatchPanel({ resourceIds, codes, groupId, today, directors }: { 
         action={assignAction}
         summary={assignSummary}
         confirmLabel="Confirmar lote"
+        alternatives={(p) => <ConflictAlternatives preview={p} backHref="/admin/escritorio/mesas/exclusividade?aba=mesas" />}
         fields={(input, previewing) => (
           <>
             {resourceIds.map((id) => (
@@ -110,9 +142,9 @@ export function ExclusivePanel({ assignment, directors, employees, today }: { as
   const a = assignment;
   const isIndividual = a.mode === "individual";
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 gap-6">
       {isIndividual ? (
-        <section aria-labelledby="transferir-titulo">
+        <section aria-labelledby="transferir-titulo" className="min-w-0">
           <h3 id="transferir-titulo" className="font-semibold">
             Transferir a outro titular
           </h3>
@@ -120,6 +152,7 @@ export function ExclusivePanel({ assignment, directors, employees, today }: { as
             action={transferAction}
             hidden={{ assignmentId: a.id }}
             confirmLabel="Confirmar transferência"
+            alternatives={(p) => <ConflictAlternatives preview={p} backHref="/admin/escritorio/mesas/exclusividade?aba=mesas" />}
             summary={(p) => (
               <p>
                 Encerra a atribuição atual no dia anterior e cria a nova a partir de {fmt(String(p.startsOn))}. Reservas do novo titular em outras mesas nas mesmas datas: {Array.isArray(p.newHolderElsewhere) ? (p.newHolderElsewhere as unknown[]).length : 0} (informadas, não canceladas).
@@ -191,7 +224,7 @@ export function ExclusivePanel({ assignment, directors, employees, today }: { as
           </SimpleForm>
         </section>
       ) : null}
-      <section aria-labelledby="liberar-titulo">
+      <section aria-labelledby="liberar-titulo" className="min-w-0">
         <h3 id="liberar-titulo" className="font-semibold">
           Liberar temporariamente
         </h3>
@@ -240,7 +273,7 @@ export function ExclusivePanel({ assignment, directors, employees, today }: { as
         />
       </section>
       {a.exceptions.filter((x) => !x.revokedAt).length ? (
-        <section aria-labelledby="revogar-titulo">
+        <section aria-labelledby="revogar-titulo" className="min-w-0">
           <h3 id="revogar-titulo" className="font-semibold">
             Liberações vigentes ou agendadas
           </h3>
@@ -248,7 +281,7 @@ export function ExclusivePanel({ assignment, directors, employees, today }: { as
             {a.exceptions
               .filter((x) => !x.revokedAt)
               .map((x) => (
-                <li key={x.id} className="rounded-md border border-border p-3 text-sm">
+                <li key={x.id} className="min-w-0 rounded-md border border-border p-3 text-sm">
                   {x.kind === "release_to_shared" ? "Ao conjunto compartilhado" : `Para ${x.beneficiaryName ?? "pessoa"}`}, de {fmt(x.startsOn)} a {fmt(x.endsOn)}: {x.reason}
                   <div className="mt-2">
                     <PreviewForm

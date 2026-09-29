@@ -88,7 +88,7 @@ function ConfirmAction({
   );
 }
 
-export function EmployeeActions({ id, status, name }: { id: string; status: string; name: string }) {
+export function EmployeeActions({ id, status, name, officeEffects }: { id: string; status: string; name: string; officeEffects?: string }) {
   return (
     <div className="flex flex-col gap-3">
       {status === "invited" ? (
@@ -107,7 +107,7 @@ export function EmployeeActions({ id, status, name }: { id: string; status: stri
           label="Desativar"
           title="Desativar pessoa"
           variant="danger"
-          preview={`${name} perde o acesso, os convites são invalidados e todos os perfis e permissões são encerrados. O histórico é preservado.`}
+          preview={`${name} perde o acesso, os convites são invalidados e todos os perfis e permissões são encerrados. O histórico é preservado. ${officeEffects ?? ""}`.trim()}
           action={deactivateEmployeeAction}
           extra={
             <Field id="exitDate" label="Data de saída">

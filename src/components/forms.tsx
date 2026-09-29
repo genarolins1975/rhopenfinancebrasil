@@ -6,10 +6,10 @@ import type { ActionState } from "@/modules/shared/action-state";
 import { Alert, Button } from "./ui";
 
 /** Botão que reflete o envio em andamento, com texto e atributo, não só cor. */
-export function SubmitButton({ children, pendingText = "Enviando…", variant }: { children: React.ReactNode; pendingText?: string; variant?: "primary" | "secondary" | "danger" | "ghost" }) {
+export function SubmitButton({ children, pendingText = "Enviando…", variant, name, value }: { children: React.ReactNode; pendingText?: string; variant?: "primary" | "secondary" | "danger" | "ghost"; name?: string; value?: string }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending} aria-busy={pending} variant={variant}>
+    <Button type="submit" disabled={pending} aria-busy={pending} variant={variant} name={name} value={value}>
       {pending ? pendingText : children}
     </Button>
   );

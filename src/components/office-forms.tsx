@@ -22,6 +22,7 @@ export function PreviewForm({
   confirmLabel = "Confirmar",
   allowRealloc = true,
   hidden = {},
+  alternatives,
 }: {
   action: Action;
   fields: (input: Input, previewing: boolean) => ReactNode;
@@ -30,6 +31,8 @@ export function PreviewForm({
   confirmLabel?: string;
   allowRealloc?: boolean;
   hidden?: Record<string, string>;
+  /** Opções excludentes do diálogo de conflito (DIR-016): iniciar após, escolher outra mesa, tratar reservas. */
+  alternatives?: (preview: Record<string, unknown>) => ReactNode;
 }) {
   const [state, formAction] = useActionState(action, {} as ActionState);
   const input = ((state.data?.input as Input | undefined) ?? {}) as Input;
@@ -44,14 +47,14 @@ export function PreviewForm({
     );
   }
   return (
-    <form action={formAction} className="flex flex-col gap-3" noValidate>
+    <form action={formAction} className="flex min-w-0 flex-col gap-3" noValidate>
       <ActionMessages state={state} />
       {Object.entries(hidden).map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
       {fields(input, !!preview)}
       {preview ? (
-        <section className="rounded-md border border-border bg-surface-muted p-3" aria-label="Prévia de impacto">
+        <section className="min-w-0 rounded-md border border-border bg-surface-muted p-3" aria-label="Prévia de impacto">
           <h3 className="font-semibold">Prévia de impacto</h3>
           {summary ? <div className="mt-1 text-sm">{summary(preview)}</div> : null}
           {blockers.length ? (
@@ -61,13 +64,16 @@ export function PreviewForm({
               ))}
             </ul>
           ) : null}
+          {conflicts.length && alternatives ? <div className="mt-3">{alternatives(preview)}</div> : null}
           <div className="mt-3">
             <ConflictTable conflicts={conflicts} allowRealloc={allowRealloc && !preview.noRealloc} />
           </div>
           {blockers.length === 0 ? (
             <div className="mt-3 flex gap-2">
-              <SubmitButton pendingText="Aplicando…">{confirmLabel}</SubmitButton>
-              <input type="hidden" name="step" value="confirm" />
+              {/* O passo de confirmação viaja no próprio botão: outros botões da prévia (iniciar após) refazem a prévia. */}
+              <SubmitButton pendingText="Aplicando…" name="step" value="confirm">
+                {confirmLabel}
+              </SubmitButton>
             </div>
           ) : (
             <p className="mt-3 text-sm">Corrija os impedimentos e gere a prévia de novo.</p>

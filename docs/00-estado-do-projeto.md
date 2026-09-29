@@ -65,11 +65,11 @@ Fora da Etapa 1, por desenho ou pendência: verificação manual com leitor de t
 
 ## Etapa 2 (núcleo do escritório)
 
-Status: implementada pelo Executor em 29/09/2026; submetida ao Revisor independente na mesma data. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
+Status: implementada pelo Executor em 29/09/2026; aceita com correções pelo Revisor independente na mesma data (15 achados, 7 obrigatórios), todos corrigidos e testados; reapresentada ao Revisor. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
 
 Entregue em código:
 
-* Banco: migração `0003` (gerada: planta, zonas, recursos, períodos operacionais, calendário, configurações, grupo e integrantes, atribuições exclusivas, exceções, reservas de mesa e de espaço, intenção e requisição de semana) e migração `0004` (manual: constraints de exclusão, `is_eligible`, `is_bookable`, `booking_remains_valid`, `desk_class`, `booking_window_open`, `transfer_assignment`, triggers de lock por recurso, dia, pessoa e grupo, trigger de vigência da atribuição, validação de exceção, verificações deferidas no commit, grants, grupo `diretoria` e parâmetros iniciais).
+* Banco: migração `0005` (rede independente do código: `DELETE` revogado do papel da aplicação nas tabelas do escritório; identidade de atribuição e de liberação imutável após a criação); migração `0003` (gerada: planta, zonas, recursos, períodos operacionais, calendário, configurações, grupo e integrantes, atribuições exclusivas, exceções, reservas de mesa e de espaço, intenção e requisição de semana) e migração `0004` (manual: constraints de exclusão, `is_eligible`, `is_bookable`, `booking_remains_valid`, `desk_class`, `booking_window_open`, `transfer_assignment`, triggers de lock por recurso, dia, pessoa e grupo, trigger de vigência da atribuição, validação de exceção, verificações deferidas no commit, grants, grupo `diretoria` e parâmetros iniciais).
 * Disponibilidade: regra pura com a ordem fixa de `DIR-019` e a elegibilidade literal de `DIR-031`, testada contra as funções SQL; carregadores por data para mapa, lista, detalhe, semana e escrita; capacidade por classe sem dupla contagem (`DIR-026`).
 * Reservas: reserva própria e em nome (`DIR-011`), cancelamento próprio e administrativo com comunicação, semana atômica e idempotente por chave de requisição (`BKG-02`), expiração preguiçosa de retenções (`DIR-034`), protocolo transacional com `lock_timeout`, novas tentativas e tradução de erro do banco em resposta de conflito.
 * Exclusividade: travar, agendar, transferir, encerrar, anular (com decisão sobre sucessora), liberar temporariamente ao compartilhado ou a pessoa, revogar liberação, grupo com vigência, revisão de vínculo, lote atômico, prévia de impacto com diálogo de conflito (cancelar com comunicação ou realocar validando a mesa de destino), auditoria e notificação por outbox (`DIR-028`), histórico por mesa, painel de conflitos por consulta dinâmica.
@@ -82,11 +82,11 @@ Testes executados em 29/09/2026 no ambiente desta sessão:
 | Bateria | Comando | Resultado |
 |---|---|---|
 | Unidade | `pnpm test:unit` | 53 testes, 53 aprovados |
-| Integração com banco | `pnpm test:integration` | 128 testes, 128 aprovados |
-| Ponta a ponta com axe (desktop e celular) | `pnpm build && pnpm test:e2e` | 42 testes, 42 aprovados |
+| Integração com banco | `pnpm test:integration` | 134 testes, 134 aprovados |
+| Ponta a ponta com axe (desktop e celular) | `pnpm build && pnpm test:e2e` | 44 testes, 44 aprovados, nenhum pulado |
 | Tipos, lint e build | `pnpm typecheck && pnpm lint && pnpm build` | sem erros |
 
-Fora da Etapa 2, por desenho ou pendência: fila de espera e ofertas (`DIR-025-T1`, `DIR-034-T2`, Etapa 3), confirmação de uso (`DIR-006-T2`, Etapa 3), salas e cabines por intervalo (Etapa 3), `DIR-030-T1`, `DIR-026-T4` e `T5`, validação do inventário por Facilities e RH (`RSK-26`), leitor de tela manual.
+Fora da Etapa 2, por desenho ou pendência: fila de espera e ofertas (`DIR-025-T1`, `DIR-034-T2`, Etapa 3), confirmação de uso (`DIR-006-T2`, Etapa 3), salas e cabines por intervalo (Etapa 3), `DIR-030-T1`, validação do inventário por Facilities e RH (`RSK-26`), leitor de tela manual.
 
 ## Próximo passo
 

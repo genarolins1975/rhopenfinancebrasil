@@ -5,9 +5,11 @@ import { expectNoA11yViolations } from "./a11y";
 
 const state = () => JSON.parse(readFileSync(".e2e-state.json", "utf8")) as { password: string; adm: { email: string }; comum: { email: string }; diretora: { email: string }; diretor2: { email: string }; totpURI: string };
 
+/** Data local de São Paulo, não UTC (DIR-029). */
 function isoPlus(days: number): string {
-  const d = new Date(Date.now() + days * 86_400_000);
-  return d.toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(Date.now() + days * 86_400_000));
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 async function login(page: Page, email: string) {
@@ -80,8 +82,7 @@ test.describe("escritório: mapa, lista e reservas", () => {
     await expect(page.getByText("uso exclusivo da diretoria")).toBeVisible();
   });
 
-  test("planejar a semana: intenção sem mesa não gera reserva; confirmação volta ao início", async ({ page }, testInfo) => {
-    if (testInfo.project.name === "celular") test.skip();
+  test("planejar a semana: intenção sem mesa não gera reserva; confirmação volta ao início", async ({ page }) => {
     await login(page, state().comum.email);
     await page.goto("/semana?semana=atual");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Planejar minha semana");
@@ -96,17 +97,17 @@ test.describe("escritório: mapa, lista e reservas", () => {
 });
 
 test.describe("administração do escritório", () => {
-  test("exclusividade: prévia com conflito explícito, decisão por reserva e confirmação; histórico registra", async ({ page }, testInfo) => {
-    if (testInfo.project.name === "celular") test.skip();
-    // colaborador reserva M020 amanhã; depois o RH trava M020 para o segundo diretor e trata a reserva
+  test("exclusividade: prévia com conflito explícito, três opções, realocação com mesas livres, decisão por reserva e confirmação; histórico registra", async ({ page }, testInfo) => {
+    // dados distintos por projeto: os projetos compartilham o banco de teste
+    const code = testInfo.project.name === "celular" ? "M030" : "M020";
+    const date = isoPlus(testInfo.project.name === "celular" ? 3 : 2);
     await login(page, state().comum.email);
-    const date = isoPlus(2);
-    await page.goto(`/escritorio/recursos/M020?data=${date}`);
+    await page.goto(`/escritorio/recursos/${code}?data=${date}`);
     await page.getByRole("button", { name: "Reservar" }).click();
     await expect(page.getByText("Sua reserva").first()).toBeVisible();
     await page.context().clearCookies();
     await loginAdmin(page);
-    await page.goto("/admin/escritorio/mesas/exclusividade?aba=mesas&mesa=M020");
+    await page.goto(`/admin/escritorio/mesas/exclusividade?aba=mesas&mesa=${code}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Exclusividade da diretoria");
     await expectNoA11yViolations(page);
     await expectNoHorizontalScroll(page);
@@ -118,33 +119,52 @@ test.describe("administração do escritório", () => {
     const preview = page.getByRole("region", { name: "Prévia de impacto" }).first();
     await expect(preview).toContainText("1 reserva(s) incompatível(is)");
     await expect(preview).toContainText("Colaborador Exemplo");
+    // três opções excludentes (DIR-016) e realocação com mesas livres para a pessoa
+    await expect(preview.getByRole("button", { name: /^Iniciar em \d{2}\/\d{2}\/\d{4}/ })).toBeVisible();
+    await expect(preview.getByRole("link", { name: "Escolher outra mesa" })).toBeVisible();
+    await expect(preview.getByText(/Tratar reservas/)).toBeVisible();
+    await expect(preview.getByLabel("Ação").locator("option", { hasText: "Realocar" })).toHaveCount(1);
+    expect(await preview.getByLabel("Mesa de destino").locator("option").count()).toBeGreaterThan(10);
     await expectNoA11yViolations(page);
-    // sem decisão, o servidor recusa
-    await preview.getByRole("button", { name: "Confirmar atribuição" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: /sem decisão|Escolha/ }).first()).toBeVisible();
-    await page.goto("/admin/escritorio/mesas/exclusividade?aba=mesas&mesa=M020");
+    await expectNoHorizontalScroll(page);
+    // opção 1: iniciar após a última reserva incompatível refaz a prévia sem conflitos
+    await preview.getByRole("button", { name: /^Iniciar em/ }).click();
+    const preview1 = page.getByRole("region", { name: "Prévia de impacto" }).first();
+    await expect(preview1).toContainText("Nenhuma reserva incompatível");
+    await expect(preview1.getByRole("button", { name: "Confirmar atribuição" })).toBeVisible();
+    // opção 3: tratar reservas; sem decisão, o servidor recusa
+    await page.goto(`/admin/escritorio/mesas/exclusividade?aba=mesas&mesa=${code}`);
     const form2 = page.getByRole("region", { name: /Travar e vincular a um titular/ });
     await form2.getByLabel(/Titular/).selectOption({ label: "Diretor Segundo" });
     await form2.getByLabel("Justificativa").fill("nova diretoria");
     await form2.getByLabel(/Responsável/).fill("Diretoria executiva");
     await form2.getByRole("button", { name: "Ver impacto" }).click();
     const preview2 = page.getByRole("region", { name: "Prévia de impacto" }).first();
-    await preview2.getByLabel("Ação").selectOption("cancel");
-    await preview2.getByLabel("Motivo").fill("mesa passa à diretoria");
-    await preview2.getByLabel("Mensagem à pessoa").fill("Pedimos desculpas pelo transtorno.");
     await preview2.getByRole("button", { name: "Confirmar atribuição" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: /sem decisão|Escolha/ }).first()).toBeVisible();
+    await page.goto(`/admin/escritorio/mesas/exclusividade?aba=mesas&mesa=${code}`);
+    const form3 = page.getByRole("region", { name: /Travar e vincular a um titular/ });
+    await form3.getByLabel(/Titular/).selectOption({ label: "Diretor Segundo" });
+    await form3.getByLabel("Justificativa").fill("nova diretoria");
+    await form3.getByLabel(/Responsável/).fill("Diretoria executiva");
+    await form3.getByRole("button", { name: "Ver impacto" }).click();
+    const preview3 = page.getByRole("region", { name: "Prévia de impacto" }).first();
+    await preview3.getByLabel("Ação").selectOption("cancel");
+    await preview3.getByLabel("Motivo").fill("mesa passa à diretoria");
+    await preview3.getByLabel("Mensagem à pessoa").fill("Pedimos desculpas pelo transtorno.");
+    await preview3.getByRole("button", { name: "Confirmar atribuição" }).click();
     // a página é revalidada: o painel passa a mostrar a atribuição vigente
     await expect(page.getByText("Atribuição vigente: Diretor Segundo")).toBeVisible();
-    await page.goto("/admin/escritorio/mesas/exclusividade?aba=historico&mesa=M020");
+    await page.goto(`/admin/escritorio/mesas/exclusividade?aba=historico&mesa=${code}`);
     await expect(page.getByRole("table", { name: "Eventos de auditoria da mesa" })).toContainText("exclusivity.assignment_created");
     await expect(page.getByRole("table", { name: "Eventos de auditoria da mesa" })).toContainText("booking.cancelled_by_conflict");
     // o colaborador vê a mesa exclusiva e sua reserva sumiu
     await page.context().clearCookies();
     await login(page, state().comum.email);
-    await page.goto(`/escritorio/recursos/M020?data=${date}`);
+    await page.goto(`/escritorio/recursos/${code}?data=${date}`);
     await expect(page.getByRole("button", { name: "Reservar" })).toHaveCount(0);
     await page.goto("/escritorio/minhas-reservas");
-    await expect(page.getByRole("table", { name: "Reservas futuras" }).or(page.getByText("Nenhuma reserva futura"))).not.toContainText("M020");
+    await expect(page.getByRole("table", { name: "Reservas futuras" }).or(page.getByText("Nenhuma reserva futura"))).not.toContainText(code);
   });
 
   test("recursos, planta, reservas administrativas e conflitos pendentes vazios; sem rolagem horizontal", async ({ page }) => {

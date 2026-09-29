@@ -6,6 +6,8 @@ import { deskBooking, exclusiveAssignment } from "@/db/schema";
 import { bookDesk } from "@/modules/booking/service";
 import { createAssignment } from "@/modules/exclusivity/service";
 import { closeDay, openDay } from "@/modules/workplace/service";
+import { createException } from "@/modules/exclusivity/service";
+import { deactivateEmployee } from "@/modules/employees/service";
 import { addDays, localToday } from "@/modules/shared/dates";
 import { privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
 
@@ -95,5 +97,26 @@ describe("concorrência do escritório", () => {
       }
     }
     expect(await invalidBookings()).toBe(0);
+  });
+
+  it("R9: liberação com realocação contra desativação da mesma pessoa, 10 rodadas: ordem única de locks, sem deadlock vazando; estado coerente", async () => {
+    for (let i = 0; i < 10; i++) {
+      const rh = await privilegedActor({ roles: ["hr"], permissions: ["booking.on_behalf.create", "booking.admin.manage"] });
+      const holder = await seedEmployee({ orgCondition: "director" });
+      const guest = await seedEmployee();
+      const desk = await seedDesk();
+      const target = await seedDesk();
+      const id = await createAssignment(db, rh.actor, { resourceId: desk.id, mode: "individual", holderEmployeeId: holder.id, validFrom: today, reason: "x", responsible: "RH" });
+      const hb = await bookDesk(db, actorOf(holder), { employeeId: holder.id, resourceId: desk.id, date: d(2), idempotencyKey: randomUUID() });
+      const [x, dctv] = await Promise.allSettled([
+        createException(db, rh.actor, { assignmentId: id, kind: "release_to_employee", beneficiaryEmployeeId: guest.id, startsOn: d(1), endsOn: d(3), reason: "viagem" }, [{ bookingId: hb.bookingId, action: "realloc", reason: "liberação", targetResourceId: target.id }]),
+        deactivateEmployee(db, rh.actor, holder.id, { reason: "desligamento" }),
+      ]);
+      for (const r of [x, dctv]) {
+        if (r.status === "rejected") expect(String(r.reason.message), `rodada ${i}`).not.toMatch(/deadlock|Failed query|40P01/);
+      }
+      expect(dctv.status, `rodada ${i}: a desativação sempre conclui`).toBe("fulfilled");
+      expect(await invalidBookings()).toBe(0);
+    }
   });
 });

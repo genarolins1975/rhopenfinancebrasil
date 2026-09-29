@@ -22,6 +22,7 @@ export type ExceptionOnDate = {
   id: string;
   kind: "release_to_shared" | "release_to_employee";
   beneficiaryEmployeeId: string | null;
+  endsOn?: string;
 };
 
 export type Policy = {
@@ -109,7 +110,8 @@ const EXCLUSIVE_LABEL = "Uso exclusivo — Diretoria";
 export function explain(person: Person, r: ResourceOnDate, ctx: DayContext): Availability {
   const mine = !!r.booking && r.booking.employeeId === person.id;
   const exclusiveMine = !!r.policy.assignment && r.policy.assignment.mode === "individual" && r.policy.assignment.holderEmployeeId === person.id && !r.policy.exception;
-  const base = { mine, exclusiveMine, opensAt: null as Date | null, publicReason: null as string | null, bookingId: r.booking?.id ?? null };
+  // DIR-035: a resposta carrega o id da reserva só quando é minha.
+  const base = { mine, exclusiveMine, opensAt: null as Date | null, publicReason: null as string | null, bookingId: mine ? (r.booking?.id ?? null) : null };
   if (person.status !== "active" || !person.canBookSelf) {
     return { ...base, code: "inactive", label: "Indisponível", reason: "conta inativa ou sem permissão", canBook: false };
   }
@@ -123,7 +125,16 @@ export function explain(person: Person, r: ResourceOnDate, ctx: DayContext): Ava
   if (r.retired) return { ...base, code: "retired", label: "Desativada", reason: "recurso desativado", canBook: false };
   if (r.period?.status === "maintenance") return { ...base, code: "maintenance", label: "Em manutenção", reason: "em manutenção", canBook: false, publicReason: r.period.publicReason };
   if (r.period?.status === "admin_block") return { ...base, code: "blocked", label: "Bloqueada", reason: "bloqueada administrativamente", canBook: false, publicReason: r.period.publicReason };
-  if (!isEligible(person.id, r.policy)) return { ...base, code: "exclusive", label: EXCLUSIVE_LABEL, reason: "uso exclusivo da diretoria", canBook: false };
+  if (!isEligible(person.id, r.policy)) {
+    const a = r.policy.assignment;
+    const x = r.policy.exception;
+    // Titular durante liberação nominal a outra pessoa (PAR-26): o texto explica, em vez do rótulo genérico.
+    if (a?.mode === "individual" && a.holderEmployeeId === person.id && x?.kind === "release_to_employee") {
+      const until = x.endsOn ? ` até ${x.endsOn.split("-").reverse().slice(0, 2).join("/")}` : "";
+      return { ...base, code: "exclusive", label: `Liberada a outra pessoa${until}`, reason: "sua mesa está liberada a outra pessoa nesta data", canBook: false };
+    }
+    return { ...base, code: "exclusive", label: EXCLUSIVE_LABEL, reason: "uso exclusivo da diretoria", canBook: false };
+  }
   if (r.booking && r.booking.employeeId !== person.id) return { ...base, code: "reserved", label: "Reservada", reason: "reservada", canBook: false };
   if (mine) return { ...base, code: "mine", label: "Sua reserva", reason: "sua reserva", canBook: false };
   if (ctx.personBooking && ctx.personBooking.resourceId !== r.id) return { ...base, code: "daily_limit", label: exclusiveMine ? "Sua mesa de uso exclusivo" : "Disponível", reason: "você já tem reserva neste dia", canBook: false };

@@ -37,7 +37,7 @@ Colaboradores, Importar CSV.
 ## Suspender, desativar e readmitir
 
 * Suspender: bloqueia o login e encerra as sessões. Cadastro e perfis ficam. Use para afastamentos.
-* Desativar: encerra sessões, convites, perfis e permissões, fecha o período de vínculo com a data de saída, cancela as reservas futuras com comunicação (PAR-25) e marca as mesas exclusivas da pessoa como "vínculo a revisar" (DIR-018). O histórico fica.
+* Desativar: encerra sessões, convites, perfis e permissões, fecha o período de vínculo com a data de saída, cancela as reservas futuras da pessoa com comunicação, marca as mesas exclusivas da pessoa como "vínculo a revisar" (DIR-018) e cancela, também com comunicação, as reservas de terceiros nessas mesas que deixam de valer com a revisão (por exemplo sob liberação ao compartilhado). O diálogo de desativação mostra esses números antes da confirmação; o gestor direto recebe o resumo (PAR-25). O histórico fica.
 * Readmitir: reutiliza o mesmo cadastro, abre novo período, envia novo convite e zera senha e segundo fator. Perfis antigos continuam encerrados.
 * Ninguém altera a própria situação nem os próprios perfis.
 

@@ -53,7 +53,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-12` | Tamanho máximo de anexo | 10 MB, tipos PDF, PNG, JPG, DOCX, XLSX | Facilities, RH e TI | |
 | `PAR-13` | Supressão de resultados de pesquisa | Mínimo 10 respondentes por recorte, mais regra contra diferença entre totais | RH e encarregado | |
 | `PAR-14` | Retenção | Ver `../dados/modelo-de-dados.md` | Encarregado e jurídico | |
-| `PAR-15` | Visibilidade do nome do titular de mesa exclusiva | RH, ADM autorizado e o próprio titular por padrão; Facilities só por concessão de `exclusive.holder.view` | RH e diretoria | `DIR-008` |
+| `PAR-15` | Visibilidade do nome do titular de mesa exclusiva, dos integrantes do grupo e das pessoas com reserva em conflito | RH, ADM autorizado e o próprio titular por padrão; Facilities e demais só por concessão de `exclusive.holder.view`; sem ela, a tela mostra "titular", "integrante" e "pessoa" com nome restrito | RH e diretoria | `DIR-008`; ampliado na revisão da Etapa 2 |
 | `PAR-16` | Dupla aprovação para conceder `admin` e `tech_admin` | Exigida | ADM | |
 | `PAR-17` | Categorias de atendimento | Infraestrutura, tecnologia, ergonomia, ruído, temperatura, copa, benefícios, assuntos de RH; assuntos de RH com fluxo restrito | RH, Facilities e TI | |
 | `PAR-18` | Limites de duração e capacidade de salas e cabines | Nenhum fixado; configuração por recurso | Facilities | |
@@ -63,7 +63,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-22` | Indicador de copa no painel | Consolidado da página 8 (17%) com nota da divergência | Facilities | `REQ-22` |
 | `PAR-23` | Titular de atribuição individual | Somente pessoa ativa com condição organizacional de diretor | RH | Sem exceção prevista |
 | `PAR-24` | Máscara do CPF | Apenas os dois últimos dígitos visíveis | RH e encarregado | |
-| `PAR-25` | Reservas futuras na desativação | Canceladas com notificação ao gestor e às áreas afetadas | RH | Prompt exige regra explícita, não define qual |
+| `PAR-25` | Reservas futuras na desativação | Canceladas com comunicação à pessoa e ao gestor direto; reservas de terceiros nas mesas exclusivas da pessoa que deixam de valer com a revisão do vínculo também são canceladas com comunicação; tudo listado na prévia da desativação e na auditoria; áreas afetadas acompanham pelo painel administrativo | RH | Prompt exige regra explícita, não define qual; revisto na revisão da Etapa 2 |
 | `PAR-26` | Acesso do titular durante liberação nominal | Titular não reserva a mesa nas datas liberadas a outra pessoa; reservas existentes viram conflito tratado | RH e diretoria | `DIR-031` |
 | `PAR-27` | Campo responsável na atribuição | Distinto do ator da sessão, que é registrado automaticamente | RH | |
 | `PAR-28` | Categoria de atendimento para pedido de liberação de mesa exclusiva | Incluída nas categorias de RH | RH | Complementa `PAR-17` |

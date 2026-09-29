@@ -46,7 +46,8 @@ let ownerPool: Pool | undefined;
 export async function resetDb() {
   ownerPool ??= new Pool({ connectionString: process.env.DATABASE_OWNER_URL, max: 1 });
   await ownerPool.query(`truncate table ${TABLES.map((t) => `"${t}"`).join(", ")} restart identity cascade`);
-  await ownerPool.query(`update office_settings set value = case key when 'booking_open_weekday' then '4'::jsonb when 'booking_open_time' then '"10:00"'::jsonb when 'booking_horizon_weeks' then '4'::jsonb when 'exception_max_days' then '30'::jsonb end`);
+  // O truncate em cascata de employee apaga office_settings (FK updated_by): os quatro parâmetros voltam aos valores iniciais.
+  await ownerPool.query(`insert into office_settings (key, value) values ('booking_open_weekday', '4'), ('booking_open_time', '"10:00"'), ('booking_horizon_weeks', '4'), ('exception_max_days', '30') on conflict (key) do update set value = excluded.value, updated_by = null`);
 }
 
 /** Pessoa com perfil privilegiado efetivo: usuário de autenticação e segundo fator ativo (PAR-33). */

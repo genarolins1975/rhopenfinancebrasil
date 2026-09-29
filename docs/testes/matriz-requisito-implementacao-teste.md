@@ -93,7 +93,7 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 | Fila sem dupla oferta e próxima pessoa elegível automática (`REQ-26`) | `waitlist` | `WL-01-T1`, `WL-02-T1` | C, I | pendente (Etapa 3) |
 | `REQ-15` confirmação de uso não libera nem remove exclusividade; QR resolve a reserva no servidor | `checkin` | `CHK-01-T1`, `CHK-02-T1` (id de reserva alheia rejeitado) | I | pendente (Etapa 3) |
 | Fila nega inscrição com reserva ativa na data | `waitlist` | `WL-03-T1` | I | pendente (Etapa 3) |
-| Indicadores por `desk_class` sem dupla contagem, `held` fora do numerador, exceção contada | `availability/rules.ts` (`deskClass`), `capacityOn` | `DIR-026-T3` (exceção ao compartilhado) em `tests/unit/availability.test.ts`; `DIR-026-T4` (períodos sobrepostos) e `DIR-026-T5` (titular fora do numerador) pendentes | U | parcial: T3 testado (29/09/2026); T4 e T5 pendentes |
+| Indicadores por `desk_class` sem dupla contagem, `held` fora do numerador, exceção contada | `availability/rules.ts` (`deskClass`), `capacityOn` | `DIR-026-T3` em `tests/unit/availability.test.ts`; `DIR-026-T1`, `T2`, `T4` e `T5` em `exclusivity.test.ts` (`capacityOn` com seis mesas contra `desk_class` do banco: exclusiva em manutenção, períodos sobrepostos, titular com reserva fora do numerador compartilhado, retenção fora, liberação ao compartilhado contada) | U, I | testado (29/09/2026) |
 | Piso de supressão não configurável | `listening` | `ESC-02-T1` | I | pendente (Etapa 4) |
 | Anexo de nota interna não migra na reclassificação | `helpdesk` | `ATD-03-T1` | I | pendente (Etapa 4) |
 | `REQ-26` transições de atendimento com motivo; reclassificação sem expor notas internas | `helpdesk` | `ATD-01-T1`, `ATD-02-T1` | I | pendente (Etapa 4) |

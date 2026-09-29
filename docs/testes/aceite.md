@@ -158,6 +158,32 @@ Os 15 casos obrigatórios da seção 23 do prompt estão testados no nível do s
 
 Limitações declaradas: inventário da planta não validado por Facilities e RH (`RSK-26`); capacidades de salas inferidas pelas cadeiras (`DEC-20`); mapa gerado das coordenadas da extração, sem o desenho arquitetônico de fundo; rótulo "Uso exclusivo — Diretoria" mantido literal como no prompt, sujeito ao manual de marca.
 
-### Revisão independente
+### Revisão independente (29/09/2026)
+
+Revisor com contexto limpo, acesso ao código, ao banco de teste e às baterias; executou as baterias oficiais, 17 testes de integração e 6 de ponta a ponta adversos temporários, consultas SQL diretas com os papéis da aplicação e dono, 100 rodadas da corrida entre trava e reserva com três pessoas, 20 sessões pela última vaga e 2.200 comparações da janela de abertura entre SQL e serviço. Veredito: ACEITO COM CORREÇÕES, obrigatórias 1 a 7, recomendadas 8 a 15. Os 15 casos da seção 23 foram considerados provados, com ressalvas nos casos 7 (três opções do diálogo ausentes), 13 (desativação com liberação vigente) e 15 (`capacityOn` sem teste do Executor), tratadas abaixo.
+
+| Nº | Severidade | Achado | Tratamento na mesma data |
+|---|---|---|---|
+| 1 | ALTA | Prévia de realocação sem mesas de destino (a própria reserva em conflito contava como limite diário) e diálogo sem as opções "iniciar após" e "escolher outra mesa" | Corrigido: a reserva em conflito é ignorada no cálculo das opções; o diálogo passa a ter as três opções excludentes (`DIR-016`), com "Iniciar em" pré-preenchido com o dia seguinte à última reserva incompatível; testes de integração e ponta a ponta nos dois projetos |
+| 2 | ALTA | Desativar titular com liberação ao compartilhado vigente e reserva de terceiro falhava no commit com erro genérico; nada aplicado, acesso mantido | Corrigido: prévia da desativação lista reservas da pessoa, vínculos que entram em revisão e reservas de terceiros que deixam de valer; a desativação cancela todas com comunicação e auditoria na mesma transação (`PAR-25` revisto); teste R4 |
+| 3 | MÉDIA | Ordem de locks divergente entre serviços (recurso antes de pessoa) e desativação fora do protocolo; deadlock observado sem nova tentativa | Corrigido: pessoa e grupo sempre antes dos recursos; suspensão, desativação, reativação e readmissão sob `withOfficeTx`; teste R9 com dez rodadas |
+| 4 | MÉDIA | O reset dos testes apagava `office_settings` em cascata; baterias rodavam só com os valores de fallback | Corrigido: reset e seed reinserem os quatro parâmetros; teste de `updateSetting` no SQL e no serviço |
+| 5 | MÉDIA | Rolagem horizontal no celular com a prévia de impacto aberta; cenário pulado no projeto celular | Corrigido: contêineres com `min-w-0`; cenário incluído nos dois projetos com `scrollWidth <= clientWidth` com a prévia aberta |
+| 6 | MÉDIA | Desativação comunicava só a pessoa desativada, não o gestor (`PAR-25`) | Corrigido: gestor direto recebe o resumo; `PAR-25` revisto no registro e no guia |
+| 7 | MÉDIA | Realocação não expirava retenção vencida na mesa de destino (`DIR-034`) | Corrigido, com teste |
+| 8 | BAIXA | Papel da aplicação podia apagar registros do escritório e alterar titular, mesa e modalidade de atribuição vigente | Corrigido: migração `0005` revoga `DELETE` e congela a identidade de atribuições e liberações; teste |
+| 9 | BAIXA | `revokeException` consultava o banco antes de validar o id | Corrigido |
+| 10 | BAIXA | Resposta do mapa carregava o id da reserva de terceiros | Corrigido: id só quando é minha (`DIR-035`) |
+| 11 | BAIXA | Data de verificação de atributos e datas do ponta a ponta em UTC | Corrigido: dia local de São Paulo (`DIR-029`) |
+| 12 | BAIXA | Relato omitia dois testes pulados; `capacityOn` sem teste | Corrigido: testes não são mais pulados; `capacityOn` testado contra `desk_class` do banco com seis mesas |
+| 13 | BAIXA | Visão geral com texto desatualizado, sem conflitos pendentes nem explicação das taxas | Corrigido |
+| 14 | BAIXA | Titular via a própria mesa liberada a outra pessoa com o rótulo genérico | Corrigido: "Liberada a outra pessoa até dd/mm" |
+| 15 | BAIXA | Nomes de integrantes do grupo e de pessoas em conflito visíveis a quem só tem `exclusive.view` | Decidido e registrado: `PAR-15` ampliado; nomes só com `exclusive.holder.view` |
+
+### Relato do Executor na reapresentação (29/09/2026)
+
+Testes executados após as correções, no mesmo ambiente: 53 de unidade, 134 de integração (seis novos: R4 da desativação com liberação vigente, realocação com retenção vencida e prévia com mesas livres, capacidade contra `desk_class`, parâmetros configuráveis, identidade imutável e `DELETE` revogado, R9 com dez rodadas de liberação contra desativação) e 44 de ponta a ponta com axe (22 por projeto, nenhum pulado; o cenário de exclusividade cobre as três opções do diálogo, a realocação com mais de dez mesas livres e a prévia aberta no celular sem rolagem horizontal), todos aprovados; tipos, lint e build sem erros; `.log-test.ndjson` sem "Failed query" nem "params". Migração `0005` aplicada em rh_dev e rh_test.
+
+### Reapresentação
 
 Em execução em 29/09/2026.

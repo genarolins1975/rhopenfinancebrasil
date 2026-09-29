@@ -10,7 +10,7 @@ export function ConflictTable({ conflicts, allowRealloc = true }: { conflicts: C
     return <p className="text-sm text-success">Nenhuma reserva incompatível.</p>;
   }
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       <p className="text-sm font-medium">
         {conflicts.length} reserva(s) incompatível(is). Decida cada uma: cancelar com motivo e mensagem, {allowRealloc ? "ou realocar para mesa disponível para a pessoa na data. " : "sem realocação neste tipo de operação. "}
         Nada é cancelado em silêncio.

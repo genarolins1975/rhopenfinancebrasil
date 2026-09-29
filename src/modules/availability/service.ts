@@ -96,7 +96,7 @@ export async function loadResourcesOnDate(db: DbOrTx, date: string, filter: { id
     const x = a ? (exceptionBy.get(a.id) ?? null) : null;
     const policy: Policy = {
       assignment: a ? { id: a.id, mode: a.mode, holderEmployeeId: a.holderEmployeeId, accessGroupId: a.accessGroupId, needsReview: a.needsReview, validFrom: a.validFrom, validTo: a.validTo } : null,
-      exception: x ? { id: x.id, kind: x.kind, beneficiaryEmployeeId: x.beneficiaryEmployeeId } : null,
+      exception: x ? { id: x.id, kind: x.kind, beneficiaryEmployeeId: x.beneficiaryEmployeeId, endsOn: x.endsOn } : null,
       members: a?.accessGroupId ? (membersBy.get(a.accessGroupId) ?? new Set()) : new Set(),
     };
     const p = maintenanceFirst.get(r.id) ?? periodBy.get(r.id) ?? null;
@@ -131,11 +131,13 @@ export type ResourceState = {
  * Estado de todos os recursos para uma pessoa numa data (mapa, lista, busca). A resposta carrega apenas o estado
  * calculado e a marca "é minha"; nomes de titulares só quando o ator tem `exclusive.holder.view`.
  */
-export async function stateForPerson(db: DbOrTx, employeeId: string, date: string, opts: { holderView?: boolean; types?: Array<"desk" | "room" | "booth">; now?: Date } = {}): Promise<{ ctx: DayContext; items: ResourceState[] }> {
+export async function stateForPerson(db: DbOrTx, employeeId: string, date: string, opts: { holderView?: boolean; types?: Array<"desk" | "room" | "booth">; now?: Date; ignoreBookingId?: string } = {}): Promise<{ ctx: DayContext; items: ResourceState[] }> {
   const now = opts.now ?? new Date();
   const person = await loadPerson(db, employeeId);
   const day = await loadDayContext(db, date, now);
-  const personBooking = await personBookingOn(db, employeeId, date);
+  // Realocação: a reserva que está sendo movida não conta como limite diário nem como "minha" na mesa de destino.
+  const found = await personBookingOn(db, employeeId, date);
+  const personBooking = found && found.id === opts.ignoreBookingId ? null : found;
   const ctx: DayContext = { ...day, personBooking };
   const resources = await loadResourcesOnDate(db, date, { types: opts.types ?? ["desk"] });
   const holderNames = opts.holderView ? await holderNamesFor(db, resources) : new Map<string, string>();
