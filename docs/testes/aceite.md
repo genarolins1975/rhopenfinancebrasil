@@ -378,6 +378,12 @@ Preparação do repositório para publicar a demonstração na Vercel Pro com Ne
 | DV-15 | BAIXA | Conferência do banco testava só `DELETE` na auditoria | Corrigido: `UPDATE`, `DELETE` e `TRUNCATE`, mais a URL do dono no mesmo banco; teste de integração |
 | DV-16 | BAIXA | Rota agendada e conferência do banco sem teste | Corrigido: testes de integração da rota (401 e 200 só com contagens) e da conferência (conforme, papel dono, bancos diferentes) |
 
+### Achado na execução do roteiro (29/09/2026)
+
+| Id | Severidade | Achado | Tratamento |
+|---|---|---|---|
+| DV-17 | MÉDIA | No SQL Editor do Neon, o Bloco 1 de `demo-neon.sql` falhou no segundo comando (o bloco que cria os papéis), e nenhum papel foi criado. A mensagem do Neon não foi vista; causa provável: o editor roda cada comando numa conexão própria, e a tabela temporária das senhas não existe na conexão seguinte | Corrigido: tabela comum `_senhas_demo` no banco `neondb`, apagada no novo Bloco 4; papel existente recebe a senha da tabela, e o Bloco 1 pode ser rodado de novo. Testado em PostgreSQL 16 local, com papel não superusuário com CREATEROLE e CREATEDB: falha reproduzida com a versão anterior; versão nova aprovada com um comando por conexão, com reexecução (mesmas senhas, entrada dos dois papéis com fuso America/Sao_Paulo) e com tudo numa transação só; Blocos 2, 3 e 4 aprovados |
+
 ### Situação
 
 Preparação pronta no repositório; publicação, branch `demo` e DNS dependem da autorização do responsável, a registrar no `DEC-45`.
