@@ -127,7 +127,6 @@ export const ADMIN_AREA_PERMISSIONS: Permission[] = [
   "content.edit",
   "survey.manage",
   "actions.manage",
-  "report.view",
   "audit.view",
   "settings.manage",
   "integration.manage",

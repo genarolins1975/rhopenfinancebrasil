@@ -1,6 +1,6 @@
 # Estado do projeto
 
-Atualizado em 28/09/2026. Branch de trabalho: `claude/new-session-0rzo0n`.
+Atualizado em 29/09/2026. Branch de trabalho: `claude/new-session-0rzo0n`.
 
 ## Situação encontrada em 28/09/2026
 
@@ -40,29 +40,29 @@ Registro completo em `decisoes/registro-de-decisoes.md`.
 
 ## Etapa 1 (fundação)
 
-Status: implementada pelo Executor entre 28/09/2026 e 29/09/2026; submetida ao Revisor independente em 29/09/2026. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
+Status: implementada pelo Executor entre 28/09/2026 e 29/09/2026; rejeitada pelo Revisor independente em 29/09/2026 com 26 achados; 20 corrigidos e 6 registrados como pendência na mesma data; reapresentada ao Revisor. Registro completo em `testes/aceite.md`. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
 
 Entregue em código:
 
 * Projeto Next.js 16 com tokens de design, primitivas acessíveis, layouts público, do portal e administrativo, e proxy de verificação otimista de sessão.
 * Banco: esquema Drizzle, duas migrações SQL (tabelas, `citext`, `btree_gist`, `local_today()`, `local_day_range()`, papel `rh_app` sem `UPDATE` e `DELETE` em auditoria, seed de perfis e permissões), `timezone` por papel.
-* Identidade: Better Auth sem plugin admin, handler HTTP restrito ao verificador de email, Argon2id (m = 47104, t = 1, p = 1), convite individual de uso único com hash, recuperação com link para a página do portal, troca de email confirmada no endereço antigo, segundo fator TOTP com códigos de recuperação e `trustDevice` neutralizado, hook global conferindo situação da pessoa, limitador por IP em banco e por conta, sessão de 12 horas para privilegiados.
-* Acesso: catálogo de permissões e perfis, `loadAccess` lendo sempre o banco, perfil Colaborador implícito, privilégio só com segundo fator (`PAR-33`), concessões com vigência, motivo e auditoria, separação de atribuições.
-* Colaboradores: cadastro, edição com histórico organizacional, convites, suspensão, desativação, readmissão, CPF cifrado (AES GCM, nonce, AAD, versão de chave) com HMAC de duplicidade e sufixo para máscara, revelação auditada, importação CSV com prévia cifrada e aplicação atômica.
-* Auditoria somente de inserção; outbox com worker `skip locked` e envio por arquivo, memória ou SMTP com lista de destinatários; bootstrap do primeiro administrador por linha de comando.
-* Telas: entrada, login, segundo fator, convite, recuperação, redefinição, privacidade, início, perfil, segurança, visão geral administrativa, colaboradores (lista, cadastro, detalhe com diálogos de confirmação, edição, importação), acessos e auditoria.
+* Identidade: Better Auth sem plugin admin, handler HTTP restrito ao verificador de email (link final da troca de email exige sessão e não emite sessão; cadastro sincronizado com auditoria), Argon2id (m = 47104, t = 1, p = 1), convite individual de uso único com hash, recuperação com link para a página do portal, troca de email confirmada no endereço antigo, segundo fator TOTP com códigos de recuperação e `trustDevice` neutralizado, hooks negando pessoa inativa no login, na recuperação e em toda rota, limitador por IP em banco e por conta, sessão de 12 horas para privilegiados em todo o portal.
+* Acesso: catálogo de permissões e perfis, `loadAccess` lendo sempre o banco, perfil Colaborador implícito, privilégio só com segundo fator (`PAR-33`), concessões com vigência, motivo e auditoria, separação de atribuições, permissão direta só por quem tem `role.assign.privileged`, autorização por página e por action.
+* Colaboradores: cadastro, edição com histórico organizacional, convites, suspensão, desativação, readmissão, CPF cifrado (AES GCM, nonce, AAD, versão de chave) com HMAC de duplicidade e sufixo para máscara, revelação auditada, importação CSV com prévia cifrada, limite por pessoa e hora, descarte só pelo dono e aplicação atômica; erros de banco traduzidos sem vazar parâmetros ao log.
+* Auditoria somente de inserção; outbox com worker `skip locked`, carga apagada após a entrega e status `blocked` por lista de destinatários; convite marcado como enviado só após envio real; bootstrap do primeiro administrador por linha de comando com lock transacional e `--force` recusado fora de desenvolvimento e teste.
+* Telas: entrada, login, segundo fator, convite, recuperação, redefinição, privacidade, início, perfil, segurança, visão geral administrativa, colaboradores (lista, cadastro, detalhe com diálogos de confirmação, edição, importação), acessos e auditoria; páginas de erro, não encontrado, carregamento e aviso de conexão perdida; cabeçalhos de segurança básicos.
 
-Testes executados em 29/09/2026 no ambiente desta sessão (PostgreSQL 16 local, Chromium pré-instalado):
+Testes executados em 29/09/2026 após as correções da revisão no ambiente desta sessão (PostgreSQL 16 local, Chromium pré-instalado):
 
 | Bateria | Comando | Resultado |
 |---|---|---|
 | Unidade | `pnpm test:unit` | 17 testes, 17 aprovados |
-| Integração com banco | `pnpm test:integration` | 37 testes, 37 aprovados |
-| Ponta a ponta com axe (desktop e celular) | `pnpm build && pnpm test:e2e` | 24 testes, 24 aprovados |
-| Tipos e lint | `pnpm typecheck && pnpm lint` | sem erros |
+| Integração com banco | `pnpm test:integration` | 47 testes, 47 aprovados |
+| Ponta a ponta com axe (desktop e celular) | `pnpm build && pnpm test:e2e` | 28 testes, 28 aprovados |
+| Tipos, lint e build | `pnpm typecheck && pnpm lint && pnpm build` | sem erros |
 
-Fora da Etapa 1, por desenho ou pendência: verificação manual com leitor de tela (`A11Y-02`), rotação automatizada de chaves (`CPF-04-T2`), fluxo de troca de email ponta a ponta (`AUT-10-T1`), reenfileiramento de revogação falha (`AUT-14-T2`), provedor real de email, hospedagem.
+Fora da Etapa 1, por desenho ou pendência: verificação manual com leitor de tela (`A11Y-02`), rotação automatizada de chaves (`CPF-04-T2`), reenfileiramento de revogação falha (`AUT-14-T2`), backoff progressivo e limite de reenvio (`RSK-24`), CSP com nonce (`RSK-25`), token de recuperação em claro por 60 minutos no Better Auth (`RSK-23`), provedor real de email, hospedagem.
 
 ## Próximo passo
 
-Revisão independente da Etapa 1, correções, aceite; depois Etapa 2 (núcleo do escritório).
+Resultado da reapresentação ao Revisor, aceite do responsável; depois Etapa 2 (núcleo do escritório).

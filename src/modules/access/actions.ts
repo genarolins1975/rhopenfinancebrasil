@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db/client";
-import type { ActionState } from "@/modules/identity/actions";
+import type { ActionState } from "@/modules/shared/action-state";
 import { actorOf, requireCurrent } from "@/modules/identity/session";
+import { safeErrorInfo, translateDbError } from "@/modules/shared/db-errors";
 import { isDomainError } from "@/modules/shared/errors";
 import { logger } from "@/modules/shared/logger";
 import { grantPermission, grantRole, revokePermission, revokeRole } from "./grants";
@@ -20,8 +21,10 @@ async function run(fd: FormData, fn: (actor: ReturnType<typeof actorOf>) => Prom
   try {
     await fn(actorOf(current));
   } catch (e) {
+    const translated = translateDbError(e);
+    if (translated) return { error: translated.message };
     if (isDomainError(e)) return { error: e.message };
-    logger.error({ err: e instanceof Error ? e.message : String(e) }, "erro em concessão");
+    logger.error({ err: safeErrorInfo(e) }, "erro em concessão");
     return { error: "Não foi possível concluir agora." };
   }
   revalidatePath(`/admin/colaboradores/${str(fd, "id")}`);

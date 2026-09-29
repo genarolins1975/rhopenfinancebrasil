@@ -15,8 +15,8 @@ describe("outbox de notificações", () => {
 
   it("NOT-01: entrega idempotente; falha reagenda com backoff e não perde o evento", async () => {
     const msg = { to: "a@teste.invalid", subject: "Teste", text: "corpo 12345678901" };
-    await enqueueOutbox(db, { eventType: "email.invitation", aggregateType: "t", aggregateId: "1", payload: { message: msg }, idempotencyKey: "k1" });
-    await enqueueOutbox(db, { eventType: "email.invitation", aggregateType: "t", aggregateId: "1", payload: { message: msg }, idempotencyKey: "k1" });
+    await enqueueOutbox(db, { eventType: "email.password_reset", aggregateType: "t", aggregateId: "1", payload: { message: msg }, idempotencyKey: "k1" });
+    await enqueueOutbox(db, { eventType: "email.password_reset", aggregateType: "t", aggregateId: "1", payload: { message: msg }, idempotencyKey: "k1" });
     expect(await db.select().from(outboxEvent)).toHaveLength(1);
     const [stored] = await db.select().from(outboxEvent);
     expect(JSON.stringify(stored.payload)).not.toContain("12345678901");
@@ -26,6 +26,9 @@ describe("outbox de notificações", () => {
     expect(memoryMailbox).toHaveLength(1);
     const [done] = await db.select().from(outboxEvent);
     expect(done.status).toBe("delivered");
+    // carga entregue não fica no banco
+    expect(done.payload).toEqual({ redacted: true });
+    expect(JSON.stringify(done)).not.toContain("corpo");
     expect(await processOutboxBatch(db, outboxHandlers())).toBe(0);
 
     await enqueueOutbox(db, { eventType: "sem.handler", aggregateType: "t", aggregateId: "2", payload: {}, idempotencyKey: "k2" });

@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { ActionMessages, SubmitButton } from "@/components/forms";
 import { Alert, Button, Field, Table, td, th } from "@/components/ui";
 import { applyImportAction, discardImportAction, previewImportAction } from "@/modules/employees/actions";
-import type { ActionState } from "@/modules/identity/actions";
+import type { ActionState } from "@/modules/shared/action-state";
 
 type Row = { line: number; status: "ok" | "erro" | "duplicado"; messages: string[]; display: Record<string, string> };
 type Preview = { batchId: string; expiresAt: string; summary: { total: number; ok: number; erro: number; duplicado: number }; rows: Row[]; warnings: string[] };

@@ -46,7 +46,8 @@ Colaboradores, Importar CSV.
 Na página da pessoa, seção Perfis e permissões, ou pela lista em Acessos.
 
 * Perfis: Colaborador (implícito para toda pessoa ativa), Gestor, RH, Facilities, Administrador, Administrador técnico.
-* Conceder Gestor exige `role.assign.standard`. Conceder RH, Facilities, Administrador, Administrador técnico ou qualquer permissão sensível exige `role.assign.privileged`.
+* Conceder Gestor exige `role.assign.standard`. Conceder RH, Facilities, Administrador, Administrador técnico ou qualquer permissão direta exige `role.assign.privileged`.
+* Suspender ou desativar alguém com perfil privilegiado exige `role.assign.privileged`. Ninguém altera a própria área, gestor ou condição organizacional.
 * Toda concessão tem motivo, data de início e término opcional. Tudo vai para a auditoria.
 * Perfis privilegiados só produzem efeito quando a pessoa está ativa e com segundo fator.
 
@@ -64,4 +65,8 @@ Os emails saem por uma fila (outbox) processada pelo worker. Na Visão geral, "N
 
 ## Primeiro administrador
 
-Procedimento de linha de comando no servidor, executado pelo administrador técnico uma única vez: `pnpm bootstrap:admin --email <email> --name <nome> --cpf <cpf>`. Cria a pessoa com os perfis Administrador e RH e as permissões `role.assign.privileged` e `audit.view`, e enfileira o convite. Recusa rodar se já existir alguém com perfil privilegiado.
+Procedimento de linha de comando no servidor, executado pelo administrador técnico uma única vez: `pnpm bootstrap:admin --email <email> --name <nome> --cpf <cpf>`. Cria a pessoa com os perfis Administrador e RH e as permissões `role.assign.privileged` e `audit.view`, e enfileira o convite. Recusa rodar se já existir alguém com perfil privilegiado; a opção `--force` só funciona em desenvolvimento e teste e é recusada em homologação e produção, onde vale o procedimento de acesso emergencial. O link do convite só aparece no console em desenvolvimento e teste; nos demais ambientes chega apenas pelo email.
+
+## Convites e envio real
+
+Na página da pessoa, cada convite mostra enfileirado, enviado, bloqueado (destinatário fora da lista permitida de homologação) ou expirado. "Enviado" só aparece depois que o worker entregou de fato. Revogar um convite exige motivo, que fica na auditoria.

@@ -54,7 +54,7 @@ describe("segundo fator", () => {
     const ok = await auth.api.verifyBackupCode({ body: { code }, headers: cookieHeader(cookies), asResponse: true });
     expect(ok.status).toBe(200);
     const res2 = await auth.api.signInEmail({ body: { email: u.email, password: u.password }, asResponse: true });
-    await expect(auth.api.verifyBackupCode({ body: { code }, headers: cookieHeader(setCookiesFrom(res2)) })).rejects.toBeTruthy();
+    await expect(auth.api.verifyBackupCode({ body: { code }, headers: cookieHeader(setCookiesFrom(res2)) })).rejects.toMatchObject({ status: expect.stringMatching(/UNAUTHORIZED|BAD_REQUEST/) });
   });
 
   it("perfil privilegiado não desativa o segundo fator; colaborador comum pode", async () => {

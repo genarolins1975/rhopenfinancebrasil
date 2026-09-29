@@ -14,7 +14,7 @@ import {
   revokeInvitationAction,
   suspendEmployeeAction,
 } from "@/modules/employees/actions";
-import type { ActionState } from "@/modules/identity/actions";
+import type { ActionState } from "@/modules/shared/action-state";
 
 type Action = (prev: ActionState, fd: FormData) => Promise<ActionState>;
 
@@ -39,6 +39,12 @@ function ConfirmAction({
   variant?: "secondary" | "danger" | "primary";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Ids sem espaços nem acentos: aria-labelledby aceita só uma lista de ids.
+  const slug = label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-");
   const [state, formAction] = useActionState(async (prev: ActionState, fd: FormData) => {
     const r = await action(prev, fd);
     if (r.ok) ref.current?.close();
@@ -49,9 +55,9 @@ function ConfirmAction({
       <Button type="button" variant={variant} className="w-full" onClick={() => ref.current?.showModal()}>
         {label}
       </Button>
-      <dialog ref={ref} className="w-full max-w-md rounded-md border border-border bg-surface p-5 shadow-lg backdrop:bg-black/40" aria-labelledby={`${label}-title`}>
+      <dialog ref={ref} className="w-full max-w-md rounded-md border border-border bg-surface p-5 shadow-lg backdrop:bg-black/40" aria-labelledby={`${slug}-title`}>
         <form action={formAction} className="flex flex-col gap-4">
-          <h2 id={`${label}-title`} className="text-lg font-semibold">
+          <h2 id={`${slug}-title`} className="text-lg font-semibold">
             {title}
           </h2>
           <p className="text-sm text-text-muted">{preview}</p>
@@ -59,8 +65,8 @@ function ConfirmAction({
           <input type="hidden" name="id" value={id} />
           {extra}
           {needsReason ? (
-            <Field id={`${label}-reason`} label="Motivo (registrado na auditoria)">
-              <Textarea id={`${label}-reason`} name="reason" required minLength={3} />
+            <Field id={`${slug}-reason`} label="Motivo (registrado na auditoria)">
+              <Textarea id={`${slug}-reason`} name="reason" required minLength={3} />
             </Field>
           ) : null}
           <div className="flex justify-end gap-2">
@@ -88,11 +94,11 @@ export function EmployeeActions({ id, status, name }: { id: string; status: stri
       {status === "invited" ? (
         <>
           <ConfirmAction id={id} label="Reenviar convite" title="Reenviar convite" preview={`Um novo convite será enviado a ${name}. O convite anterior deixa de valer.`} action={resendInvitationAction} needsReason={false} />
-          <ConfirmAction id={id} label="Revogar convite" title="Revogar convite" preview="Os convites válidos deixam de funcionar. A pessoa continua cadastrada como convidada." action={revokeInvitationAction} needsReason={false} />
+          <ConfirmAction id={id} label="Revogar convite" title="Revogar convite" preview="Os convites válidos deixam de funcionar. A pessoa continua cadastrada como convidada." action={revokeInvitationAction} />
         </>
       ) : null}
       {status === "active" ? (
-        <ConfirmAction id={id} label="Suspender" title="Suspender acesso" preview={`${name} perde o acesso imediatamente. Cadastro, perfis e reservas ficam como estão.`} action={suspendEmployeeAction} />
+        <ConfirmAction id={id} label="Suspender" title="Suspender acesso" preview={`${name} perde o acesso imediatamente. Cadastro, perfis e reservas ficam como estão. Se a pessoa tem perfil privilegiado, a ação exige permissão para gerir perfis privilegiados.`} action={suspendEmployeeAction} />
       ) : null}
       {status === "suspended" ? <ConfirmAction id={id} label="Reativar" title="Reativar acesso" preview={`${name} volta a entrar no portal.`} action={reactivateEmployeeAction} /> : null}
       {status === "active" || status === "suspended" || status === "invited" ? (

@@ -2,7 +2,7 @@
 
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Field, Input, Select } from "@/components/ui";
-import type { ActionState } from "@/modules/identity/actions";
+import type { ActionState } from "@/modules/shared/action-state";
 
 type Option = { id: string; name: string };
 

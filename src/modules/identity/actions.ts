@@ -3,8 +3,11 @@
 import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { isDomainError } from "@/modules/shared/errors";
+import { authUser, authVerification, employee } from "@/db/schema";
+import { unexpected, type ActionState } from "@/modules/shared/action-state";
+import { safeErrorInfo } from "@/modules/shared/db-errors";
 import { logger } from "@/modules/shared/logger";
 import { auth } from "./auth";
 import { acceptInvitation } from "./invitations";
@@ -12,7 +15,7 @@ import { checkPasswordPolicy, isPasswordBreached } from "./password";
 import { getCurrent } from "./session";
 import { isThrottled, registerAttempt } from "./throttle";
 
-export type ActionState = { ok?: boolean; error?: string; message?: string; data?: Record<string, unknown> };
+export type { ActionState } from "@/modules/shared/action-state";
 
 const NEUTRAL_LOGIN = "Não foi possível entrar com estes dados. Confira o email e a senha.";
 
@@ -38,7 +41,7 @@ export async function signInAction(_prev: ActionState, formData: FormData): Prom
   } catch (e) {
     await registerAttempt(db, email, false);
     if (e instanceof APIError) return { error: NEUTRAL_LOGIN, ...keep };
-    logger.error({ err: e instanceof Error ? e.message : String(e) }, "erro inesperado no login");
+    logger.error({ err: safeErrorInfo(e) }, "erro inesperado no login");
     return { error: "Não foi possível entrar agora. Tente de novo em instantes.", ...keep };
   }
   redirect(next);
@@ -74,9 +77,7 @@ export async function acceptInvitationAction(_prev: ActionState, formData: FormD
   try {
     await acceptInvitation(db, token, password);
   } catch (e) {
-    if (isDomainError(e)) return { error: e.message };
-    logger.error({ err: e instanceof Error ? e.message : String(e) }, "erro ao aceitar convite");
-    return { error: "Não foi possível concluir agora. Tente de novo em instantes." };
+    return unexpected(e, "aceitar convite");
   }
   redirect("/entrar?aviso=senha-definida");
 }
@@ -100,7 +101,10 @@ export async function resetPasswordAction(_prev: ActionState, formData: FormData
   const password = str(formData, "password");
   const confirm = str(formData, "confirm");
   if (password !== confirm) return { error: "As senhas não coincidem." };
-  const policy = checkPasswordPolicy(password);
+  // Dono do token, para aplicar a política com nome e email, sem confiar em nada além disso.
+  const [verification] = token ? await db.select({ value: authVerification.value }).from(authVerification).where(eq(authVerification.identifier, `reset-password:${token}`)) : [];
+  const [owner] = verification ? await db.select({ email: authUser.email, name: authUser.name }).from(authUser).where(eq(authUser.id, verification.value)) : [];
+  const policy = checkPasswordPolicy(password, owner ? { email: owner.email, name: owner.name } : {});
   if (!policy.ok) return { error: policy.reason };
   if (await isPasswordBreached(password)) return { error: "Esta senha apareceu em vazamentos conhecidos. Escolha outra." };
   try {
@@ -143,7 +147,7 @@ export async function enableTwoFactorAction(_prev: ActionState, formData: FormDa
     return { ok: true, data: { totpURI, backupCodes, svg } };
   } catch (e) {
     if (e instanceof APIError) return { error: "Senha incorreta." };
-    logger.error({ err: e instanceof Error ? e.message : String(e) }, "erro ao ativar segundo fator");
+    logger.error({ err: safeErrorInfo(e) }, "erro ao ativar segundo fator");
     return { error: "Não foi possível ativar agora." };
   }
 }
@@ -177,6 +181,10 @@ export async function requestEmailChangeAction(_prev: ActionState, formData: For
   if (!current) redirect("/entrar");
   const newEmail = str(formData, "newEmail").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) return { error: "Informe um email válido." };
+  if (newEmail === current.user.email.toLowerCase()) return { error: "Este já é o seu email." };
+  // Email já cadastrado para qualquer pessoa, inclusive convidada sem acesso definido: recusa genérica.
+  const [taken] = await db.select({ id: employee.id }).from(employee).where(eq(employee.corporateEmail, newEmail));
+  if (taken) return { error: "Não foi possível iniciar a troca. Confira o email informado." };
   try {
     await auth.api.changeEmail({ body: { newEmail, callbackURL: "/perfil?aviso=email-confirmado" }, headers: await headers() });
   } catch (e) {

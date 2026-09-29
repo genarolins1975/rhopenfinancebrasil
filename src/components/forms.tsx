@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import type { ActionState } from "@/modules/identity/actions";
+import type { ActionState } from "@/modules/shared/action-state";
 import { Alert, Button } from "./ui";
 
 /** Botão que reflete o envio em andamento, com texto e atributo, não só cor. */

@@ -35,6 +35,7 @@ async function person(name: string, email: string, seed: number, roles: string[]
 async function main() {
   await reset();
   const comum = await person("Colaborador Exemplo", "colaborador@teste.invalid", 9001, ["employee"], []);
+  const gestor = await person("Gestor Exemplo", "gestor@teste.invalid", 9004, ["manager"], []);
   const adm = await person("Administradora Exemplo", "admin@teste.invalid", 9002, ["admin", "hr"], ["role.assign.privileged", "audit.view", "cpf.reveal"]);
   // Segundo fator do admin ativado por API, guardando o URI para o teste gerar códigos.
   const signIn = await auth.api.signInEmail({ body: { email: adm.email, password: PASSWORD }, asResponse: true });
@@ -51,7 +52,7 @@ async function main() {
   const invitedNoInvite = await db.insert(employee).values({ fullName: "Pessoa Convidada", corporateEmail: "convidada@teste.invalid", status: "invited" }).returning({ id: employee.id });
   await db.insert(employeeSensitive).values({ employeeId: invitedNoInvite[0].id, ...protectCpf(syntheticCpf(9003), invitedNoInvite[0].id) });
   const inv = await db.transaction((tx) => createInvitation(tx, { employeeId: adm.id, userId: adm.userId }, invitedNoInvite[0].id));
-  writeFileSync(".e2e-state.json", JSON.stringify({ password: PASSWORD, comum, adm, totpURI: enabled.totpURI, inviteToken: inv.token }));
+  writeFileSync(".e2e-state.json", JSON.stringify({ password: PASSWORD, comum, gestor, adm, totpURI: enabled.totpURI, inviteToken: inv.token }));
   console.log("seed do ponta a ponta concluído");
   process.exit(0);
 }

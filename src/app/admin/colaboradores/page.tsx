@@ -2,10 +2,10 @@ import Link from "next/link";
 import { Button, ButtonLink, EmptyState, Input, PageHeader, Select, StatusBadge, Table, td, th } from "@/components/ui";
 import { db } from "@/db/client";
 import { listEmployees } from "@/modules/employees/service";
-import { requireAdminArea } from "@/modules/identity/session";
+import { requireAnyPermission } from "@/modules/identity/session";
 
 export default async function ColaboradoresPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; page?: string }> }) {
-  const current = await requireAdminArea();
+  const current = await requireAnyPermission(["employee.read.full", "employee.manage"]);
   const sp = await searchParams;
   const page = Number(sp.page ?? "1") || 1;
   const { items, total } = await listEmployees(db, { q: sp.q, status: sp.status, page });

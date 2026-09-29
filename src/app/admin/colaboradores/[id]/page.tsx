@@ -5,18 +5,17 @@ import { db } from "@/db/client";
 import { listGrants } from "@/modules/access/query";
 import { getEmployee } from "@/modules/employees/service";
 import { maskCpf } from "@/modules/employees/cpf";
-import { requireAdminArea } from "@/modules/identity/session";
+import { requireAnyPermission } from "@/modules/identity/session";
 import { formatLocal, formatLocalDate } from "@/modules/shared/dates";
 import { EmployeeActions, GrantForms, RevealCpf } from "./actions-panel";
 
 const AVISOS: Record<string, string> = { criado: "Pessoa cadastrada.", editado: "Cadastro atualizado." };
 
 export default async function ColaboradorPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ aviso?: string }> }) {
-  const current = await requireAdminArea();
+  const current = await requireAnyPermission(["employee.read.full", "employee.manage"]);
   const { id } = await params;
   const sp = await searchParams;
   const p = current.access.permissions;
-  if (!p.has("employee.read.full") && !p.has("employee.manage")) notFound();
   const emp = await getEmployee(db, id);
   if (!emp) notFound();
   const grants = await listGrants(db, id);
@@ -34,8 +33,8 @@ export default async function ColaboradorPage({ params, searchParams }: { params
           <Alert kind="success">{AVISOS[sp.aviso]}</Alert>
         </div>
       ) : null}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="flex flex-col gap-6 lg:col-span-2">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
           <Card title="Cadastro">
             <DefinitionList
               items={[
@@ -114,7 +113,7 @@ export default async function ColaboradorPage({ params, searchParams }: { params
             )}
           </Card>
         </div>
-        <div>
+        <div className="min-w-0">
           {canManage ? (
             <Card title="Ações">
               {current.employee.id === id ? (

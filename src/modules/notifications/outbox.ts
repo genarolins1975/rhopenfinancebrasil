@@ -12,7 +12,11 @@ export type OutboxInput = {
 };
 
 export type OutboxEvent = typeof outboxEvent.$inferSelect;
-export type OutboxHandler = (event: OutboxEvent) => Promise<void>;
+/** Handler devolve `blocked` quando a entrega foi recusada por política (lista de destinatários), sem nova tentativa. */
+export type OutboxHandler = (event: OutboxEvent) => Promise<void | { blocked?: boolean }>;
+
+/** Carga entregue não fica no banco: links de uso único e conteúdo saem após a entrega ou a desistência. */
+const REDACTED_PAYLOAD = { redacted: true } as const;
 
 const MAX_ATTEMPTS = 10;
 
@@ -51,22 +55,24 @@ export async function processOutboxBatch(db: Db, handlers: Record<string, Outbox
       const handler = handlers[row.eventType];
       try {
         if (!handler) throw new Error(`sem handler para ${row.eventType}`);
-        await handler(row);
+        const result = await handler(row);
         await tx
           .update(outboxEvent)
-          .set({ status: "delivered", deliveredAt: new Date(), attempts: row.attempts + 1, lastError: null })
+          .set({ status: result?.blocked ? "blocked" : "delivered", deliveredAt: new Date(), attempts: row.attempts + 1, lastError: null, payload: REDACTED_PAYLOAD })
           .where(eq(outboxEvent.id, row.id));
       } catch (e) {
         const attempts = row.attempts + 1;
         const message = scrub(e instanceof Error ? e.message : String(e)) as string;
         logger.warn({ eventId: row.id, eventType: row.eventType, attempts, err: message }, "falha na entrega da outbox");
+        const failed = attempts >= MAX_ATTEMPTS;
         await tx
           .update(outboxEvent)
           .set({
             attempts,
             lastError: message.slice(0, 500),
-            status: attempts >= MAX_ATTEMPTS ? "failed" : "pending",
+            status: failed ? "failed" : "pending",
             nextAttemptAt: new Date(Date.now() + backoffSeconds(attempts) * 1000),
+            ...(failed ? { payload: REDACTED_PAYLOAD } : {}),
           })
           .where(eq(outboxEvent.id, row.id));
       }

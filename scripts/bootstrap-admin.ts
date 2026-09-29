@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { parseArgs } from "node:util";
-import { eq, inArray, isNull, and } from "drizzle-orm";
+import { eq, inArray, isNull, and, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { employee, employeePermission, employeeRole, employeeSensitive, employmentPeriod, employeeOrgAssignment } from "@/db/schema";
 import { PRIVILEGED_ROLES } from "@/modules/access/permissions";
@@ -27,16 +27,22 @@ async function main() {
     console.error("CPF inválido");
     process.exit(2);
   }
-  const existing = await db
-    .select({ id: employeeRole.id })
-    .from(employeeRole)
-    .where(and(inArray(employeeRole.roleCode, PRIVILEGED_ROLES), isNull(employeeRole.revokedAt)));
-  if (existing.length > 0 && !values.force) {
-    console.error("já existe pessoa com perfil privilegiado; bootstrap recusado (use --force apenas em ambiente novo)");
+  const appEnv = process.env.APP_ENV ?? "development";
+  if (values.force && (appEnv === "production" || appEnv === "homolog")) {
+    console.error("--force não é permitido em homologação nem em produção; use o procedimento de acesso emergencial documentado");
     process.exit(1);
   }
   const email = values.email.trim().toLowerCase();
   const url = await db.transaction(async (tx) => {
+    // Lock de aplicação: duas execuções simultâneas não criam dois administradores.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('bootstrap-admin'))`);
+    const existing = await tx
+      .select({ id: employeeRole.id })
+      .from(employeeRole)
+      .where(and(inArray(employeeRole.roleCode, PRIVILEGED_ROLES), isNull(employeeRole.revokedAt)));
+    if (existing.length > 0 && !values.force) {
+      throw new Error("já existe pessoa com perfil privilegiado; bootstrap recusado");
+    }
     const [dupEmail] = await tx.select({ id: employee.id }).from(employee).where(eq(employee.corporateEmail, email));
     const [dupCpf] = await tx.select({ id: employeeSensitive.employeeId }).from(employeeSensitive).where(eq(employeeSensitive.cpfHmac, cpfHmac(cpf)));
     if (dupEmail || dupCpf) throw new Error("já existe cadastro com estes dados");
@@ -59,7 +65,8 @@ async function main() {
     return inv.url;
   });
   console.log("primeiro administrador cadastrado. O convite foi enfileirado para envio.");
-  if (process.env.APP_ENV !== "production") console.log(`link do convite (ambiente ${process.env.APP_ENV}): ${url}`);
+  // O link só aparece em desenvolvimento e teste; em homologação e produção ele chega apenas pelo email.
+  if (appEnv === "development" || appEnv === "test") console.log(`link do convite (ambiente ${appEnv}): ${url}`);
   process.exit(0);
 }
 

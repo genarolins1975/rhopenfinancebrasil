@@ -6,8 +6,10 @@ import { logger } from "@/modules/shared/logger";
 
 export type EmailMessage = { to: string; subject: string; text: string; html?: string };
 
+export type SendResult = { id: string; blocked?: boolean };
+
 export interface EmailSender {
-  send(message: EmailMessage): Promise<{ id: string }>;
+  send(message: EmailMessage): Promise<SendResult>;
 }
 
 /** Captura em memória para testes. */
@@ -71,7 +73,7 @@ export function getEmailSender(): EmailSender {
     async send(message) {
       if (!allowlisted(message.to)) {
         logger.warn({ to: message.to }, "destinatário fora da lista permitida; envio bloqueado");
-        return { id: "blocked-by-allowlist" };
+        return { id: "blocked-by-allowlist", blocked: true };
       }
       return inner.send(message);
     },

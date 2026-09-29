@@ -9,7 +9,9 @@ export function NavLinks({ items, horizontal = false }: { items: Array<{ href: s
   return (
     <ul className={horizontal ? "flex justify-around" : "flex flex-col gap-1"}>
       {items.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        // Raiz de uma área (como /admin) só é atual na própria raiz; os demais itens cobrem suas subrotas.
+        const isRoot = item.href.split("/").filter(Boolean).length <= 1;
+        const active = pathname === item.href || (!isRoot && pathname.startsWith(`${item.href}/`));
         return (
           <li key={item.href} className={horizontal ? "flex-1" : undefined}>
             <Link

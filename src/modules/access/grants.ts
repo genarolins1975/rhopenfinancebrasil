@@ -5,7 +5,7 @@ import { recordAudit } from "@/modules/audit/audit";
 import { localToday } from "@/modules/shared/dates";
 import { ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { loadAccess } from "./can";
-import { PRIVILEGED_ROLES, ROLES, isSensitivePermission, PERMISSIONS, type Permission, type Role } from "./permissions";
+import { PRIVILEGED_ROLES, ROLES, PERMISSIONS, type Permission, type Role } from "./permissions";
 
 export type Actor = { employeeId: string; userId: string; requestId?: string };
 
@@ -15,6 +15,19 @@ type GrantPermissionInput = { targetEmployeeId: string; permission: Permission; 
 /** Ninguém altera os próprios perfis ou permissões. */
 function assertNotSelf(actor: Actor, targetEmployeeId: string) {
   if (actor.employeeId === targetEmployeeId) throw new ForbiddenError("Ninguém altera os próprios perfis ou permissões.");
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function validateValidity(validFrom: string | undefined, validTo: string | null | undefined): { validFrom: string; validTo: string | null } {
+  const from = validFrom ?? localToday();
+  if (!ISO_DATE.test(from)) throw new ValidationError("Data de início inválida.");
+  if (validTo != null && validTo !== "") {
+    if (!ISO_DATE.test(validTo)) throw new ValidationError("Data de término inválida.");
+    if (validTo < from) throw new ValidationError("O término não pode ser anterior ao início.");
+    return { validFrom: from, validTo };
+  }
+  return { validFrom: from, validTo: null };
 }
 
 async function assertCanAssign(db: Db, actor: Actor, privileged: boolean) {
@@ -39,14 +52,15 @@ export async function grantRole(db: Db, actor: Actor, input: GrantRoleInput): Pr
   await assertCanAssign(db, actor, privileged);
   await assertTargetExists(db, input.targetEmployeeId);
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo da concessão.");
+  const validity = validateValidity(input.validFrom, input.validTo);
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(employeeRole)
       .values({
         employeeId: input.targetEmployeeId,
         roleCode: input.role,
-        validFrom: input.validFrom ?? localToday(),
-        validTo: input.validTo ?? null,
+        validFrom: validity.validFrom,
+        validTo: validity.validTo,
         grantedBy: actor.employeeId,
         reason: input.reason,
       })
@@ -57,7 +71,7 @@ export async function grantRole(db: Db, actor: Actor, input: GrantRoleInput): Pr
       action: "access.role.granted",
       entityType: "employee",
       entityId: input.targetEmployeeId,
-      after: { role: input.role, validFrom: input.validFrom ?? localToday(), validTo: input.validTo ?? null },
+      after: { role: input.role, ...validity },
       reason: input.reason,
       requestId: actor.requestId,
     });
@@ -89,20 +103,22 @@ export async function revokeRole(db: Db, actor: Actor, input: { targetEmployeeId
   });
 }
 
+/** Permissão direta, sensível ou não, sempre exige `role.assign.privileged` (PAR-40). */
 export async function grantPermission(db: Db, actor: Actor, input: GrantPermissionInput): Promise<string> {
   if (!(input.permission in PERMISSIONS)) throw new ValidationError("Permissão inexistente.");
   assertNotSelf(actor, input.targetEmployeeId);
-  await assertCanAssign(db, actor, isSensitivePermission(input.permission));
+  await assertCanAssign(db, actor, true);
   await assertTargetExists(db, input.targetEmployeeId);
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo da concessão.");
+  const validity = validateValidity(input.validFrom, input.validTo);
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(employeePermission)
       .values({
         employeeId: input.targetEmployeeId,
         permissionCode: input.permission,
-        validFrom: input.validFrom ?? localToday(),
-        validTo: input.validTo ?? null,
+        validFrom: validity.validFrom,
+        validTo: validity.validTo,
         grantedBy: actor.employeeId,
         reason: input.reason,
       })
@@ -113,7 +129,7 @@ export async function grantPermission(db: Db, actor: Actor, input: GrantPermissi
       action: "access.permission.granted",
       entityType: "employee",
       entityId: input.targetEmployeeId,
-      after: { permission: input.permission, validFrom: input.validFrom ?? localToday(), validTo: input.validTo ?? null },
+      after: { permission: input.permission, ...validity },
       reason: input.reason,
       requestId: actor.requestId,
     });
@@ -123,7 +139,7 @@ export async function grantPermission(db: Db, actor: Actor, input: GrantPermissi
 
 export async function revokePermission(db: Db, actor: Actor, input: { targetEmployeeId: string; permission: Permission; reason: string }): Promise<void> {
   assertNotSelf(actor, input.targetEmployeeId);
-  await assertCanAssign(db, actor, isSensitivePermission(input.permission));
+  await assertCanAssign(db, actor, true);
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo da revogação.");
   await db.transaction(async (tx) => {
     const updated = await tx

@@ -2,10 +2,10 @@ import Link from "next/link";
 import { Card, EmptyState, PageHeader, StatusBadge, Table, td, th } from "@/components/ui";
 import { db } from "@/db/client";
 import { listPeopleWithGrants } from "@/modules/access/query";
-import { requireAdminArea } from "@/modules/identity/session";
+import { requireAnyPermission } from "@/modules/identity/session";
 
 export default async function AcessosPage() {
-  const current = await requireAdminArea();
+  const current = await requireAnyPermission(["role.assign.standard", "role.assign.privileged", "audit.view"]);
   const p = current.access.permissions;
   const people = await listPeopleWithGrants(db);
   return (

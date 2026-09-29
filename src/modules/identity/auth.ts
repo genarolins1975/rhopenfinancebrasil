@@ -6,11 +6,12 @@ import { haveIBeenPwned } from "better-auth/plugins/haveibeenpwned";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { authSchema, employee } from "@/db/schema";
+import { authSchema, authVerification, employee } from "@/db/schema";
+import { recordAudit } from "@/modules/audit/audit";
 import { loadAccess } from "@/modules/access/can";
 import { enqueueOutbox } from "@/modules/notifications/outbox";
 import { emailChangeConfirmation, emailVerification, maskEmail, passwordResetEmail } from "@/modules/notifications/templates";
-import { env, isProduction } from "@/modules/shared/env";
+import { env } from "@/modules/shared/env";
 import { logger } from "@/modules/shared/logger";
 import { hashPassword, PASSWORD_MAX, PASSWORD_MIN, verifyPassword } from "./password";
 
@@ -52,6 +53,31 @@ async function employeeStatusForUser(userId: string) {
   const [row] = await db.select({ id: employee.id, status: employee.status }).from(employee).where(eq(employee.userId, userId));
   return row ?? null;
 }
+
+async function employeeStatusForEmail(email: string) {
+  const [row] = await db.select({ id: employee.id, status: employee.status }).from(employee).where(eq(employee.corporateEmail, email.trim().toLowerCase()));
+  return row ?? null;
+}
+
+/** Dono de um token de recuperação, pela tabela de verificação do Better Auth (identificador `reset-password:<token>`). */
+async function userIdForResetToken(token: string): Promise<string | null> {
+  const [row] = await db.select({ value: authVerification.value }).from(authVerification).where(eq(authVerification.identifier, `reset-password:${token}`));
+  return row?.value ?? null;
+}
+
+/** Tipo de pedido embutido no token de verificação de email, sem confiar nele para nada além de rotear. */
+function verificationRequestType(token: string | undefined): string | null {
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1];
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { requestType?: string };
+    return parsed.requestType ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const UNAUTHORIZED = () => new APIError("UNAUTHORIZED", { message: "Conta indisponível." });
 
 const authIssuer = "Portal do Colaborador AOF";
 const trustedIpHeader = env().TRUSTED_IP_HEADER;
@@ -99,7 +125,13 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
     // O link aponta para a página do portal; a rota GET do Better Auth não é servida pela rede.
+    // Pessoa suspensa ou desativada não recebe o email; a resposta ao pedido continua neutra.
     sendResetPassword: async ({ user, token }) => {
+      const emp = await employeeStatusForUser(user.id);
+      if (!emp || emp.status !== "active") {
+        logger.info({ userId: user.id }, "recuperação ignorada: pessoa inativa");
+        return;
+      }
       const url = `${env().APP_BASE_URL}/redefinir-senha/${token}`;
       await enqueueOutbox(db, {
         eventType: "email.password_reset",
@@ -136,7 +168,8 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    useSecureCookies: isProduction(),
+    // Seguro sempre que o domínio canônico for https, inclusive em homologação.
+    useSecureCookies: env().APP_BASE_URL.startsWith("https://"),
     ipAddress: {
       ipAddressHeaders: trustedIpHeaders,
     },
@@ -145,8 +178,12 @@ export const auth = betterAuth({
   databaseHooks: {
     session: {
       create: {
-        // Só pessoa ativa recebe sessão nova.
-        before: async (session) => {
+        // Só pessoa ativa recebe sessão nova; o link de verificação de email nunca emite sessão.
+        before: async (session, ctx) => {
+          if (ctx?.path === "/verify-email") {
+            logger.warn({ userId: session.userId }, "sessão negada: verificação de email não emite sessão");
+            return false;
+          }
           const emp = await employeeStatusForUser(session.userId);
           if (!emp || emp.status !== "active") {
             logger.warn({ userId: session.userId }, "sessão negada: pessoa inexistente ou inativa");
@@ -156,12 +193,54 @@ export const auth = betterAuth({
         },
       },
     },
+    user: {
+      update: {
+        // Email de autenticação e email do cadastro andam juntos; a troca só chega aqui após confirmação nos dois endereços.
+        after: async (user) => {
+          const [emp] = await db.select({ id: employee.id, email: employee.corporateEmail }).from(employee).where(eq(employee.userId, user.id));
+          if (!emp || emp.email.toLowerCase() === user.email.toLowerCase()) return;
+          await db.transaction(async (tx) => {
+            await tx.update(employee).set({ corporateEmail: user.email.toLowerCase(), updatedAt: new Date() }).where(eq(employee.id, emp.id));
+            await recordAudit(tx, { actorUserId: user.id, actorEmployeeId: emp.id, action: "employee.email_changed", entityType: "employee", entityId: emp.id, before: { corporateEmail: emp.email }, after: { corporateEmail: user.email.toLowerCase() }, reason: "troca confirmada pela própria pessoa" });
+          });
+        },
+      },
+    },
   },
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       // Dispositivo confiável desativado para todos (PAR-38): o cookie de 30 dias pularia o segundo fator.
       if (TWO_FACTOR_VERIFY_PATHS.has(ctx.path)) {
         return { context: { ...ctx, body: { ...(ctx.body ?? {}), trustDevice: false } } };
+      }
+      // Login e redefinição de senha de pessoa inativa falham antes de qualquer verificação de segredo.
+      if (ctx.path === "/sign-in/email") {
+        const email = (ctx.body as { email?: string } | undefined)?.email;
+        if (email) {
+          const emp = await employeeStatusForEmail(email);
+          if (emp && emp.status !== "active") throw UNAUTHORIZED();
+        }
+        return;
+      }
+      if (ctx.path === "/reset-password") {
+        const token = (ctx.body as { token?: string } | undefined)?.token;
+        const userId = token ? await userIdForResetToken(token) : null;
+        if (userId) {
+          const emp = await employeeStatusForUser(userId);
+          if (!emp || emp.status !== "active") throw UNAUTHORIZED();
+        }
+        return;
+      }
+      if (ctx.path === "/verify-email") {
+        // Confirmar a troca de email exige sessão ativa; sem ela, a pessoa entra primeiro e reabre o link.
+        const type = verificationRequestType((ctx.query as { token?: string } | undefined)?.token);
+        if (type === "change-email-verification") {
+          const session = await getSessionFromCtx(ctx, { disableCookieCache: true });
+          if (!session) throw ctx.redirect(`${env().APP_BASE_URL}/entrar?aviso=confirmar-email`);
+          const emp = await employeeStatusForUser(session.user.id);
+          if (!emp || emp.status !== "active") throw UNAUTHORIZED();
+        }
+        return;
       }
       if (PATHS_WITHOUT_STATUS_CHECK.has(ctx.path)) return;
       const session = await getSessionFromCtx(ctx, { disableCookieCache: true });

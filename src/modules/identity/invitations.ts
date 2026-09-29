@@ -8,6 +8,7 @@ import { formatLocal } from "@/modules/shared/dates";
 import { env } from "@/modules/shared/env";
 import { DomainError, ValidationError } from "@/modules/shared/errors";
 import { newToken, sha256Hex } from "@/modules/shared/ids";
+import { safeErrorInfo } from "@/modules/shared/db-errors";
 import { logger } from "@/modules/shared/logger";
 import { authContext } from "./auth";
 import { checkPasswordPolicy, isPasswordBreached } from "./password";
@@ -43,7 +44,7 @@ export async function createInvitation(tx: DbOrTx, actor: ActorRef, employeeId: 
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
   const [row] = await tx
     .insert(invitation)
-    .values({ employeeId, tokenHash: sha256Hex(token), expiresAt, createdBy: actor.employeeId, sentAt: new Date() })
+    .values({ employeeId, tokenHash: sha256Hex(token), expiresAt, createdBy: actor.employeeId, sentAt: null, deliveryStatus: "queued" })
     .returning({ id: invitation.id });
   const url = `${env().APP_BASE_URL}/convite/${token}`;
   await enqueueOutbox(tx, {
@@ -138,7 +139,7 @@ export async function acceptInvitation(db: Db, token: string, password: string, 
     try {
       await ctx.internalAdapter.deleteUser(user.id);
     } catch (cleanupError) {
-      logger.error({ userId: user.id, err: cleanupError instanceof Error ? cleanupError.message : String(cleanupError) }, "falha ao remover identidade órfã");
+      logger.error({ userId: user.id, err: safeErrorInfo(cleanupError) }, "falha ao remover identidade órfã");
     }
     throw e;
   }

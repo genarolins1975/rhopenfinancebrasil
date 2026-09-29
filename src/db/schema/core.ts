@@ -32,7 +32,7 @@ const ts = () => timestamp({ withTimezone: true, mode: "date" });
 /* Enums de domínio. */
 export const employeeStatus = pgEnum("employee_status", ["invited", "active", "suspended", "deactivated"]);
 export const orgCondition = pgEnum("org_condition", ["standard", "director"]);
-export const outboxStatus = pgEnum("outbox_status", ["pending", "delivered", "failed"]);
+export const outboxStatus = pgEnum("outbox_status", ["pending", "delivered", "failed", "blocked"]);
 export const importBatchStatus = pgEnum("import_batch_status", ["previewed", "applied", "discarded"]);
 
 /* Colaboradores. */

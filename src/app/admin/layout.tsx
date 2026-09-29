@@ -8,7 +8,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const p = current.access.permissions;
   const items = [{ href: "/admin", label: "Visão geral" }];
   if (p.has("employee.manage") || p.has("employee.read.full")) items.push({ href: "/admin/colaboradores", label: "Colaboradores" });
-  if (p.has("role.assign.standard") || p.has("role.assign.privileged")) items.push({ href: "/admin/acessos", label: "Acessos" });
+  if (p.has("role.assign.standard") || p.has("role.assign.privileged") || p.has("audit.view")) items.push({ href: "/admin/acessos", label: "Acessos" });
   if (p.has("audit.view")) items.push({ href: "/admin/auditoria", label: "Auditoria" });
   return (
     <div className="flex min-h-screen flex-col md:flex-row">

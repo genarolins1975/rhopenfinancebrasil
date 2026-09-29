@@ -100,7 +100,7 @@ export function Alert({ kind = "info", title, children }: { kind?: AlertKind; ti
 
 export function Card({ title, children, className, actions }: { title?: string; children: ReactNode; className?: string; actions?: ReactNode }) {
   return (
-    <section className={cx("rounded-md border border-border bg-surface p-5 shadow-[var(--shadow-1)]", className)}>
+    <section className={cx("min-w-0 rounded-md border border-border bg-surface p-5 shadow-[var(--shadow-1)]", className)}>
       {title || actions ? (
         <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
           {title ? <h2 className="text-lg font-semibold">{title}</h2> : <span />}
@@ -152,7 +152,8 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 
 export function Table({ caption, children }: { caption: string; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
+    // Região rolável no celular: precisa ser alcançável pelo teclado (WCAG 2.1.1) e ter nome.
+    <div role="region" aria-label={caption} tabIndex={0} className="max-w-full overflow-x-auto rounded-md border border-border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
       <table className="w-full min-w-[640px] text-sm">
         <caption className="sr-only">{caption}</caption>
         {children}

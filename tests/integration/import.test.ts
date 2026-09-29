@@ -66,6 +66,21 @@ describe("importação CSV", () => {
     await expect(applyImport(db, actor, p2.batchId)).rejects.toThrow(/mudanças no cadastro/);
   });
 
+  it("limite anti oráculo: quinta prévia na hora é recusada; descarte só pelo dono e só de prévia", async () => {
+    const actor = await rhActor();
+    const outroRh = await rhActor();
+    const csv = (n: number) => `nome;email;cpf;area;cargo;gestor_email;condicao;data_admissao\nPessoa ${n};p${n}@teste.invalid;${syntheticCpf(4000 + n)};;;;;01/10/2026`;
+    const previews = [];
+    for (let i = 0; i < 5; i++) previews.push(await previewImport(db, actor, csv(i)));
+    await expect(previewImport(db, actor, csv(9))).rejects.toThrow(/Limite de prévias/);
+    await expect(previewImport(db, outroRh, csv(9))).resolves.toBeTruthy();
+    const { discardImport } = await import("@/modules/employees/import");
+    await expect(discardImport(db, outroRh, previews[0].batchId)).rejects.toThrow(/não encontrada/);
+    await discardImport(db, actor, previews[0].batchId);
+    await expect(discardImport(db, actor, previews[0].batchId)).rejects.toThrow(/não encontrada/);
+    await expect(applyImport(db, actor, previews[0].batchId)).rejects.toThrow(/já foi usada/);
+  });
+
   it("prévia expirada ou de outra pessoa não é aplicada; sem permissão nada acontece", async () => {
     const actor = await rhActor();
     const p = await previewImport(db, actor, `nome;email;cpf;area;cargo;gestor_email;condicao;data_admissao\nQuatro;quatro@teste.invalid;${syntheticCpf(3001)};;;;;01/10/2026`);

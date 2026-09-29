@@ -64,6 +64,43 @@ Escopo entregue conforme `00-estado-do-projeto.md`. Testes executados no ambient
 
 Limitações declaradas: sem verificação manual com leitor de tela; sem provedor real de email; sem rotação automatizada de chave; fluxo de troca de email testado só no nível da configuração; reenfileiramento de revogação de sessão não coberto por teste; o limitador por IP depende do cabeçalho configurado na plataforma.
 
-### Revisão independente
+### Revisão independente (29/09/2026)
+
+Revisor com contexto limpo, acesso ao código, ao banco de teste e ao código do `better-auth@1.7.6`; executou as baterias oficiais e 21 testes adversos temporários. Veredito: REJEITADO, com 26 achados. Motivo declarado: falhas de autorização e exposição de dados bloqueiam o aceite pelo critério da seção 23 do prompt, e três pontos relatados como implementados (limite por hora da importação, "só o hash é gravado", captura de 23505 com detalhe redigido) não estavam.
+
+| Nº | Severidade | Achado | Tratamento |
+|---|---|---|---|
+| 1 | ALTA | Gestor sem segundo fator lia colaboradores e concessões no ambiente administrativo (`report.view` liberava a área) | Corrigido: `report.view` fora da área administrativa; cada página exige permissão própria; teste ponta a ponta com gestor |
+| 2 | ALTA | Troca de email deixava `employee.corporate_email` divergente, o link público emitia sessão sem senha nem segundo fator e permitia tomar o email de pessoa convidada | Corrigido: link final exige sessão e nunca emite sessão; hook sincroniza cadastro com auditoria; email já cadastrado recusado; `AUT-10-T1` |
+| 3 | ALTA | Tokens de convite e recuperação em claro na outbox após a entrega | Corrigido: carga apagada na entrega, bloqueio ou desistência; token de recuperação do Better Auth em claro por 60 minutos registrado em `RSK-23` |
+| 4 | ALTA | Prévia da importação sem o limite prometido (oráculo de CPF) | Corrigido: 5 prévias e 3.000 linhas por pessoa por hora (`PAR-41`), com teste |
+| 5 | ALTA | Erro de banco não tratado levava parâmetros da consulta (HMAC, cifra, nome, email) ao log; entradas sem validação | Corrigido: `translateDbError` e `safeErrorInfo`; validação de UUID, datas e referências antes do banco; `CPF-03-T2` com corrida real e log capturado |
+| 6 | MÉDIA | Regra das 12 horas e `requirePermission` não valiam nas actions de concessão | Corrigido: expiração em `getCurrentResult`, válida em todo caminho; actions exigem permissão (`PAR-42`) |
+| 7 | MÉDIA | `discardImport` sem conferir dono nem status | Corrigido, com teste |
+| 8 | MÉDIA | `role.assign.standard` concedia qualquer permissão não sensível | Corrigido: toda permissão direta exige `role.assign.privileged` (`PAR-40`) |
+| 9 | MÉDIA | RH suspendia administradores; `--force` do bootstrap sem controle | Corrigido: alvo privilegiado exige `role.assign.privileged`; `--force` recusado em homologação e produção; link só em desenvolvimento e teste; lock transacional |
+| 10 | MÉDIA | Cookies sem `Secure` em homologação | Corrigido: `Secure` segue o esquema `https` da URL base |
+| 11 | MÉDIA | Página da pessoa com rolagem horizontal no celular | Corrigido: `min-w-0` e região rolável; teste de `scrollWidth` em todas as páginas administrativas no projeto celular |
+| 12 | MÉDIA | Sem estados de erro, indisponibilidade, conexão perdida e não encontrado | Corrigido: `error.tsx`, `global-error.tsx`, `not-found.tsx`, `loading.tsx`, aviso de conexão perdida, identificador de requisição nas mensagens |
+| 13 | MÉDIA | Falsa confirmação de envio de convite | Corrigido: `sent` e `sent_at` só após envio real; `blocked` por lista de destinatários |
+| 14 | MÉDIA | Pessoa suspensa ou desativada recebia recuperação e redefinia senha | Corrigido: sem email para inativos; hooks negam `sign-in` e `reset-password`, com teste |
+| 15 | MÉDIA | Dois "página atual" na navegação; diálogos sem nome acessível | Corrigido: comparação exata para a raiz; ids por slug; axe com diálogo aberto |
+| 16 | MÉDIA | Asserções fracas (`rejects.toBeTruthy`) e casos da matriz sem teste | Corrigido: asserções por código de resposta e ausência de sessão; novos testes `AUT-07`, `AUT-10-T1`, `AUT-11` pela action, `CPF-03-T2`, limite de prévias, redação da outbox |
+| 17 | MÉDIA | Documentação divergente do código | Corrigido em arquitetura, modelo de dados, matriz de permissões, guia, decisões e riscos |
+| 18 | BAIXA | RH editava o próprio cadastro e virava diretor | Corrigido: autoedição de área, gestor e condição bloqueada |
+| 19 | BAIXA | `mfaRequired` ignorava permissões sensíveis diretas | Corrigido |
+| 20 | BAIXA | Bloqueio por conta permite negação de serviço; sucesso registrado antes do TOTP | Pendência registrada em `RSK-24` para a Etapa 5 |
+| 21 | BAIXA | Modelo CSV com CPF inválido | Corrigido: CPF sintético válido |
+| 22 | BAIXA | Redefinição de senha sem contexto de nome e email na política | Corrigido |
+| 23 | BAIXA | Revogar convite sem motivo; reenvio sem limite | Motivo obrigatório corrigido; limite de reenvio registrado em `RSK-24` |
+| 24 | BAIXA | Checagem do bootstrap fora da transação | Corrigido com `pg_advisory_xact_lock` |
+| 25 | BAIXA | Sem cabeçalhos de segurança | Cabeçalhos básicos aplicados; CSP com nonce registrada em `RSK-25` para a Etapa 5 |
+| 26 | BAIXA | Curingas sem escape no filtro de busca | Corrigido |
+
+### Relato do Executor na reapresentação (29/09/2026)
+
+Testes executados após as correções, no mesmo ambiente: 17 de unidade, 47 de integração com PostgreSQL real, 28 de ponta a ponta com axe (14 por projeto, desktop e celular), todos aprovados; tipos, lint e build de produção sem erros. Evidências pedidas pelo revisor: teste `CPF-03-T2` com corrida de 23505 e log capturado em arquivo sem consulta, email ou CPF; teste ponta a ponta com gestor redirecionado em cinco rotas administrativas; `AUT-10-T1` completo; consulta direta ao banco de teste mostrando `outbox_event.payload = {"redacted": true}` e `invitation.token_hash` com 64 caracteres após a entrega; `scrollWidth <= clientWidth` em seis páginas administrativas e no detalhe da pessoa no projeto celular.
+
+### Reapresentação
 
 Em execução em 29/09/2026.

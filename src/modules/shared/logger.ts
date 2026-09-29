@@ -21,6 +21,7 @@ export function scrubCpf(value: unknown): unknown {
 
 export function scrub(value: unknown): unknown {
   if (typeof value === "string") {
+    if (value.startsWith("Failed query")) return "[consulta redigida]";
     return value
       .replace(CPF_MASKED, "[cpf]")
       .replace(CPF_DIGITS, "[cpf]")
@@ -38,6 +39,7 @@ export function scrub(value: unknown): unknown {
 }
 
 const level = process.env.LOG_LEVEL ?? "info";
+const captureFile = process.env.LOG_CAPTURE_FILE;
 
 export const logger = pino({
   level,
@@ -58,7 +60,7 @@ export const logger = pino({
     },
   },
   transport:
-    (process.env.APP_ENV ?? "development") === "development" && process.env.NODE_ENV !== "test"
+    !captureFile && (process.env.APP_ENV ?? "development") === "development" && process.env.NODE_ENV !== "test"
       ? { target: "pino-pretty", options: { colorize: true } }
       : undefined,
-});
+}, captureFile ? pino.destination({ dest: captureFile, sync: true, mkdir: true }) : undefined);

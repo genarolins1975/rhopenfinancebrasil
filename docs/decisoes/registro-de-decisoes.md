@@ -78,6 +78,9 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-37` | Prioridade da fila sobre reserva direta | Sempre: cancelamento e reserva direta que expira uma retenção oferecem a mesa à próxima pessoa elegível da fila antes de conceder | RH | `DIR-034` |
 | `PAR-38` | Dispositivo confiável no segundo fator | Desativado para todos na primeira versão: o código é pedido a cada login | ADM | Simplifica e fecha a brecha do cookie de 30 dias |
 | `PAR-39` | Perfil Colaborador | Implícito para toda pessoa ativa, sem concessão | RH | |
+| `PAR-40` | Escopo de `role.assign.standard` | Só os perfis Colaborador e Gestor; toda permissão direta exige `role.assign.privileged` | ADM | Revisão da Etapa 1 |
+| `PAR-41` | Limite anti oráculo da importação | 5 prévias e 3.000 linhas por pessoa por hora | RH e encarregado | Revisão da Etapa 1 |
+| `PAR-42` | Sessão de 12 horas para privilegiados | Conferida em toda página e toda action, não só no ambiente administrativo | ADM | Revisão da Etapa 1 |
 
 ## C. Decisões técnicas propostas
 
@@ -126,4 +129,5 @@ A Etapa 0 e a stack foram validadas pelo responsável em 28/09/2026 ("Pode segui
 | 28/09/2026 | Reapresentação dos itens críticos a terceiro revisor: aprovado com ajustes, cinco grupos verificados em banco e no código do Better Auth; todos incorporados na mesma data | Executor |
 | 28/09/2026 | Etapa 0 e stack validadas pelo responsável; parâmetros propostos adotados provisoriamente; Etapa 1 iniciada | Responsável e Executor |
 | 29/09/2026 | Etapa 1: fundação implementada (projeto, banco, autenticação, acesso, colaboradores, CPF, auditoria, outbox, telas) com testes de unidade, integração e ponta a ponta; decisões `DEC-15` a `DEC-17`, parâmetros `PAR-38` e `PAR-39` | Executor |
+| 29/09/2026 | Revisão independente da Etapa 1: rejeitada com 26 achados; 20 corrigidos na mesma data (autorização de página, troca de email, tokens em claro na outbox, limite anti oráculo, erros de banco, sessão de 12 horas, estados de tela, celular, acessibilidade, testes, documentação); pendências registradas em `RSK-23` a `RSK-25` e `PAR-40` a `PAR-42` | Executor |
 | 28/09/2026 | Planta recebida e extraída; inventário preliminar de 84 mesas, 3 salas, 2 booths, 4 cabines, 1 mesa aberta, marcado como não validado; PDF mantido fora do repositório | Executor |

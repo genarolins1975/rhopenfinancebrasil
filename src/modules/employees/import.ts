@@ -1,14 +1,15 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/db/client";
 import { employee, employeeSensitive, importBatch } from "@/db/schema";
 import { loadAccess } from "@/modules/access/can";
 import { recordAudit } from "@/modules/audit/audit";
 import { createInvitation } from "@/modules/identity/invitations";
 import { decryptGcm, encryptGcm, keyFromBase64 } from "@/modules/shared/crypto";
+import { withDbErrors } from "@/modules/shared/db-errors";
 import { env } from "@/modules/shared/env";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { newId } from "@/modules/shared/ids";
-import { cpfHmac, maskCpf, normalizeCpf, protectCpf } from "./cpf";
+import { cpfHmac, maskCpf, normalizeCpf, protectCpf, syntheticCpf } from "./cpf";
 import { ensureArea, type Actor } from "./service";
 import { employeeOrgAssignment, employmentPeriod } from "@/db/schema";
 
@@ -17,12 +18,25 @@ const PRIVILEGED_COLUMNS = ["perfil", "perfis", "permissao", "permissoes", "perm
 export const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 export const IMPORT_MAX_ROWS = 1000;
 export const IMPORT_PREVIEW_TTL_MS = 30 * 60 * 1000;
+/** Limite anti oráculo por pessoa e hora: prévias e linhas validadas (PAR-41). */
+export const IMPORT_MAX_PREVIEWS_PER_HOUR = 5;
+export const IMPORT_MAX_ROWS_PER_HOUR = 3000;
 
 export function csvTemplate(): string {
   return [
     IMPORT_COLUMNS.join(";"),
-    "Maria Exemplo;maria.exemplo@dominio-corporativo.exemplo;00000000000;Tecnologia;Analista;gestor@dominio-corporativo.exemplo;colaborador;01/02/2026",
+    `Maria Exemplo;maria.exemplo@dominio-corporativo.exemplo;${syntheticCpf(1)};Tecnologia;Analista;gestor@dominio-corporativo.exemplo;colaborador;01/02/2026`,
   ].join("\n");
+}
+
+async function assertImportRate(db: DbOrTx, actorEmployeeId: string, rows: number) {
+  const [r] = await db
+    .select({ n: sql<number>`count(*)::int`, rows: sql<number>`coalesce(sum((${importBatch.summary}->>'total')::int), 0)::int` })
+    .from(importBatch)
+    .where(and(eq(importBatch.createdBy, actorEmployeeId), gt(importBatch.createdAt, sql`now() - interval '1 hour'`)));
+  if ((r?.n ?? 0) >= IMPORT_MAX_PREVIEWS_PER_HOUR || (r?.rows ?? 0) + rows > IMPORT_MAX_ROWS_PER_HOUR) {
+    throw new ValidationError("Limite de prévias por hora atingido. Aguarde para enviar outro arquivo.");
+  }
 }
 
 /** Leitor CSV mínimo: detecta ; , ou tabulação pelo cabeçalho, trata aspas e BOM. */
@@ -208,6 +222,7 @@ export async function previewImport(db: Db, actor: Actor, csvText: string): Prom
   const { header, rows } = parseCsv(csvText);
   if (rows.length === 0) throw new ValidationError("Arquivo sem linhas de dados.");
   if (rows.length > IMPORT_MAX_ROWS) throw new ValidationError(`Arquivo com mais de ${IMPORT_MAX_ROWS} linhas. Divida em partes.`);
+  await assertImportRate(db, actor.employeeId, rows.length);
   const { parsed, warnings } = parseRows(header, rows);
   const results = await validateAgainstDb(db, parsed);
   const summary = {
@@ -237,7 +252,7 @@ export async function previewImport(db: Db, actor: Actor, csvText: string): Prom
 export async function applyImport(db: Db, actor: Actor, batchId: string): Promise<{ created: number }> {
   const access = await loadAccess(db, actor.employeeId);
   if (!access.permissions.has("employee.import")) throw new ForbiddenError();
-  return db.transaction(async (tx) => {
+  return withDbErrors(() => db.transaction(async (tx) => {
     const [batch] = await tx.select().from(importBatch).where(eq(importBatch.id, batchId)).for("update");
     if (!batch || batch.createdBy !== actor.employeeId) throw new ValidationError("Prévia não encontrada.");
     if (batch.status !== "previewed") throw new ValidationError("Esta prévia já foi usada.");
@@ -289,13 +304,18 @@ export async function applyImport(db: Db, actor: Actor, batchId: string): Promis
       requestId: actor.requestId,
     });
     return { created: rows.length };
-  });
+  }));
 }
 
+/** Só quem gerou a prévia a descarta, e só enquanto ela ainda é prévia. */
 export async function discardImport(db: Db, actor: Actor, batchId: string): Promise<void> {
-  await db
+  const access = await loadAccess(db, actor.employeeId);
+  if (!access.permissions.has("employee.import")) throw new ForbiddenError();
+  const rows = await db
     .update(importBatch)
     .set({ status: "discarded", rowsCiphertext: Buffer.alloc(0) })
-    .where(eq(importBatch.id, batchId));
+    .where(and(eq(importBatch.id, batchId), eq(importBatch.createdBy, actor.employeeId), eq(importBatch.status, "previewed")))
+    .returning({ id: importBatch.id });
+  if (rows.length === 0) throw new ValidationError("Prévia não encontrada ou já usada.");
   await recordAudit(db, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "employee.import.discarded", entityType: "import_batch", entityId: batchId, requestId: actor.requestId });
 }

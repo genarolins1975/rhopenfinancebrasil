@@ -48,7 +48,13 @@ export async function loadAccess(db: DbOrTx, employeeId: string, today = localTo
     .from(employeeRole)
     .where(and(eq(employeeRole.employeeId, employeeId), vigente(employeeRole)));
   const grantedRoles = roleRows.map((r) => r.code as Role);
-  const hasPrivilegedGrant = grantedRoles.some((r) => PRIVILEGED_ROLES.includes(r));
+  const directRows = await db
+    .select({ code: employeePermission.permissionCode })
+    .from(employeePermission)
+    .where(and(eq(employeePermission.employeeId, employeeId), vigente(employeePermission)));
+  const hasSensitiveDirect = directRows.some((d) => isSensitivePermission(d.code as Permission));
+  // Segundo fator obrigatório para perfil privilegiado ou permissão sensível direta (PAR-33).
+  const hasPrivilegedGrant = grantedRoles.some((r) => PRIVILEGED_ROLES.includes(r)) || hasSensitiveDirect;
 
   if (emp.status !== "active") {
     return { ...empty(emp.status, twoFactorEnabled), grantedRoles, hasPrivilegedGrant, mfaRequired: hasPrivilegedGrant && !twoFactorEnabled };
@@ -66,11 +72,7 @@ export async function loadAccess(db: DbOrTx, employeeId: string, today = localTo
       .where(inArray(rolePermission.roleCode, effectiveRoles));
     for (const r of rp) permissions.add(r.code as Permission);
   }
-  const direct = await db
-    .select({ code: employeePermission.permissionCode })
-    .from(employeePermission)
-    .where(and(eq(employeePermission.employeeId, employeeId), vigente(employeePermission)));
-  for (const d of direct) {
+  for (const d of directRows) {
     const p = d.code as Permission;
     if (isSensitivePermission(p) && !privilegedAllowed) continue;
     permissions.add(p);

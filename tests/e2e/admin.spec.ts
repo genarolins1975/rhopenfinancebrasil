@@ -4,7 +4,21 @@ import { formatCpf, syntheticCpf } from "@/modules/employees/cpf";
 import { totpFromUri } from "../integration/totp";
 import { expectNoA11yViolations } from "./a11y";
 
-const state = () => JSON.parse(readFileSync(".e2e-state.json", "utf8")) as { password: string; adm: { email: string }; comum: { email: string }; totpURI: string };
+const state = () => JSON.parse(readFileSync(".e2e-state.json", "utf8")) as { password: string; adm: { email: string }; comum: { email: string }; gestor: { email: string }; totpURI: string };
+
+async function loginAs(page: Page, email: string) {
+  await page.goto("/entrar");
+  await page.getByLabel("Email corporativo").fill(email);
+  await page.getByLabel("Senha").fill(state().password);
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await expect(page).toHaveURL(/\/inicio/);
+}
+
+/** Nenhuma tela administrativa pode rolar na horizontal no celular. */
+async function expectNoHorizontalScroll(page: Page) {
+  const { scrollWidth, clientWidth } = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
+  expect(scrollWidth, `scrollWidth ${scrollWidth} > clientWidth ${clientWidth} em ${page.url()}`).toBeLessThanOrEqual(clientWidth);
+}
 
 async function loginAdmin(page: Page) {
   const s = state();
@@ -20,15 +34,35 @@ async function loginAdmin(page: Page) {
 
 test.describe("ambiente administrativo", () => {
   test("colaborador comum não entra no admin", async ({ page }) => {
-    const s = state();
-    await page.goto("/entrar");
-    await page.getByLabel("Email corporativo").fill(s.comum.email);
-    await page.getByLabel("Senha").fill(s.password);
-    await page.getByRole("button", { name: "Entrar" }).click();
-    await expect(page).toHaveURL(/\/inicio/);
+    await loginAs(page, state().comum.email);
     await page.goto("/admin");
     await expect(page).toHaveURL(/\/inicio\?aviso=sem-permissao/);
     await expect(page.getByText("não está disponível para o seu perfil")).toBeVisible();
+  });
+
+  test("gestor não vê colaboradores, acessos nem auditoria", async ({ page }) => {
+    await loginAs(page, state().gestor.email);
+    for (const path of ["/admin", "/admin/colaboradores", "/admin/acessos", "/admin/auditoria", "/admin/colaboradores/importar/modelo"]) {
+      const res = await page.goto(path);
+      expect(page.url(), path).toMatch(/\/inicio\?aviso=sem-permissao/);
+      expect(res?.status(), path).toBeLessThan(500);
+    }
+  });
+
+  test("telas administrativas não rolam na horizontal e o diálogo de ação passa no axe aberto", async ({ page }) => {
+    await loginAdmin(page);
+    for (const path of ["/admin", "/admin/colaboradores", "/admin/acessos", "/admin/auditoria", "/admin/colaboradores/importar", "/admin/colaboradores/novo"]) {
+      await page.goto(path);
+      await expectNoHorizontalScroll(page);
+    }
+    await page.goto("/admin/colaboradores?q=Colaborador%20Exemplo");
+    await page.getByRole("link", { name: "Colaborador Exemplo" }).click();
+    await expectNoHorizontalScroll(page);
+    await page.getByRole("button", { name: "Suspender" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveAccessibleName(/Suspender acesso/);
+    await expectNoA11yViolations(page);
+    await page.getByRole("dialog").getByRole("button", { name: "Cancelar" }).click();
   });
 
   test("admin com segundo fator entra, vê a lista sem CPF e cadastra pessoa com convite", async ({ page }, testInfo) => {

@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/db/client";
-import type { ActionState } from "@/modules/identity/actions";
+import { unexpected, type ActionState } from "@/modules/shared/action-state";
 import { actorOf, requirePermission } from "@/modules/identity/session";
-import { isDomainError } from "@/modules/shared/errors";
-import { logger } from "@/modules/shared/logger";
 import { applyImport, discardImport, previewImport } from "./import";
 import {
   createEmployee,
@@ -25,10 +23,8 @@ function str(fd: FormData, key: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-function fail(e: unknown, fallback: string): ActionState {
-  if (isDomainError(e)) return { error: e.message };
-  logger.error({ err: e instanceof Error ? e.message : String(e) }, fallback);
-  return { error: "Não foi possível concluir agora. Tente de novo em instantes." };
+function fail(e: unknown, fallback: string, requestId?: string): ActionState {
+  return unexpected(e, fallback, requestId);
 }
 
 function keepValues(fd: FormData) {
@@ -93,7 +89,7 @@ export async function resendInvitationAction(_prev: ActionState, fd: FormData) {
   return simple(fd, (a, id) => resendInvitation(db, a, id), "erro ao reenviar convite", "Novo convite enfileirado. O anterior foi invalidado.");
 }
 export async function revokeInvitationAction(_prev: ActionState, fd: FormData) {
-  return simple(fd, (a, id) => revokeInvitation(db, a, id), "erro ao revogar convite", "Convite revogado.");
+  return simple(fd, (a, id) => revokeInvitation(db, a, id, str(fd, "reason")), "erro ao revogar convite", "Convite revogado.");
 }
 export async function suspendEmployeeAction(_prev: ActionState, fd: FormData) {
   return simple(fd, (a, id) => suspendEmployee(db, a, id, str(fd, "reason")), "erro ao suspender", "Pessoa suspensa. Sessões encerradas.");

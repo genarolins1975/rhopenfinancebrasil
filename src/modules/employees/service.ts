@@ -8,6 +8,7 @@ import { recordAudit } from "@/modules/audit/audit";
 import { authContext } from "@/modules/identity/auth";
 import { createInvitation, revokeActiveInvitations } from "@/modules/identity/invitations";
 import { addDays, localToday } from "@/modules/shared/dates";
+import { safeErrorInfo, withDbErrors } from "@/modules/shared/db-errors";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { logger } from "@/modules/shared/logger";
 import { cpfHmac, formatCpf, normalizeCpf, protectCpf } from "./cpf";
@@ -27,6 +28,37 @@ export type NewEmployeeInput = {
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Referências vindas do formulário: formato e existência conferidos antes do banco. */
+async function assertReferences(db: DbOrTx, refs: { areaId?: string | null; managerEmployeeId?: string | null }, selfId?: string) {
+  if (refs.areaId) {
+    if (!UUID_RE.test(refs.areaId)) throw new ValidationError("Área inválida.");
+    const [a] = await db.select({ id: area.id }).from(area).where(eq(area.id, refs.areaId));
+    if (!a) throw new ValidationError("Área inválida.");
+  }
+  if (refs.managerEmployeeId) {
+    if (!UUID_RE.test(refs.managerEmployeeId)) throw new ValidationError("Gestor inválido.");
+    if (selfId && refs.managerEmployeeId === selfId) throw new ValidationError("A pessoa não pode ser gestora de si mesma.");
+    const [m] = await db.select({ id: employee.id, status: employee.status }).from(employee).where(eq(employee.id, refs.managerEmployeeId));
+    if (!m || m.status === "deactivated") throw new ValidationError("Gestor inválido.");
+  }
+}
+
+/** Suspender ou desativar quem tem concessão privilegiada vigente exige `role.assign.privileged`. */
+async function assertMayChangeStatusOf(db: DbOrTx, actor: Actor, targetEmployeeId: string) {
+  const target = await loadAccess(db, targetEmployeeId);
+  if (!target.hasPrivilegedGrant) return;
+  const mine = await loadAccess(db, actor.employeeId);
+  if (!mine.permissions.has("role.assign.privileged")) {
+    throw new ForbiddenError("Alterar a situação de pessoa com perfil privilegiado exige permissão para gerir perfis privilegiados.");
+  }
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
 
 async function assertPermission(db: DbOrTx, actor: Actor, permission: Permission): Promise<void> {
   const access = await loadAccess(db, actor.employeeId);
@@ -39,7 +71,7 @@ export function validateNewEmployee(input: NewEmployeeInput): { cpf: string; ema
   if (!email || !EMAIL_RE.test(email)) throw new ValidationError("Informe um email corporativo válido.");
   const cpf = normalizeCpf(input.cpf ?? "");
   if (!cpf) throw new ValidationError("CPF inválido. Confira os 11 dígitos.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.hireDate ?? "")) throw new ValidationError("Informe a data de admissão.");
+  if (!ISO_DATE.test(input.hireDate ?? "")) throw new ValidationError("Informe a data de admissão.");
   return { cpf, email };
 }
 
@@ -47,7 +79,8 @@ export function validateNewEmployee(input: NewEmployeeInput): { cpf: string; ema
 export async function createEmployee(db: Db, actor: Actor, input: NewEmployeeInput): Promise<{ employeeId: string; invitationUrl?: string }> {
   await assertPermission(db, actor, "employee.manage");
   const { cpf, email } = validateNewEmployee(input);
-  return db.transaction(async (tx) => {
+  await assertReferences(db, input);
+  return withDbErrors(() => db.transaction(async (tx) => {
     const hmac = cpfHmac(cpf);
     const [dupCpf] = await tx.select({ id: employeeSensitive.employeeId }).from(employeeSensitive).where(eq(employeeSensitive.cpfHmac, hmac));
     const [dupEmail] = await tx.select({ id: employee.id }).from(employee).where(eq(employee.corporateEmail, email));
@@ -92,7 +125,7 @@ export async function createEmployee(db: Db, actor: Actor, input: NewEmployeeInp
       invitationUrl = inv.url;
     }
     return { employeeId: emp.id, invitationUrl };
-  });
+  }));
 }
 
 export async function resendInvitation(db: Db, actor: Actor, employeeId: string): Promise<void> {
@@ -102,11 +135,12 @@ export async function resendInvitation(db: Db, actor: Actor, employeeId: string)
   });
 }
 
-export async function revokeInvitation(db: Db, actor: Actor, employeeId: string): Promise<void> {
+export async function revokeInvitation(db: Db, actor: Actor, employeeId: string, reason: string): Promise<void> {
   await assertPermission(db, actor, "employee.manage");
+  if (!reason?.trim()) throw new ValidationError("Informe o motivo.");
   await db.transaction(async (tx) => {
     const n = await revokeActiveInvitations(tx, employeeId);
-    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "invitation.revoked", entityType: "employee", entityId: employeeId, after: { revoked: n }, requestId: actor.requestId });
+    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "invitation.revoked", entityType: "employee", entityId: employeeId, after: { revoked: n }, reason, requestId: actor.requestId });
   });
 }
 
@@ -127,7 +161,10 @@ export type UpdateEmployeeInput = {
  */
 export async function updateEmployee(db: Db, actor: Actor, employeeId: string, patch: UpdateEmployeeInput): Promise<void> {
   await assertPermission(db, actor, "employee.manage");
-  await db.transaction(async (tx) => {
+  const touchesOrg = patch.areaId !== undefined || patch.managerEmployeeId !== undefined || patch.orgCondition !== undefined;
+  if (actor.employeeId === employeeId && touchesOrg) throw new ForbiddenError("Ninguém altera a própria área, gestor ou condição organizacional.");
+  await assertReferences(db, patch, employeeId);
+  await withDbErrors(() => db.transaction(async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status === "deactivated") throw new ValidationError("Pessoa desativada não é editada. Use readmissão.");
@@ -192,7 +229,7 @@ export async function updateEmployee(db: Db, actor: Actor, employeeId: string, p
       reason: patch.reason,
       requestId: actor.requestId,
     });
-  });
+  }));
 }
 
 async function revokeIdentitySessions(userId: string | null) {
@@ -206,6 +243,7 @@ export async function suspendEmployee(db: Db, actor: Actor, employeeId: string, 
   await assertPermission(db, actor, "employee.manage");
   if (actor.employeeId === employeeId) throw new ForbiddenError("Ninguém altera o próprio status.");
   if (!reason?.trim()) throw new ValidationError("Informe o motivo.");
+  await assertMayChangeStatusOf(db, actor, employeeId);
   const userId = await db.transaction(async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
@@ -238,10 +276,14 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
   if (actor.employeeId === employeeId) throw new ForbiddenError("Ninguém desativa a si mesmo.");
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo.");
   const exitDate = input.exitDate ?? localToday();
+  if (!ISO_DATE.test(exitDate)) throw new ValidationError("Data de saída inválida.");
+  await assertMayChangeStatusOf(db, actor, employeeId);
   const userId = await db.transaction(async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status === "deactivated") throw new ValidationError("Pessoa já desativada.");
+    const [open] = await tx.select({ hireDate: employmentPeriod.hireDate }).from(employmentPeriod).where(and(eq(employmentPeriod.employeeId, employeeId), isNull(employmentPeriod.exitDate)));
+    if (open && exitDate < open.hireDate) throw new ValidationError("A data de saída não pode ser anterior à admissão.");
     await tx.update(employee).set({ status: "deactivated", deactivatedAt: new Date(), deactivatedBy: actor.employeeId, updatedAt: new Date() }).where(eq(employee.id, employeeId));
     await revokeActiveInvitations(tx, employeeId);
     await revokeAllGrants(tx, employeeId, actor.employeeId);
@@ -265,7 +307,7 @@ async function revokeSessionsAfterCommit(db: Db, employeeId: string, userId: str
   try {
     await revokeIdentitySessions(userId);
   } catch (e) {
-    logger.error({ employeeId, err: e instanceof Error ? e.message : String(e) }, "falha ao revogar sessões; reagendado pela outbox");
+    logger.error({ employeeId, err: safeErrorInfo(e) }, "falha ao revogar sessões; reagendado pela outbox");
     const { enqueueOutbox } = await import("@/modules/notifications/outbox");
     await enqueueOutbox(db, {
       eventType: "identity.revoke_sessions",
@@ -281,7 +323,7 @@ async function revokeSessionsAfterCommit(db: Db, employeeId: string, userId: str
 export async function readmitEmployee(db: Db, actor: Actor, employeeId: string, input: { hireDate: string; reason: string }): Promise<void> {
   await assertPermission(db, actor, "employee.manage");
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.hireDate)) throw new ValidationError("Informe a data de admissão.");
+  if (!ISO_DATE.test(input.hireDate)) throw new ValidationError("Informe a data de admissão.");
   const ctx = await authContext();
   await db.transaction(async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
@@ -341,7 +383,7 @@ export async function listEmployees(db: DbOrTx, filters: { q?: string; status?: 
   const conds = [];
   if (filters.status && ["invited", "active", "suspended", "deactivated"].includes(filters.status)) conds.push(eq(employee.status, filters.status as never));
   if (filters.q?.trim()) {
-    const like = `%${filters.q.trim()}%`;
+    const like = `%${escapeLike(filters.q.trim())}%`;
     conds.push(or(ilike(employee.fullName, like), ilike(employee.corporateEmail, like)));
   }
   const where = conds.length ? and(...conds) : undefined;
