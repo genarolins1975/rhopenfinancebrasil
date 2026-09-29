@@ -42,6 +42,14 @@ class FileSender implements EmailSender {
   }
 }
 
+/** Demonstração sem provedor: nada sai; a notificação fica registrada como bloqueada, sem gravar o conteúdo. */
+class NoneSender implements EmailSender {
+  async send(message: EmailMessage) {
+    logger.info({ subject: message.subject }, "email não enviado: transporte desligado neste ambiente");
+    return { id: "not-sent", blocked: true };
+  }
+}
+
 class SmtpSender implements EmailSender {
   private transport = nodemailer.createTransport(env().SMTP_URL);
   async send(message: EmailMessage) {
@@ -68,7 +76,7 @@ let sender: EmailSender | undefined;
 export function getEmailSender(): EmailSender {
   if (sender) return sender;
   const kind = env().EMAIL_TRANSPORT;
-  const inner: EmailSender = kind === "memory" ? new MemorySender() : kind === "smtp" ? new SmtpSender() : new FileSender();
+  const inner: EmailSender = kind === "memory" ? new MemorySender() : kind === "smtp" ? new SmtpSender() : kind === "none" ? new NoneSender() : new FileSender();
   sender = {
     async send(message) {
       if (!allowlisted(message.to)) {

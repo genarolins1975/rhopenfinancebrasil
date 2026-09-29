@@ -16,7 +16,9 @@
     "test:e2e": "playwright test",
     "worker:outbox": "tsx src/workers/outbox.ts",
     "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
-    "check": "pnpm typecheck && pnpm lint && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "vercel-build": "tsx scripts/vercel-build.ts && next build",
+    "demo:seed": "tsx scripts/demo-seed.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.6",

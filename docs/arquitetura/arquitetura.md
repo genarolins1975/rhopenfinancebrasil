@@ -83,6 +83,7 @@ Regras: componentes não decidem autorização nem disponibilidade; toda mutaç�
 | Ambiente | Banco | Dados | Email | Acesso |
 |---|---|---|---|---|
 | Desenvolvimento | PostgreSQL local ou container | Sintéticos com prefixo `DEMO` | Capturado localmente, nunca enviado | Desenvolvedor |
+| Demonstração (`DEC-45`) | Neon, região São Paulo, banco próprio | Fictícios, criados no build | Desligado (`EMAIL_TRANSPORT=none`) | Contas de demonstração; roteiro em `../operacao/demo-vercel.md` |
 | Homologação | Instância própria | Sintéticos | Provedor em modo restrito a lista de destinatários de teste | RH, Facilities, ADM designados |
 | Produção | Instância própria, backups e teste de restauração | Reais | Provedor com SPF, DKIM e DMARC | Colaboradores |
 

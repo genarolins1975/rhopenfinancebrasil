@@ -12,9 +12,9 @@ function pool(): Pool {
   if (!globalThis.__rhPool) {
     globalThis.__rhPool = new Pool({
       connectionString: env().DATABASE_URL,
-      max: 10,
-      // Cada sessão informa o fuso; o papel de banco também o fixa. Defesa em profundidade.
-      options: "-c timezone=America/Sao_Paulo",
+      max: env().DATABASE_POOL_MAX,
+      // Cada sessão informa o fuso; o papel e o banco também o fixam. Defesa em profundidade.
+      ...(env().DATABASE_TZ_OPTION === "on" ? { options: "-c timezone=America/Sao_Paulo" } : {}),
     });
   }
   return globalThis.__rhPool;

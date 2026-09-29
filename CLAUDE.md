@@ -15,6 +15,8 @@ pnpm install
 pnpm db:migrate                 # migrações como papel dono (DATABASE_OWNER_URL)
 pnpm dev                        # http://localhost:3000
 pnpm worker:outbox              # entrega de emails e revogações pendentes; varreduras da fila e da confirmação de uso a cada minuto
+pnpm demo:seed                  # só com APP_ENV=demo e banco vazio: dados fictícios da demonstração (DEC-45)
+pnpm vercel-build               # build de produção na Vercel: migrações, checagem do banco, dados de demonstração, next build
 pnpm bootstrap:admin --email <email> --name "<nome>" --cpf <cpf>
 pnpm typecheck && pnpm lint
 pnpm test:unit                  # sem banco
@@ -25,7 +27,7 @@ pnpm db:generate                # nova migração a partir do esquema Drizzle
 Banco local: cluster PostgreSQL 16 com papéis `rh_owner` (migrações) e `rh_app` (aplicação), bancos `rh_dev` e `rh_test`, ambos com `timezone = America/Sao_Paulo`.
 
 ## Onde as coisas vivem
-`src/modules/<módulo>` tem a regra de negócio (identity, access, employees, audit, notifications, admin, workplace, availability, booking, exclusivity, office, waitlist, checkin, spaces, team). `src/app` só orquestra e renderiza. `src/db/schema` e `src/db/migrations` são a única fonte do esquema; funções, triggers e constraints de exclusão do escritório vivem nas migrações manuais `0004` a `0006`, `0008`, `0009`, `0011`, `0012`, `0014`, `0015` e `0016`. `src/components` não decide autorização. Toda mutação do escritório passa por `withOfficeTx` (locks, revalidação, tradução de erro) e pelo diálogo de conflito de `office/conflicts.ts`.
+`src/modules/<módulo>` tem a regra de negócio (identity, access, employees, audit, notifications, admin, workplace, availability, booking, exclusivity, office, waitlist, checkin, spaces, team, operations). `src/app` só orquestra e renderiza. `src/db/schema` e `src/db/migrations` são a única fonte do esquema; funções, triggers e constraints de exclusão do escritório vivem nas migrações manuais `0004` a `0006`, `0008`, `0009`, `0011`, `0012`, `0014`, `0015` e `0016`. `src/components` não decide autorização. Toda mutação do escritório passa por `withOfficeTx` (locks, revalidação, tradução de erro) e pelo diálogo de conflito de `office/conflicts.ts`.
 
 ## Invariantes do projeto (não negociáveis)
 1. Toda regra de autorização e disponibilidade vive no servidor. A interface só reflete o que o servidor decidiu.

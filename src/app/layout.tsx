@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { DemoBanner } from "@/components/demo-banner";
 import { OfflineBanner } from "@/components/offline-banner";
 import "./globals.css";
 
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Ir para o conteúdo
         </a>
+        <DemoBanner />
         <OfflineBanner />
         {children}
       </body>
