@@ -45,7 +45,7 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 | `DIR-034` retenção vencida não trava mesa nem pessoa; oferta nasce no cancelamento | `booking`, `waitlist` | `DIR-034-T1` (sem job, nova reserva entra), `DIR-034-T2` (oferta criada na transação do cancelamento) | I | pendente (T1 Etapa 2; T2 Etapa 3) |
 | `DIR-035` resposta sem identificadores de titular | `availability`, `app` | `DIR-035-T1` (varredura das respostas do mapa, lista, busca e semana) | I, E | pendente (Etapa 2) |
 | `DIR-036` estado derivado; encerrar não contorna a sobreposição | `exclusivity`, `db` | `DIR-036-T1` (encerrar e criar nova atribuição sobreposta é rejeitado), `DIR-036-T2` (anular só antes do início) | I | pendente (Etapa 2) |
-| Modelo: extensão e constraints existem no catálogo | `db` | `DB-01` | I | pendente (Etapa 1) |
+| Modelo: extensão e constraints existem no catálogo | `src/db/migrations` | `DB-01` em `tests/integration/db.test.ts` | I | testado (29/09/2026) para a Etapa 1 |
 | Modelo: lock imposto por trigger | `db` | `DIR-024-T2` (aplicação sem nenhum lock, nem advisory nem de pessoa; pares reserva e trava, reserva e remoção de integrante, reserva e fechamento do dia, reserva em nome e desativação, atribuição de grupo e remoção de integrante; banco serializa e rejeita) | C | pendente (Etapa 2) |
 | Modelo: trigger de vigência da atribuição | `db` | `DIR-036-T3` (reabrir, encerrar no passado, mover início após começar, anular em duas etapas e anular sucessora sem decisão são rejeitados) | I | pendente (Etapa 2) |
 | Modelo: suspensão mantém reservas, desativação exige tratamento | `db`, `employees` | `EMP-02-T1` | I | pendente (Etapa 2) |
@@ -58,27 +58,27 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 
 | Requisito | Implementação prevista | Teste | Tipo | Status |
 |---|---|---|---|---|
-| `REQ-01` convite expirado ou usado | `identity` | `AUT-01-T1`, `AUT-01-T2` | I, E | pendente (Etapa 1) |
-| `REQ-01` sem autorregistro | `identity` | `AUT-02-T1` (rota de cadastro inexistente ou negada) | I | pendente (Etapa 1) |
-| Troca obrigatória de senha temporária, se o fluxo for adotado | `identity` | `AUT-03-T1` | I | pendente (Etapa 1) |
-| Recuperação sem revelar conta | `identity` | `AUT-04-T1` | I, E | pendente (Etapa 1) |
-| Limite de tentativas | `identity` | `AUT-05-T1` | I | pendente (Etapa 1) |
-| MFA obrigatório para admin | `identity`, `access` | `AUT-06-T1` | E | pendente (Etapa 1) |
-| Revogação de sessão em desativação e troca de senha | `identity`, `employees` | `AUT-07-T1` | I | pendente (Etapa 1) |
-| `REQ-23` e `REQ-24` CPF nunca em senha, usuário ou recuperação; senha nunca exibida | `identity` | `AUT-08-T1` (revisão de código e teste de rotas) | I, M | pendente (Etapa 1) |
-| Endpoints administrativos de identidade inexistentes | `identity` | `AUT-09-T1` (`/api/auth/admin/*` responde 404 para toda sessão) | I | pendente (Etapa 1) |
-| Troca de email com confirmação no endereço antigo; convite revogado ao editar email de convidado; privilégio só após ativo com segundo fator | `identity`, `employees`, `access` | `AUT-10-T1`, `AUT-10-T2`, `AUT-10-T3` | I, E | pendente (Etapa 1) |
-| Limite por conta com cabeçalho de IP forjado | `identity` | `AUT-11-T1` | I | pendente (Etapa 1) |
-| Revogação vale na requisição seguinte (sem cache de sessão) | `identity`, `access` | `AUT-12-T1` | I | pendente (Etapa 1) |
-| Segundo fator sem dispositivo confiável para perfis administrativos | `identity` | `AUT-13-T1` (`trustDevice` ignorado) | I | pendente (Etapa 1) |
-| Hook global bloqueia sessão emitida antes da desativação, inclusive nas rotas do próprio Better Auth; revogação retentada pela outbox | `identity` | `AUT-14-T1`, `AUT-14-T2` | I | pendente (Etapa 1) |
-| Importação não é oráculo de CPF; detalhe de unicidade redigido; arquivo não persistido | `employees` | `CPF-03-T1`, `CPF-03-T2`, `CPF-03-T3` | I | pendente (Etapa 1) |
-| Cifra com nonce único, AAD por pessoa, versão de chave e rotação em duas fases | `employees` | `CPF-04-T1` (troca de texto cifrado entre linhas falha), `CPF-04-T2` (rotação) | U, I | pendente (Etapa 1) |
-| Readmissão reutiliza cadastro e zera credenciais | `employees`, `identity` | `EMP-01-T1` | I | pendente (Etapa 1) |
-| `REQ-05` CPF ausente de respostas, logs, erros, exportações | `employees`, `audit` | `CPF-01-T1` (varredura de padrão), `CPF-01-T2` (mascaramento), `CPF-01-T3` (revelação auditada) | I, E | pendente (Etapa 1) |
-| `REQ-05` HMAC para duplicidade e zeros à esquerda | `employees` | `CPF-02-T1` | U, I | pendente (Etapa 1) |
-| `REQ-04` sem autopromoção | `access` | `ACC-01-T1`, `ACC-01-T2` (importação ignora perfis) | I | pendente (Etapa 1) |
-| Importação CSV com prévia e validação por linha | `employees` | `IMP-01-T1` | I, E | pendente (Etapa 1) |
+| `REQ-01` convite expirado ou usado | `src/modules/identity/invitations.ts` | `AUT-01-T1`, `AUT-01-T2` em `tests/integration/invitation.test.ts`; `tests/e2e/public.spec.ts` | I, E | testado (29/09/2026) |
+| `REQ-01` sem autorregistro | `src/app/api/auth/[...all]/route.ts`, `disabledPaths` | `AUT-02-T1` em `tests/integration/auth-surface.test.ts` | I | testado (29/09/2026) |
+| Troca obrigatória de senha temporária, se o fluxo for adotado | não implementado: o fluxo padrão é o convite, sem senha temporária | `AUT-03-T1` | I | não aplicável enquanto o fluxo não for adotado |
+| Recuperação sem revelar conta | `src/modules/identity/auth.ts`, `actions.ts` | `AUT-04-T1` em `tests/integration/password-reset.test.ts` | I | testado (29/09/2026); ponta a ponta pendente |
+| Limite de tentativas | `src/modules/identity/throttle.ts` e limitador do Better Auth em banco | `AUT-05-T1` em `tests/integration/session-status.test.ts` | I | testado (29/09/2026) |
+| MFA obrigatório para admin | `src/modules/access/can.ts` (PAR-33), `session.ts` | `AUT-06-T1` em `tests/integration/two-factor.test.ts`; `tests/e2e/admin.spec.ts` | I, E | testado (29/09/2026) |
+| Revogação de sessão em desativação e troca de senha | `src/modules/employees/service.ts`, `auth.ts` | `AUT-07-T1` em `tests/integration/employees.test.ts` e `password-reset.test.ts` | I | testado (29/09/2026) |
+| `REQ-23` e `REQ-24` CPF nunca em senha, usuário ou recuperação; senha nunca exibida | `src/modules/identity/password.ts` (política rejeita 11 dígitos) | `AUT-08-T1` em `tests/unit/password.test.ts`; revisão de código | U, M | testado (29/09/2026); revisão pendente |
+| Endpoints administrativos de identidade inexistentes | `src/app/api/auth/[...all]/route.ts`, `DEC-13` | `AUT-09-T1` em `tests/integration/auth-surface.test.ts` | I | testado (29/09/2026) |
+| Troca de email com confirmação no endereço antigo; convite revogado ao editar email de convidado; privilégio só após ativo com segundo fator | `auth.ts` (`sendChangeEmailConfirmation`), `service.ts`, `can.ts` | `AUT-10-T2` e `AUT-10-T3` em `employees.test.ts` e `access.test.ts`; `AUT-10-T1` (fluxo de troca ponta a ponta) | I, E | parcial: T2 e T3 testados; T1 pendente |
+| Limite por conta com cabeçalho de IP forjado | `throttle.ts` (chave por email, independente de IP) | `AUT-11-T1` em `session-status.test.ts` | I | testado (29/09/2026) |
+| Revogação vale na requisição seguinte (sem cache de sessão) | `auth.ts` (`cookieCache` desativado) | `AUT-12-T1` em `session-status.test.ts` | I | testado (29/09/2026) |
+| Segundo fator sem dispositivo confiável (PAR-38, todos) | `auth.ts` (hook remove `trustDevice`) | `AUT-13-T1` em `two-factor.test.ts` | I | testado (29/09/2026) |
+| Hook global bloqueia sessão emitida antes da desativação, inclusive nas rotas do próprio Better Auth; revogação retentada pela outbox | `auth.ts` (`hooks.before`), `service.ts` | `AUT-14-T1` em `session-status.test.ts`; `AUT-14-T2` (falha de revogação reenfileirada) | I | parcial: T1 testado; T2 pendente |
+| Importação não é oráculo de CPF; detalhe de unicidade redigido; arquivo não persistido | `import.ts` | `CPF-03-T1` e `T3` em `import.test.ts`; `CPF-03-T2` (redação do detalhe 23505 no log) | I | parcial: T1 e T3 testados; T2 coberto por `scrub` |
+| Cifra com nonce único, AAD por pessoa, versão de chave e rotação em duas fases | `crypto.ts`, `cpf.ts` | `CPF-04-T1` em `tests/unit/crypto.test.ts`; `CPF-04-T2` (procedimento de rotação) | U | parcial: T1 testado; rotação documentada, não automatizada |
+| Readmissão reutiliza cadastro e zera credenciais | `service.ts` | `EMP-01-T1` em `employees.test.ts` | I | testado (29/09/2026) |
+| `REQ-05` CPF ausente de respostas, logs, erros, exportações | `cpf.ts`, `logger.ts`, `service.ts` | `CPF-01-T1` a `T3` em `employees.test.ts`; logs em `tests/unit/scrub.test.ts`; ponta a ponta em `admin.spec.ts` | U, I, E | testado (29/09/2026) |
+| `REQ-05` HMAC para duplicidade e zeros à esquerda | `cpf.ts` | `CPF-02-T1` em `employees.test.ts` e `tests/unit/cpf.test.ts` | U, I | testado (29/09/2026) |
+| `REQ-04` sem autopromoção | `grants.ts`, `import.ts` | `ACC-01-T1` em `access.test.ts`; `ACC-01-T2` em `import.test.ts` | I | testado (29/09/2026) |
+| Importação CSV com prévia e validação por linha | `import.ts` | `IMP-01-T1` em `import.test.ts`; `admin.spec.ts` | I, E | testado (29/09/2026) |
 | `REQ-28` buscas, anexos e exportações sob o mesmo controle de acesso | `content`, `helpdesk`, `access` | `ACC-02-T1` (anexos), `ACC-02-T2` (chamados), `ACC-02-T3` (pesquisas), `ACC-02-T4` (busca e exportação) | I | pendente (Etapa 4) |
 
 ## Operação e experiência
@@ -88,7 +88,7 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 | Cancelamento reflete disponibilidade imediatamente | `booking` | `BKG-01-T1` | I | pendente (Etapa 2) |
 | Semana atômica e idempotente (`REQ-25` intenção não é reserva) | `booking` | `BKG-02-T1`, `BKG-02-T2`, `BKG-02-T3` (intenção sem reserva não gera presença) | I | pendente (Etapa 2) |
 | Salas sem sobreposição e adjacência permitida | `booking` | `BKG-03-T1` | I | pendente (Etapa 3) |
-| Falha de notificação não corrompe reserva | `notifications` | `NOT-01-T1` | I | pendente (Etapa 2) |
+| Falha de notificação não corrompe a operação | `outbox.ts` | `NOT-01-T1` em `tests/integration/outbox.test.ts` | I | testado (29/09/2026) para convites; reservas na Etapa 2 |
 | Fila sem dupla oferta e próxima pessoa elegível automática (`REQ-26`) | `waitlist` | `WL-01-T1`, `WL-02-T1` | C, I | pendente (Etapa 3) |
 | `REQ-15` confirmação de uso não libera nem remove exclusividade; QR resolve a reserva no servidor | `checkin` | `CHK-01-T1`, `CHK-02-T1` (id de reserva alheia rejeitado) | I | pendente (Etapa 3) |
 | Fila nega inscrição com reserva ativa na data | `waitlist` | `WL-03-T1` | I | pendente (Etapa 3) |
@@ -99,5 +99,5 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 | `REQ-28` conteúdo e busca respeitam controle de acesso | `content` | `CNT-01-T1` | I | pendente (Etapa 4) |
 | `REQ-22` divergência de copa e nota metodológica exibidas | `actions`, `reports` | `IND-01-T1` | E | pendente (Etapa 4) |
 | Supressão de grupos pequenos (`PAR-13`) | `listening` | `ESC-01-T1` | U | pendente (Etapa 4) |
-| Acessibilidade dos fluxos prioritários | `components`, `design` | `A11Y-01` (axe) e `A11Y-02` (teclado e leitor de tela, manual) | A, M | pendente (Etapas 1 a 4) |
+| Acessibilidade dos fluxos prioritários | `components`, `design` | `A11Y-01` (axe) em `tests/e2e/*.spec.ts`; `A11Y-02` (teclado e leitor de tela, manual) | A, M | A11Y-01 nas telas da Etapa 1; A11Y-02 pendente |
 | Restauração de backup | operação | `OPS-01` | M | pendente (Etapa 5) |

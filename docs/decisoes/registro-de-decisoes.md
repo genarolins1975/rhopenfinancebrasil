@@ -76,6 +76,8 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-35` | Duração máxima de uma liberação temporária | 30 dias corridos | RH | Acima disso, encerrar a atribuição |
 | `PAR-36` | Readmissão e CPF após exclusão | Mesmo cadastro reutilizado; ao apagar o CPF o HMAC permanece para impedir duplicidade | RH e encarregado | |
 | `PAR-37` | Prioridade da fila sobre reserva direta | Sempre: cancelamento e reserva direta que expira uma retenção oferecem a mesa à próxima pessoa elegível da fila antes de conceder | RH | `DIR-034` |
+| `PAR-38` | Dispositivo confiável no segundo fator | Desativado para todos na primeira versão: o código é pedido a cada login | ADM | Simplifica e fecha a brecha do cookie de 30 dias |
+| `PAR-39` | Perfil Colaborador | Implícito para toda pessoa ativa, sem concessão | RH | |
 
 ## C. Decisões técnicas propostas
 
@@ -95,6 +97,9 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-12` | Lint com ESLint e regras de acessibilidade; formatação com Prettier | Biome | Proposta |
 | `DEC-13` | Plugin admin do Better Auth não montado; operações administrativas de identidade pelo adaptador interno após `can()`; handler com lista explícita de caminhos e `disabledPaths`; cache de sessão em cookie desativado; hook global conferindo `employee.status`; `sendChangeEmailConfirmation`; `trustDevice` neutralizado para perfis administrativos | Montar o plugin com `adminRoles` vazio | Proposta, verificada contra o código de `better-auth@1.7.6` em 28/09/2026 |
 | `DEC-14` | Lock por recurso imposto por trigger no banco, além do protocolo da aplicação; estado de atribuição derivado da vigência; expiração preguiçosa de retenções | Confiar só na disciplina do código | Proposta |
+| `DEC-15` | Prévia da importação CSV persistida cifrada (AES GCM, chave própria, AAD = id do lote) por 30 minutos, só com as linhas válidas; arquivo original nunca gravado | Reenvio do arquivo na confirmação; memória do processo | Adotada na Etapa 1 |
+| `DEC-16` | Outbox consumida por worker próprio com `for update skip locked` na Etapa 1; `pg-boss` entra na Etapa 3, quando houver agendamentos | Adotar `pg-boss` já | Adotada na Etapa 1 |
+| `DEC-17` | Identidade criada pelo adaptador interno do Better Auth com `method: "invitation"`; ids gerados pelo Better Auth; tabelas com prefixo `auth_` | Plugin admin; ids pelo banco | Adotada na Etapa 1 |
 
 ## D. Perguntas bloqueantes
 
@@ -120,4 +125,5 @@ A Etapa 0 e a stack foram validadas pelo responsável em 28/09/2026 ("Pode segui
 | 28/09/2026 | Revisão independente 2 (adversarial técnica): aceito com correções, 30 achados, 1 bloqueante e 9 de alta severidade; todos incorporados ao modelo de dados, à política DIR, à arquitetura e à matriz de permissões na mesma data; itens 1, 3, 4, 6 e 9 reapresentados para nova revisão | Executor |
 | 28/09/2026 | Reapresentação dos itens críticos a terceiro revisor: aprovado com ajustes, cinco grupos verificados em banco e no código do Better Auth; todos incorporados na mesma data | Executor |
 | 28/09/2026 | Etapa 0 e stack validadas pelo responsável; parâmetros propostos adotados provisoriamente; Etapa 1 iniciada | Responsável e Executor |
+| 29/09/2026 | Etapa 1: fundação implementada (projeto, banco, autenticação, acesso, colaboradores, CPF, auditoria, outbox, telas) com testes de unidade, integração e ponta a ponta; decisões `DEC-15` a `DEC-17`, parâmetros `PAR-38` e `PAR-39` | Executor |
 | 28/09/2026 | Planta recebida e extraída; inventário preliminar de 84 mesas, 3 salas, 2 booths, 4 cabines, 1 mesa aberta, marcado como não validado; PDF mantido fora do repositório | Executor |

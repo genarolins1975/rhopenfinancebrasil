@@ -53,3 +53,17 @@ Não há código, portanto não há testes de software. Executadas: consulta ao 
 ### Situação do aceite
 
 Executor: entregue. Revisores: duas revisões aceitas com correções e reapresentação aprovada com ajustes; todas as correções e ajustes aplicados. Responsável pelo produto: pendente de validação, única pergunta que bloqueia a Etapa 1.
+
+## Etapa 1 (fundação)
+
+Data: 29/09/2026. Executor: sessão principal. Revisor: subagente independente com contexto limpo, com acesso ao código, ao banco de teste e às baterias de teste.
+
+### Relato do Executor
+
+Escopo entregue conforme `00-estado-do-projeto.md`. Testes executados no ambiente da sessão: 17 de unidade, 37 de integração com PostgreSQL real e 24 de ponta a ponta com axe (12 por projeto, desktop e celular), todos aprovados; tipos e lint sem erros; build de produção concluído. Casos cobertos por identificador na matriz de rastreabilidade (`AUT-01` a `AUT-14`, `CPF-01` a `CPF-04`, `ACC-01`, `IMP-01`, `EMP-01`, `NOT-01`, `DB-01`, `A11Y-01`).
+
+Limitações declaradas: sem verificação manual com leitor de tela; sem provedor real de email; sem rotação automatizada de chave; fluxo de troca de email testado só no nível da configuração; reenfileiramento de revogação de sessão não coberto por teste; o limitador por IP depende do cabeçalho configurado na plataforma.
+
+### Revisão independente
+
+Em execução em 29/09/2026.

@@ -1,12 +1,31 @@
 # Portal do Colaborador da Associação Open Finance Brasil
 
-Domínio adquirido: rhopenfinancebrasil.com. Repositório iniciado em 2026 09 28 na Etapa 0 (definição). Ainda não há código de aplicação.
+Domínio adquirido: rhopenfinancebrasil.com. Etapa 0 (definição) validada em 28/09/2026. Etapa 1 (fundação) em andamento desde 28/09/2026.
 
 ## Estado atual
-Consulte `docs/00-estado-do-projeto.md` antes de qualquer ação. Ele registra o que foi feito, testado, revisado e o que falta.
+Consulte `docs/00-estado-do-projeto.md` antes de qualquer ação. Ele registra o que foi feito, testado, revisado e o que falta. Mapa da documentação em `docs/README.md`.
+
+## Stack
+Next.js 16 (App Router, server actions), React 19, TypeScript, Tailwind 4, PostgreSQL com Drizzle ORM e migrações SQL, Better Auth 1.7 (sem plugin admin), pino, Vitest, Playwright com axe. Node 22 ou superior; pnpm.
 
 ## Comandos reais
-Nenhum comando de aplicação existe ainda. Serão registrados aqui na Etapa 1, junto com o projeto. Não invente comandos.
+```
+cp .env.example .env            # preencher segredos com openssl rand -base64 32
+pnpm install
+pnpm db:migrate                 # migrações como papel dono (DATABASE_OWNER_URL)
+pnpm dev                        # http://localhost:3000
+pnpm worker:outbox              # entrega de emails e revogações pendentes
+pnpm bootstrap:admin --email <email> --name "<nome>" --cpf <cpf>
+pnpm typecheck && pnpm lint
+pnpm test:unit                  # sem banco
+pnpm test:integration           # PostgreSQL local, banco rh_test, .env.test
+pnpm build && pnpm test:e2e     # Playwright contra build de produção, porta 3100
+pnpm db:generate                # nova migração a partir do esquema Drizzle
+```
+Banco local: cluster PostgreSQL 16 com papéis `rh_owner` (migrações) e `rh_app` (aplicação), bancos `rh_dev` e `rh_test`, ambos com `timezone = America/Sao_Paulo`.
+
+## Onde as coisas vivem
+`src/modules/<módulo>` tem a regra de negócio (identity, access, employees, audit, notifications, admin). `src/app` só orquestra e renderiza. `src/db/schema` e `src/db/migrations` são a única fonte do esquema. `src/components` não decide autorização.
 
 ## Invariantes do projeto (não negociáveis)
 1. Toda regra de autorização e disponibilidade vive no servidor. A interface só reflete o que o servidor decidiu.
@@ -16,15 +35,15 @@ Nenhum comando de aplicação existe ainda. Serão registrados aqui na Etapa 1, 
 5. Conflito nunca é resolvido em silêncio: reservas incompatíveis são exibidas e tratadas com decisão explícita, motivo e trilha de auditoria.
 6. CPF é dado separado, cifrado em repouso, mascarado por padrão, ausente de logs, URLs, analytics, erros, notificações, exportações comuns e dados de demonstração.
 7. Cadastro fechado. Não existe autorregistro. Convite individual, expirável e de uso único.
-8. Instantes em UTC; datas e regras em `America/Sao_Paulo`; relógio do servidor.
+8. Instantes em UTC; datas e regras em `America/Sao_Paulo`; relógio do servidor. `current_date` é proibido em SQL; use `local_today()`.
 9. Dados dos PDFs históricos são referências agregadas, nunca base de usuários ou séries individuais.
 10. Nenhuma publicação em produção, alteração de DNS, envio em massa ou contratação sem autorização explícita registrada em `docs/decisoes/registro-de-decisoes.md`.
 11. Verificar formato e dígitos do CPF não verifica identidade. CPF nunca é chave pública, nome de usuário, componente de senha ou resposta de recuperação. Nenhuma senha deriva de CPF ou de sufixo fixo.
 12. O sistema jamais exibe senhas atuais a ninguém, ADM incluído. Registra eventos de segurança, não senhas nem tokens.
 13. Intenção presencial não garante mesa. Ausência de reserva não indica falta ao trabalho. Confirmação de uso não é presença física, ponto nem produtividade.
+14. Pela rede, o handler de autenticação só serve o verificador de email; tudo o mais passa por server actions com `auth.api`. O plugin admin do Better Auth não é montado.
 
 ## Regras de execução
-Executor e Revisor são papéis separados. Cada entrega: especificar, implementar, testar, revisar, corrigir, testar novamente, registrar aceite em `docs/testes/aceite.md`. Reportar apenas testes realmente executados.
+Executor e Revisor são papéis separados. Cada entrega: especificar, implementar, testar, revisar, corrigir, testar novamente, registrar aceite em `docs/testes/aceite.md`. Reportar apenas testes realmente executados. Nunca versionar `.env`, PDFs ou `.e2e-state.json`.
 
-## Mapa da documentação
-`docs/README.md`
+Regras específicas do Next.js instalado estão em `AGENTS.md` (gerado pelo próprio Next).

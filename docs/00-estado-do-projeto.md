@@ -31,17 +31,38 @@ Não há código, portanto não há testes de software. Verificações realizada
 | Pendência | Bloqueia | Não bloqueia |
 |---|---|---|
 | Validação da planta por Facilities e RH (84 ou 90 mesas, códigos, capacidades, atributos) | Mapa definitivo e publicação do inventário (Etapa 2, aceite final) | Motor de reservas, mesas exclusivas e testes de concorrência, que usam o inventário preliminar marcado como não validado |
-| Domínio de email corporativo e provedor de envio | Envio de convites reais (Etapa 1, homologação) | Desenvolvimento do fluxo de convite com envio simulado |
+| Domínio de email corporativo e provedor de envio | Envio de convites reais em homologação | Fluxo de convite implementado e testado com envio simulado |
 | Hospedagem, região e banco gerenciado | Homologação e produção (Etapa 5) | Etapas 1 a 4 em ambiente local |
-| Primeiro administrador (nome e email corporativo) | Bootstrap em homologação | Desenvolvimento |
+| Primeiro administrador (nome e email corporativo) | Bootstrap em homologação | Procedimento `pnpm bootstrap:admin` implementado |
 | Manual de marca | Ajuste fino da identidade visual | Tokens provisórios em azul petróleo e amarelo |
 
 Registro completo em `decisoes/registro-de-decisoes.md`.
 
 ## Etapa 1 (fundação)
 
-Status: iniciada em 28/09/2026. Escopo e aceite em `operacao/plano-de-entregas.md`. O progresso é registrado nesta seção a cada entrega parcial.
+Status: implementada pelo Executor entre 28/09/2026 e 29/09/2026; submetida ao Revisor independente em 29/09/2026. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
+
+Entregue em código:
+
+* Projeto Next.js 16 com tokens de design, primitivas acessíveis, layouts público, do portal e administrativo, e proxy de verificação otimista de sessão.
+* Banco: esquema Drizzle, duas migrações SQL (tabelas, `citext`, `btree_gist`, `local_today()`, `local_day_range()`, papel `rh_app` sem `UPDATE` e `DELETE` em auditoria, seed de perfis e permissões), `timezone` por papel.
+* Identidade: Better Auth sem plugin admin, handler HTTP restrito ao verificador de email, Argon2id (m = 47104, t = 1, p = 1), convite individual de uso único com hash, recuperação com link para a página do portal, troca de email confirmada no endereço antigo, segundo fator TOTP com códigos de recuperação e `trustDevice` neutralizado, hook global conferindo situação da pessoa, limitador por IP em banco e por conta, sessão de 12 horas para privilegiados.
+* Acesso: catálogo de permissões e perfis, `loadAccess` lendo sempre o banco, perfil Colaborador implícito, privilégio só com segundo fator (`PAR-33`), concessões com vigência, motivo e auditoria, separação de atribuições.
+* Colaboradores: cadastro, edição com histórico organizacional, convites, suspensão, desativação, readmissão, CPF cifrado (AES GCM, nonce, AAD, versão de chave) com HMAC de duplicidade e sufixo para máscara, revelação auditada, importação CSV com prévia cifrada e aplicação atômica.
+* Auditoria somente de inserção; outbox com worker `skip locked` e envio por arquivo, memória ou SMTP com lista de destinatários; bootstrap do primeiro administrador por linha de comando.
+* Telas: entrada, login, segundo fator, convite, recuperação, redefinição, privacidade, início, perfil, segurança, visão geral administrativa, colaboradores (lista, cadastro, detalhe com diálogos de confirmação, edição, importação), acessos e auditoria.
+
+Testes executados em 29/09/2026 no ambiente desta sessão (PostgreSQL 16 local, Chromium pré-instalado):
+
+| Bateria | Comando | Resultado |
+|---|---|---|
+| Unidade | `pnpm test:unit` | 17 testes, 17 aprovados |
+| Integração com banco | `pnpm test:integration` | 37 testes, 37 aprovados |
+| Ponta a ponta com axe (desktop e celular) | `pnpm build && pnpm test:e2e` | 24 testes, 24 aprovados |
+| Tipos e lint | `pnpm typecheck && pnpm lint` | sem erros |
+
+Fora da Etapa 1, por desenho ou pendência: verificação manual com leitor de tela (`A11Y-02`), rotação automatizada de chaves (`CPF-04-T2`), fluxo de troca de email ponta a ponta (`AUT-10-T1`), reenfileiramento de revogação falha (`AUT-14-T2`), provedor real de email, hospedagem.
 
 ## Próximo passo
 
-Concluir a Etapa 1 com testes executados, revisão independente e aceite registrado.
+Revisão independente da Etapa 1, correções, aceite; depois Etapa 2 (núcleo do escritório).

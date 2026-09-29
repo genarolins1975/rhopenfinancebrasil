@@ -92,7 +92,7 @@ Segredos fora do repositório, por ambiente. Chave de cifra do CPF e chave do HM
 
 ## Notificações confiáveis
 
-Toda notificação nasce como linha em `outbox_event` na mesma transação da operação de negócio. Um worker `pg-boss` consome a outbox, entrega com chave de idempotência, registra tentativa, erro e próxima tentativa, e expõe falhas no painel administrativo. Email indisponível não corrompe a reserva nem produz confirmação falsa: a interface mostra "confirmada" com base no banco e "notificação pendente" com base na outbox.
+Toda notificação nasce como linha em `outbox_event` na mesma transação da operação de negócio. Na Etapa 1 um worker próprio (`pnpm worker:outbox`, `for update skip locked`, `DEC-16`) consome a outbox; `pg-boss` entra na Etapa 3 com os agendamentos. O worker entrega com chave de idempotência, registra tentativa, erro e próxima tentativa, e expõe falhas no painel administrativo. Email indisponível não corrompe a reserva nem produz confirmação falsa: a interface mostra "confirmada" com base no banco e "notificação pendente" com base na outbox.
 
 ## Armazenamento de anexos
 
