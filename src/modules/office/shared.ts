@@ -73,6 +73,10 @@ const DB_RULE_MESSAGES: Record<string, string> = {
   entry_already_closed: "Esta inscrição já foi encerrada.",
   checkin_not_allowed: "A confirmação de uso vale só para a sua reserva confirmada, no dia da reserva.",
   checkin_immutable: "Uma confirmação de uso não é alterada.",
+  entry_must_start_waiting: "Uma inscrição na fila começa em espera.",
+  offer_incoherent: "Oferta, retenção e inscrição ficariam incoerentes. Nada foi aplicado.",
+  entry_incoherent: "A inscrição ficaria sem a oferta correspondente. Nada foi aplicado.",
+  hold_incoherent: "A retenção da fila só vira reserva com a oferta aceita. Nada foi aplicado.",
 };
 
 /** Converte erro do banco em erro de domínio: regra de trigger, exclusão, unicidade, deadlock ou tempo de lock. */
@@ -168,8 +172,8 @@ export async function advisoryExclusiveDay(tx: Tx, date: string): Promise<void> 
 /**
  * Expiração preguiçosa de retenções vencidas da mesa e da pessoa na data (passo 6), sempre com os dois filtros.
  * Cascata para a oferta e a inscrição da fila (DIR-034): oferta vencida vira `expired`, a inscrição sai da fila e a pessoa
- * é avisada. Sem job: quem escreve expira antes de gravar. Devolve as mesas liberadas para que o chamador ofereça à
- * próxima pessoa elegível (PAR-37).
+ * é avisada. Sem job: quem escreve expira antes de gravar. Devolve a quantidade expirada; quem chama e tem a mesa travada
+ * oferece à próxima pessoa elegível (PAR-37).
  */
 export async function expireHolds(tx: DbOrTx, filter: { resourceId?: string; employeeId?: string; date: string }): Promise<number> {
   const conds = [];

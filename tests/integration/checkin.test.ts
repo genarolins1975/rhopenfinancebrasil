@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { TZDate } from "@date-fns/tz";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db/client";
@@ -8,7 +9,6 @@ import { bookDesk } from "@/modules/booking/service";
 import { confirmUse, ownBookingTodayOn, releaseUnconfirmed } from "@/modules/checkin/service";
 import { ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { addDays, localToday } from "@/modules/shared/dates";
-import { bookSpace } from "@/modules/spaces/service";
 import { joinWaitlist } from "@/modules/waitlist/service";
 import { ownerQuery, resetDb, seedDesk, seedEmployee } from "./helpers";
 
@@ -79,12 +79,8 @@ describe("confirmação de uso", () => {
   it("confirmação de sala: pelo QR do código da sala resolve a reserva do dia; confirmação é imutável no banco", async () => {
     const a = await seedEmployee();
     const room = await seedDesk("SALA1", "room");
-    const now = new Date();
-    const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(now));
-    if (h >= 23) return; // sem intervalo futuro no dia; o caso é coberto nas demais horas
-    const start = `${String(h + 1).padStart(2, "0")}:00`;
-    const end = `${String(h + 1).padStart(2, "0")}:30`;
-    await bookSpace(db, actorOf(a), { resourceId: room.id, date: today, start, end, idempotencyKey: randomUUID() });
+    // Reserva em andamento gravada pelo papel dono (independe da hora em que a bateria roda).
+    await ownerQuery("insert into space_booking (resource_id, employee_id, actor_employee_id, period, status) values ($1, $2, $2, tstzrange(now() - interval '1 millisecond', now() + interval '10 minutes', '[)'), 'confirmed')", [room.id, a.id]);
     const r = await confirmUse(db, actorOf(a), { resourceCode: "SALA1", method: "qr" });
     expect(r.kind).toBe("space");
     let msg = "";
@@ -125,8 +121,11 @@ describe("confirmação de uso", () => {
     // exclusividade intacta; a compartilhada liberada foi oferecida à fila
     const [asg] = await db.select().from(exclusiveAssignment).where(eq(exclusiveAssignment.resourceId, ex.id));
     expect(asg.validTo).toBeNull();
+    // A oferta nasce se ainda houver ao menos 15 minutos no dia (PAR-05); nos últimos minutos, a mesa fica livre.
     const [offer] = await db.select().from(waitlistOffer).where(eq(waitlistOffer.status, "open"));
-    expect(offer.resourceId).toBe(s1.id);
+    const minutesLeft = (new TZDate(new Date(), "America/Sao_Paulo").setHours(24, 0, 0, 0) - Date.now()) / 60_000;
+    if (minutesLeft >= 16) expect(offer.resourceId).toBe(s1.id);
+    else if (minutesLeft < 14) expect(offer).toBeUndefined();
     expect(await db.select().from(outboxEvent).where(and(eq(outboxEvent.eventType, "email.booking_changed"), eq(outboxEvent.aggregateId, b1.bookingId)))).toHaveLength(1);
     // antes do horário limite nada acontece
     await ownerQuery(`update office_settings set value = '"23:59"' where key = 'checkin_release_time'`);

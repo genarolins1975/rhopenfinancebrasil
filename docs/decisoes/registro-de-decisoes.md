@@ -81,9 +81,9 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-40` | Escopo de `role.assign.standard` | Só os perfis Colaborador e Gestor; toda permissão direta exige `role.assign.privileged` | ADM | Revisão da Etapa 1 |
 | `PAR-41` | Limite anti oráculo da importação | 5 prévias e 3.000 linhas por pessoa por hora | RH e encarregado | Revisão da Etapa 1 |
 | `PAR-42` | Sessão de 12 horas para privilegiados | Conferida em toda página e toda action, não só no ambiente administrativo | ADM | Revisão da Etapa 1 |
-| `PAR-43` | Expediente para contar horas úteis da oferta | 09:00 às 18:00, segunda a sexta, exceto dias fechados no calendário do escritório | RH e Facilities | Valor adotado pelo Executor sem fonte oficial; configurável (`business_hours_start`, `business_hours_end`) |
-| `PAR-44` | Horário limite da confirmação de uso, se `PAR-06` for ativado | 11:00 do dia da reserva | RH | Sem efeito enquanto `PAR-06` estiver desativado |
-| `PAR-45` | Grade e limites de salas e cabines | Múltiplos de 15 minutos, intervalo no mesmo dia local, duração mínima de 15 minutos, horizonte igual ao das mesas; limite máximo por recurso opcional (`PAR-18`) | Facilities | Etapa 3 |
+| `PAR-43` | Expediente para contar horas úteis da oferta | 09:00 às 18:00, segunda a sexta, exceto dias fechados no calendário do escritório; oferta para data que não é dia útil (fim de semana aberto) conta minutos corridos | RH e Facilities | Valor adotado pelo Executor sem fonte oficial; configurável (`business_hours_start`, `business_hours_end`); regra do fim de semana da revisão independente (T-08) |
+| `PAR-44` | Horário limite da confirmação de uso, se `PAR-06` for ativado | 11:00 do dia da reserva; só é liberada a reserva que já estava confirmada antes do limite (oferta aceita conta do aceite) e cuja pessoa não declarou uso em nenhuma reserva de mesa do dia | RH | Sem efeito enquanto `PAR-06` estiver desativado; semântica da revisão independente (T-03, T-04) |
+| `PAR-45` | Grade e limites de salas e cabines | Múltiplos de 15 minutos, intervalo no mesmo dia local com fim até 24:00, duração mínima de 15 minutos, horizonte em semanas igual ao das mesas; limite máximo por recurso opcional (`PAR-18`) | Facilities | Etapa 3 |
 
 ## C. Decisões técnicas propostas
 
@@ -93,7 +93,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-02` | PostgreSQL 18 (17 se o provedor não oferecer) | MySQL | Proposta |
 | `DEC-03` | Drizzle ORM linha estável com migrações SQL explícitas | Prisma 7, Kysely | Proposta |
 | `DEC-04` | Better Auth com Argon2id, MFA, admin server side, sem impersonação | Auth.js, Keycloak, Auth0, Clerk | Proposta |
-| `DEC-05` | `pg-boss` para outbox e agendamentos | Cron externo, Redis | Proposta |
+| `DEC-05` | `pg-boss` para outbox e agendamentos | Cron externo, Redis | Substituída por `DEC-16` e `DEC-27` (worker próprio) |
 | `DEC-06` | Node.js 24 LTS como alvo; 22 aceito | | Proposta |
 | `DEC-07` | Mapa em SVG gerado do mapa operacional, com lista equivalente | Canvas, biblioteca de mapas | Proposta |
 | `DEC-08` | Hospedagem: opção A (Vercel mais Neon) ou B (Railway) para piloto | C, D | Pendente de contratação autorizada |
@@ -104,7 +104,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-13` | Plugin admin do Better Auth não montado; operações administrativas de identidade pelo adaptador interno após `can()`; handler com lista explícita de caminhos e `disabledPaths`; cache de sessão em cookie desativado; hook global conferindo `employee.status`; `sendChangeEmailConfirmation`; `trustDevice` neutralizado para perfis administrativos | Montar o plugin com `adminRoles` vazio | Proposta, verificada contra o código de `better-auth@1.7.6` em 28/09/2026 |
 | `DEC-14` | Lock por recurso imposto por trigger no banco, além do protocolo da aplicação; estado de atribuição derivado da vigência; expiração preguiçosa de retenções | Confiar só na disciplina do código | Proposta |
 | `DEC-15` | Prévia da importação CSV persistida cifrada (AES GCM, chave própria, AAD = id do lote) por 30 minutos, só com as linhas válidas; arquivo original nunca gravado | Reenvio do arquivo na confirmação; memória do processo | Adotada na Etapa 1 |
-| `DEC-16` | Outbox consumida por worker próprio com `for update skip locked` na Etapa 1; `pg-boss` entra na Etapa 3, quando houver agendamentos | Adotar `pg-boss` já | Adotada na Etapa 1 |
+| `DEC-16` | Outbox consumida por worker próprio com `for update skip locked` na Etapa 1; `pg-boss` entra na Etapa 3, quando houver agendamentos | Adotar `pg-boss` já | Adotada na Etapa 1; revista por `DEC-27` (`pg-boss` não adotado) |
 | `DEC-17` | Identidade criada pelo adaptador interno do Better Auth com `method: "invitation"`; ids gerados pelo Better Auth; tabelas com prefixo `auth_` | Plugin admin; ids pelo banco | Adotada na Etapa 1 |
 | `DEC-18` | Página não encontrada na área autenticada responde HTTP 200 com a tela "Página não encontrada", porque o streaming com estado de carregamento já iniciou a resposta; monitoramento de acesso usa auditoria e logs de aplicação, não códigos HTTP | Validar o id antes do streaming e remover o estado de carregamento do segmento | Adotada na Etapa 1 (terceira verificação, achado 8) |
 | `DEC-19` | Parâmetros do escritório (dia e hora de abertura, horizonte, duração máxima de liberação) em `office_settings`, lidos pelas funções SQL e pelo serviço; alteração exige `settings.manage` e é auditada | Constantes de código | Adotada na Etapa 2 |
@@ -114,7 +114,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-23` | Fechar dia do escritório trata reservas só por cancelamento com comunicação, nunca por realocação | Realocação para outro dia | Adotada na Etapa 2 (DIR-033) |
 | `DEC-24` | Dentro da semana corrente as reservas estão sempre abertas para datas de hoje em diante; a semana seguinte abre no instante configurado; semanas posteriores permanecem fechadas até a quinta da semana anterior a elas | Horizonte fixo em dias | Adotada na Etapa 2 (PAR-01) |
 | `DEC-25` | Inscrição na fila só quando não há mesa disponível para a pessoa na data (além de `PAR-30`); escritório fechado ou janela fechada recusam a inscrição | Fila aberta sempre, como lista de interesse | Adotada na Etapa 3 |
-| `DEC-26` | Salas e cabines seguem só o horizonte das mesas; a abertura semanal de quinta às 10h não se aplica a elas | Mesma janela das mesas | Adotada na Etapa 3, sujeita a validação de Facilities |
+| `DEC-26` | Salas e cabines seguem só o horizonte das mesas, em semanas de segunda a domingo contadas a partir da semana de hoje; a abertura semanal de quinta às 10h não se aplica a elas | Mesma janela das mesas | Adotada na Etapa 3, sujeita a validação de Facilities; cálculo corrigido na revisão independente (T-01) |
 | `DEC-27` | Varreduras do escritório (oferta vencida passa à próxima pessoa, mesa livre com fila recebe oferta, liberação de `PAR-06`) rodam no mesmo worker da outbox, a cada minuto; `pg-boss` não foi adotado porque a correção não depende de agendamento (`DIR-034`) | `pg-boss` com job em `expires_at` (`DEC-16`) | Adotada na Etapa 3; revisita `DEC-16` |
 | `DEC-28` | Meu time mostra só subordinados diretos ativos (`manager_employee_id`) e só o conteúdo de quem ativou o compartilhamento no próprio perfil (padrão desativado, alteração auditada); títulos de sala seguem a visibilidade da reserva | Visibilidade automática ao gestor | Adotada na Etapa 3 (matriz de permissões, "Equipe do gestor") |
 | `DEC-29` | O QR carrega só `/escritorio/qr/<código>`; o servidor resolve a reserva confirmada da sessão naquele recurso e dia; sem sessão, o login devolve à própria rota por lista fechada de retorno | QR com id da reserva ou token | Adotada na Etapa 3 (`CHK-02`) |
@@ -127,6 +127,8 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-36` | Oferta manual só de mesa compartilhada na data, com resposta única; a aba Fila oculta o código de mesa exclusiva a quem não tem `exclusive.holder.view`; o nome de quem reservou sala aparece só para a própria pessoa e a administração | Mensagem da regra de disponibilidade | Adotada na revisão independente da Etapa 3 (AUT-02, AUT-04) |
 | `DEC-37` | Consentimento do Meu time guarda o gestor para quem foi dado; troca de gestor, desativação e readmissão exigem nova autorização | Booleano sem gestor | Adotada na revisão independente da Etapa 3 (AUT-03) |
 | `DEC-38` | Quem tem mesa de uso exclusivo livre para si na data não consome mesa compartilhada da fila: a inscrição é encerrada com aviso; a varredura oferece primeiro a mesa própria | Tratar o titular como qualquer pessoa | Adotada na revisão independente da Etapa 3 (EXC-03) |
+| `DEC-40` | Retenção da fila aparece à pessoa como oferta ("Oferecida a você"), nunca como reserva, no início, no mapa, na lista e no detalhe | Tratar como reserva | Adotada na revisão independente da Etapa 3 (INT-03) |
+| `DEC-41` | Inscrições em espera de datas passadas são encerradas pela varredura como vencidas; fechar o dia de hoje ignora reservas de sala já encerradas (migração `0011`) | Deixar a limpeza manual | Adotada na revisão independente da Etapa 3 (T-02, T-09) |
 | `DEC-39` | Mudanças de política que cancelam reservas pelo diálogo (grupo, liberação, transferência) não oferecem a mesa à fila na mesma transação; a varredura do worker oferece em até um minuto e a reserva direta respeita a ordem da fila (`DEC-31`) | Travar candidatas em todos os fluxos de exclusividade | Adotada na revisão independente da Etapa 3 (EXC-07) |
 
 ## D. Perguntas bloqueantes

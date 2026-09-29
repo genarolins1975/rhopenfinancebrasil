@@ -85,6 +85,13 @@
       "when": 1790684566346,
       "tag": "0011_etapa3_fechamento_dia",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790684567346,
+      "tag": "0012_etapa3_rede_fila",
+      "breakpoints": true
     }
   ]
 }

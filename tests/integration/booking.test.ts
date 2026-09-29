@@ -7,7 +7,7 @@ import { stateForPerson } from "@/modules/availability/service";
 import { bookDesk, cancelDesk, habitualDesk, listMyBookings, planWeek } from "@/modules/booking/service";
 import { ConflictError, ForbiddenError } from "@/modules/shared/errors";
 import { addDays, localToday } from "@/modules/shared/dates";
-import { directorsGroupId, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
+import { directorsGroupId, privilegedActor, resetDb, seedDesk, seedEmployee, seedHold } from "./helpers";
 
 const today = localToday();
 const d = (n: number) => addDays(today, n);
@@ -170,14 +170,14 @@ describe("reservas de mesa", () => {
     const a = await seedEmployee();
     const b = await seedEmployee();
     const desk = await seedDesk();
-    await db.insert(deskBooking).values({ resourceId: desk.id, employeeId: a.id, bookingDate: d(1), status: "held", origin: "waitlist_offer", actorEmployeeId: a.id, holdExpiresAt: new Date(Date.now() - 1000) });
+    await seedHold({ resourceId: desk.id, employeeId: a.id, date: d(1), expiresAt: new Date(Date.now() - 1000) });
     expect((await stateForPerson(db, b.id, d(1))).items[0].availability.code).toBe("available");
     await expect(bookDesk(db, actorOf(b), { employeeId: b.id, resourceId: desk.id, date: d(1), idempotencyKey: randomUUID() })).resolves.toMatchObject({ created: true });
     const [old] = await db.select({ status: deskBooking.status }).from(deskBooking).where(and(eq(deskBooking.employeeId, a.id), eq(deskBooking.bookingDate, d(1))));
     expect(old.status).toBe("expired");
     // retenção viva bloqueia
     const desk2 = await seedDesk();
-    await db.insert(deskBooking).values({ resourceId: desk2.id, employeeId: a.id, bookingDate: d(2), status: "held", origin: "waitlist_offer", actorEmployeeId: a.id, holdExpiresAt: new Date(Date.now() + 60_000) });
+    await seedHold({ resourceId: desk2.id, employeeId: a.id, date: d(2), expiresAt: new Date(Date.now() + 60_000) });
     await expect(bookDesk(db, actorOf(b), { employeeId: b.id, resourceId: desk2.id, date: d(2), idempotencyKey: randomUUID() })).rejects.toThrow(/reservada/);
   });
 

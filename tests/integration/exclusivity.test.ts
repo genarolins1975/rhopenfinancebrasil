@@ -11,7 +11,7 @@ import { closeDay, createStatusPeriod, previewStatusPeriod, retireResource } fro
 import { pendingConflicts } from "@/modules/office/conflicts";
 import { ConflictError, ForbiddenError } from "@/modules/shared/errors";
 import { addDays, localToday } from "@/modules/shared/dates";
-import { directorsGroupId, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
+import { directorsGroupId, privilegedActor, resetDb, seedDesk, seedEmployee, seedHold } from "./helpers";
 
 const today = localToday();
 const d = (n: number) => addDays(today, n);
@@ -356,7 +356,7 @@ describe("correções da revisão da Etapa 2", () => {
     const desk = await seedDesk("A1");
     const target = await seedDesk("A2");
     const b = await book(p, desk.id, d(2));
-    await db.insert(deskBooking).values({ resourceId: target.id, employeeId: other.id, bookingDate: d(2), status: "held", origin: "waitlist_offer", actorEmployeeId: other.id, holdExpiresAt: new Date(Date.now() - 1000) });
+    await seedHold({ resourceId: target.id, employeeId: other.id, date: d(2), expiresAt: new Date(Date.now() - 1000) });
     const { withReallocOptions } = await import("@/modules/office/decisions");
     const input = { resourceId: desk.id, mode: "individual" as const, holderEmployeeId: holder.id, validFrom: d(1), reason: "x", responsible: "RH" };
     const preview = await previewAssignment(db, rh.actor, input);
@@ -388,7 +388,7 @@ describe("correções da revisão da Etapa 2", () => {
     await db.insert(resourceStatusPeriod).values({ resourceId: overlapped.id, status: "admin_block", startsOn: today, endsOn: d(3), reason: "t" });
     await createAssignment(db, rh.actor, { resourceId: exclusiveBooked.id, mode: "individual", holderEmployeeId: holder2.id, validFrom: today, reason: "x", responsible: "RH" });
     await book(holder2, exclusiveBooked.id, d(1));
-    await db.insert(deskBooking).values({ resourceId: sharedHeld.id, employeeId: q.id, bookingDate: d(1), status: "held", origin: "waitlist_offer", actorEmployeeId: q.id, holdExpiresAt: new Date(Date.now() + 60_000) });
+    await seedHold({ resourceId: sharedHeld.id, employeeId: q.id, date: d(1), expiresAt: new Date(Date.now() + 60_000) });
     const a5 = await createAssignment(db, rh.actor, { resourceId: exclusiveReleased.id, mode: "individual", holderEmployeeId: holder.id, validFrom: d(2), reason: "x", responsible: "RH" });
     void a1;
     void a5;

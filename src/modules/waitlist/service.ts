@@ -486,22 +486,19 @@ export async function listQueue(db: DbOrTx, filter: { date: string }): Promise<Q
   });
 }
 
-/** Demanda não atendida: inscrições em espera por data a partir de hoje (indicador com numerador explícito). */
+/**
+ * Demanda não atendida: inscrições vivas por data, de hoje até `days` dias à frente (exclusive). Com oferta só conta a
+ * oferta aberta e não vencida, o mesmo predicado da leitura (DIR-034); oferta vencida ainda não varrida conta como espera.
+ */
 export async function unmetDemand(db: DbOrTx, from = localToday(), days = 14): Promise<Array<{ date: string; waiting: number; offered: number }>> {
-  const rows = await db
-    .select({ date: waitlistEntry.date, status: waitlistEntry.status, n: sql<number>`count(*)::int` })
-    .from(waitlistEntry)
-    .where(and(gte(waitlistEntry.date, from), lte(waitlistEntry.date, sql`${from}::date + ${days}::int`), inArray(waitlistEntry.status, ["waiting", "offered"])))
-    .groupBy(waitlistEntry.date, waitlistEntry.status)
-    .orderBy(asc(waitlistEntry.date));
-  const by = new Map<string, { date: string; waiting: number; offered: number }>();
-  for (const r of rows) {
-    const cur = by.get(r.date) ?? { date: r.date, waiting: 0, offered: 0 };
-    if (r.status === "waiting") cur.waiting += r.n;
-    else cur.offered += r.n;
-    by.set(r.date, cur);
-  }
-  return [...by.values()];
+  const rows = await db.execute(sql`
+    select e.date::text as date,
+           count(*) filter (where e.status = 'waiting' or not exists (select 1 from waitlist_offer o where o.entry_id = e.id and o.status = 'open' and o.expires_at > now()))::int as waiting,
+           count(*) filter (where e.status = 'offered' and exists (select 1 from waitlist_offer o where o.entry_id = e.id and o.status = 'open' and o.expires_at > now()))::int as offered
+      from waitlist_entry e
+     where e.status in ('waiting', 'offered') and e.date >= ${from}::date and e.date < ${from}::date + ${days}::int
+     group by e.date order by e.date`);
+  return (rows.rows as Array<{ date: string; waiting: number; offered: number }>).map((r) => ({ date: r.date, waiting: r.waiting, offered: r.offered }));
 }
 
 /** Zonas conhecidas para preferência (opcional; a preferência é informativa e não filtra a oferta automática). */

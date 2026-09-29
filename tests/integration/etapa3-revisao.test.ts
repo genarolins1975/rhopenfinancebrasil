@@ -13,7 +13,7 @@ import { setShareWithManager, sharesWithManager, teamWeek } from "@/modules/team
 import { acceptOffer, joinWaitlist, leaveWaitlist, manualOfferOptions, offerFreeDesks, offerManually } from "@/modules/waitlist/service";
 import { closeDay, createStatusPeriod, previewCloseDay, previewStatusPeriod } from "@/modules/workplace/service";
 import { parseDecisions } from "@/modules/office/decisions";
-import { directorsGroupId, ownerQuery, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
+import { ageOpenOffers, directorsGroupId, ownerQuery, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
 
 /*
  * Regressão dos achados confirmados na revisão independente da Etapa 3 (docs/testes/aceite.md).
@@ -120,8 +120,7 @@ describe("revisão independente da Etapa 3: regressão", () => {
       await joinWaitlist(db, actorOf(p), { date });
       await cancelDesk(db, actorOf(taker), booking.bookingId);
       const [o] = await openOffers();
-      await ownerQuery("update desk_booking set hold_expires_at = now() - interval '1 minute' where id = $1", [o.holdBookingId]);
-      await ownerQuery("update waitlist_offer set expires_at = now() - interval '1 minute' where id = $1", [o.id]);
+      await ageOpenOffers(o.id);
       const q = await seedEmployee();
       const rh = await privilegedActor({ roles: ["hr"] });
       const [s, b] = await Promise.allSettled([suspendEmployee(db, rh.actor, p.id, "afastamento"), bookDesk(db, actorOf(q), { employeeId: q.id, resourceId: desk.id, date, idempotencyKey: randomUUID() })]);

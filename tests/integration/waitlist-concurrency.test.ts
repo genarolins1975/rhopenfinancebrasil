@@ -9,7 +9,7 @@ import { bookDesk, cancelDesk } from "@/modules/booking/service";
 import { deactivateEmployee, suspendEmployee } from "@/modules/employees/service";
 import { addDays, localToday } from "@/modules/shared/dates";
 import { acceptOffer, declineOffer, expireDueOffers, joinWaitlist, leaveWaitlist, offerFreeDesks } from "@/modules/waitlist/service";
-import { ownerQuery, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
+import { ageOpenOffers, ownerQuery, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
 
 /*
  * R10: concorrência da fila de espera com o pool da aplicação. Cada operação abre a própria transação.
@@ -45,8 +45,7 @@ async function violations(): Promise<Record<string, number>> {
 const ZERO = { ofertaAbertaSemRetencaoViva: 0, ofertaAbertaComInscricaoFechada: 0, inscricaoOfertadaSemOfertaAberta: 0, retencaoDaFilaSemOferta: 0, retencaoVivaComOfertaFechada: 0, reservaInvalida: 0, ofertaDeMesaExclusiva: 0 };
 
 async function ageOffers() {
-  await ownerQuery("update desk_booking set hold_expires_at = now() - interval '1 minute' where status = 'held' and origin = 'waitlist_offer'");
-  await ownerQuery("update waitlist_offer set expires_at = now() - interval '1 minute' where status = 'open'");
+  await ageOpenOffers();
 }
 
 describe("R10: concorrência da fila de espera", () => {
@@ -142,5 +141,61 @@ describe("R10: concorrência da fila de espera", () => {
     expect(tail.includes("nova tentativa da transação do escritório"), "transação do escritório precisou de nova tentativa").toBe(false);
     const holds = await db.select().from(deskBooking).where(eq(deskBooking.status, "held"));
     for (const h of holds) expect(h.origin).toBe("waitlist_offer");
+  });
+
+  it("R10b: mesa exclusiva sob corrida (titular cancela contra liberação; aceite contra revogação; cancelamento com fila contra nova atribuição): nunca oferta de exclusiva a inelegível", async () => {
+    const { createAssignment, createException, previewRevokeException, revokeException } = await import("@/modules/exclusivity/service");
+    const before = await deadlocks();
+    for (let i = 0; i < 5; i++) {
+      await resetDb();
+      const rh = await privilegedActor({ roles: ["hr"] });
+      const date = d(1 + i);
+      const holder = await seedEmployee({ orgCondition: "director" });
+      const x = await seedDesk(`X${i}`);
+      const assignmentId = await createAssignment(db, rh.actor, { resourceId: x.id, mode: "individual", holderEmployeeId: holder.id, validFrom: today, reason: "t", responsible: "RH" });
+      const s1 = await seedDesk(`S${i}`);
+      const filler = await seedEmployee();
+      const fb = await bookDesk(db, actorOf(filler), { employeeId: filler.id, resourceId: s1.id, date, idempotencyKey: randomUUID() });
+      const c = await seedEmployee();
+      await joinWaitlist(db, actorOf(c), { date });
+      const hb = await bookDesk(db, actorOf(holder), { employeeId: holder.id, resourceId: x.id, date, idempotencyKey: randomUUID() });
+      // a) titular cancela a própria reserva enquanto o RH libera a mesa ao compartilhado na data
+      const [a1, a2] = await Promise.allSettled([
+        cancelDesk(db, actorOf(holder), hb.bookingId),
+        createException(db, rh.actor, { assignmentId, kind: "release_to_shared", startsOn: date, endsOn: date, reason: "férias" }),
+      ]);
+      expect(a1.status, `rodada ${i} a: cancelamento`).toBe("fulfilled");
+      expect(await violations(), `rodada ${i} a`).toEqual(ZERO);
+      await offerFreeDesks(db);
+      expect(await violations(), `rodada ${i} a, depois da varredura`).toEqual(ZERO);
+      // b) C aceita a oferta da mesa liberada enquanto o RH revoga a liberação, com decisão sobre a retenção vista na prévia
+      const exceptionId = a2.status === "fulfilled" ? a2.value : null;
+      const [open] = await db.select().from(waitlistOffer).where(eq(waitlistOffer.status, "open"));
+      if (exceptionId) {
+        const preview = await previewRevokeException(db, rh.actor, exceptionId);
+        const decisions = preview.conflicts.map((k) => ({ bookingId: k.bookingId, action: "cancel" as const, reason: "revogada", expectedStatus: k.status }));
+        await Promise.allSettled([
+          open ? acceptOffer(db, actorOf(c), open.id) : Promise.resolve(null),
+          revokeException(db, rh.actor, { exceptionId, reason: "voltou" }, decisions),
+        ]);
+      }
+      expect(await violations(), `rodada ${i} b`).toEqual(ZERO);
+      // c) nova mesa compartilhada ocupada, fila em espera; cancelamento contra atribuição exclusiva nova da mesma mesa
+      const n = await seedDesk(`N${i}`);
+      const f2 = await seedEmployee();
+      // Preparação: a mesa nova nasce ocupada (com fila em espera, uma reserva direta dela iria corretamente para a fila).
+      const nbRow = await ownerQuery("insert into desk_booking (resource_id, employee_id, booking_date, status, origin, actor_employee_id) values ($1, $2, $3::date, 'confirmed', 'self', $2) returning id", [n.id, f2.id, date]);
+      const nb = { bookingId: nbRow.rows[0].id as string };
+      const c2 = await seedEmployee();
+      await joinWaitlist(db, actorOf(c2), { date }).catch(() => null);
+      const holder2 = await seedEmployee({ orgCondition: "director" });
+      await Promise.allSettled([
+        cancelDesk(db, actorOf(f2), nb.bookingId),
+        createAssignment(db, rh.actor, { resourceId: n.id, mode: "individual", holderEmployeeId: holder2.id, validFrom: date, reason: "nova", responsible: "RH" }),
+      ]);
+      expect(await violations(), `rodada ${i} c`).toEqual(ZERO);
+      void fb;
+    }
+    expect((await deadlocks()) - before, "deadlocks detectados pelo banco").toBe(0);
   });
 });

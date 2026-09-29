@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db/client";
-import { auditEvent, deskBooking, exclusiveAssignment, officeCalendar, outboxEvent, waitlistEntry, waitlistOffer } from "@/db/schema";
+import { accessGroupMember, auditEvent, deskBooking, exclusiveAssignment, officeCalendar, outboxEvent, waitlistEntry, waitlistOffer } from "@/db/schema";
 import { stateForPerson } from "@/modules/availability/service";
 import { bookDesk, cancelDesk, planWeek } from "@/modules/booking/service";
 import { deactivateEmployee, suspendEmployee } from "@/modules/employees/service";
@@ -10,7 +10,7 @@ import { ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { addDays, localToday } from "@/modules/shared/dates";
 import { acceptOffer, declineOffer, expireDueOffers, joinWaitlist, leaveWaitlist, listQueue, myQueue, offerFreeDesks, offerManually, unmetDemand } from "@/modules/waitlist/service";
 import { availableDesksFor, createStatusPeriod, previewStatusPeriod } from "@/modules/workplace/service";
-import { ownerQuery, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
+import { ageOpenOffers, directorsGroupId, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
 
 /*
  * Fila de espera: WL-01 (sem dupla oferta), WL-02 (próxima pessoa elegível automática), WL-03 (inscrição negada com
@@ -29,9 +29,7 @@ async function openOffers() {
 }
 /** Simula a passagem do prazo: retenção e oferta vencidas no banco (só o papel dono, só em teste). */
 async function ageOffer(offerId: string) {
-  const [o] = await db.select().from(waitlistOffer).where(eq(waitlistOffer.id, offerId));
-  await ownerQuery("update desk_booking set hold_expires_at = now() - interval '1 minute' where id = $1", [o.holdBookingId]);
-  await ownerQuery("update waitlist_offer set expires_at = now() - interval '1 minute' where id = $1", [offerId]);
+  await ageOpenOffers(offerId);
 }
 /** Escritório cheio: uma mesa, reservada por `taker`. */
 async function fullOffice(date: string) {
@@ -50,13 +48,9 @@ describe("fila de espera", () => {
     const other = await seedEmployee();
     const free = await seedDesk("F002");
     await expect(joinWaitlist(db, actorOf(other), { date: d(1) })).rejects.toThrow(/1 mesa\(s\) disponível/);
-    await bookDesk(db, actorOf(await seedEmployee()), { employeeId: (await db.select().from(waitlistEntry)).length ? "" : (await seedEmployee()).id, resourceId: free.id, date: d(1), idempotencyKey: randomUUID() }).catch(() => null);
-    // agora as duas mesas estão ocupadas ou a segunda está livre? garante ocupação explícita
-    const [freeState] = (await stateForPerson(db, other.id, d(1))).items.filter((i) => i.resource.id === free.id);
-    if (freeState.availability.canBook) {
-      const third = await seedEmployee();
-      await bookDesk(db, actorOf(third), { employeeId: third.id, resourceId: free.id, date: d(1), idempotencyKey: randomUUID() });
-    }
+    // ocupa a segunda mesa: agora não há mesa disponível e a inscrição passa
+    const third = await seedEmployee();
+    await bookDesk(db, actorOf(third), { employeeId: third.id, resourceId: free.id, date: d(1), idempotencyKey: randomUUID() });
     const first = await joinWaitlist(db, actorOf(other), { date: d(1), preferences: { zoneCode: "A" } });
     expect(first.created).toBe(true);
     const again = await joinWaitlist(db, actorOf(other), { date: d(1) });
@@ -108,16 +102,29 @@ describe("fila de espera", () => {
     expect(await unmetDemand(db)).toEqual([{ date: d(1), waiting: 1, offered: 1 }]);
   });
 
-  it("WL-01-T2: cancelamentos e inscrições concorrentes não geram dupla retenção nem dupla inscrição", async () => {
-    const { taker, booking } = await fullOffice(d(1));
-    const people = await Promise.all(Array.from({ length: 8 }, () => seedEmployee()));
-    const joins = await Promise.allSettled(people.flatMap((p) => [joinWaitlist(db, actorOf(p), { date: d(1) }), joinWaitlist(db, actorOf(p), { date: d(1) })]));
-    expect(joins.filter((j) => j.status === "rejected")).toHaveLength(0);
-    expect(await db.select().from(waitlistEntry)).toHaveLength(8);
-    const cancels = await Promise.allSettled(Array.from({ length: 5 }, () => cancelDesk(db, actorOf(taker), booking.bookingId)));
-    expect(cancels.filter((c) => c.status === "fulfilled")).toHaveLength(1);
-    expect(await openOffers()).toHaveLength(1);
-    expect(await db.select().from(deskBooking).where(eq(deskBooking.status, "held"))).toHaveLength(1);
+  it("WL-01-T2: cancelamentos e inscrições concorrentes, no mesmo lote: nunca dupla retenção, dupla inscrição ou oferta sem retenção", async () => {
+    for (let round = 0; round < 5; round++) {
+      await resetDb();
+      const { taker, booking } = await fullOffice(d(1));
+      const people = await Promise.all(Array.from({ length: 6 }, () => seedEmployee()));
+      const ops = [
+        ...people.flatMap((p) => [() => joinWaitlist(db, actorOf(p), { date: d(1) }), () => joinWaitlist(db, actorOf(p), { date: d(1) })]),
+        ...Array.from({ length: 4 }, () => () => cancelDesk(db, actorOf(taker), booking.bookingId)),
+      ];
+      const results = await Promise.allSettled(ops.map((f) => f()));
+      const cancels = results.slice(people.length * 2);
+      expect(cancels.filter((c) => c.status === "fulfilled"), `rodada ${round}`).toHaveLength(1);
+      for (const r of results.slice(0, people.length * 2)) if (r.status === "rejected") expect(String(r.reason.message)).toMatch(/mesa\(s\) disponível|Outra operação/);
+      const live = await db.execute(sql`select employee_id, count(*)::int as n from waitlist_entry where status in ('waiting', 'offered') group by employee_id having count(*) > 1`);
+      expect(live.rows, `rodada ${round}: inscrição dupla`).toHaveLength(0);
+      expect((await openOffers()).length).toBeLessThanOrEqual(1);
+      expect((await db.select().from(deskBooking).where(eq(deskBooking.status, "held"))).length).toBeLessThanOrEqual(1);
+      // se a mesa ficou livre com gente em espera (inscrição posterior à foto), a varredura oferece
+      await offerFreeDesks(db);
+      const waitingNow = await db.select().from(waitlistEntry).where(eq(waitlistEntry.status, "waiting"));
+      const offersNow = await openOffers();
+      if (waitingNow.length + offersNow.length > 0) expect(offersNow).toHaveLength(1);
+    }
   });
 
   it("aceitar converte a retenção em reserva confirmada; oferta alheia é inexistente; aceite após vencimento é recusado", async () => {
@@ -140,11 +147,10 @@ describe("fila de espera", () => {
     const c = await seedEmployee();
     const desk2 = await seedDesk("F002");
     const bk = await bookDesk(db, actorOf(taker), { employeeId: taker.id, resourceId: desk2.id, date: d(2), idempotencyKey: randomUUID() });
-    await joinWaitlist(db, actorOf(c), { date: d(2) }).catch(() => null);
-    // d(2) tem F001 livre para c: a inscrição é recusada por DEC-25; ocupa F001 e tenta de novo
-    const filler = await seedEmployee();
-    await bookDesk(db, actorOf(filler), { employeeId: filler.id, resourceId: (await seedDesk("F003")).id, date: d(2), idempotencyKey: randomUUID() }).catch(() => null);
+    // d(2) tem F001 livre para c: a inscrição é recusada por DEC-25; ocupa as mesas livres e c entra na fila
+    await expect(joinWaitlist(db, actorOf(c), { date: d(2) })).rejects.toThrow(/mesa\(s\) disponível/);
     const free = await availableDesksFor(db, c.id, d(2));
+    expect(free.length).toBeGreaterThan(0);
     for (const f of free) {
       const p = await seedEmployee();
       await bookDesk(db, actorOf(p), { employeeId: p.id, resourceId: f.id, date: d(2), idempotencyKey: randomUUID() });
@@ -223,40 +229,54 @@ describe("fila de espera", () => {
     const again = await joinWaitlist(db, actorOf(a), { date: d(1) });
     expect(again.created).toBe(true);
     expect((await entriesOf(a.id)).map((e) => e.status).sort()).toEqual(["expired", "waiting"]);
-    // rejeição da inscrição não deixa rastro: transação inteira desfeita, inclusive a expiração preguiçosa (o predicado de leitura cobre)
+    // a leitura da pessoa mostra só a inscrição viva
     expect(await myQueue(db, a.id)).toHaveLength(1);
   });
 
-  it("WL-04-T3: semana atômica também cede à fila (PAR-37) e encerra a inscrição em espera de quem conseguiu mesa", async () => {
-    const { taker, desk, booking } = await fullOffice(d(1));
+  it("WL-04-T3: semana atômica cede à fila (PAR-37): conflito explícito, oferta persistida, repetição da chave igual; quem está na fila e planeja a semana sai da fila", async () => {
+    await fullOffice(d(1));
     const a = await seedEmployee();
     const c = await seedEmployee();
     await joinWaitlist(db, actorOf(a), { date: d(1) });
-    await cancelDesk(db, actorOf(taker), booking.bookingId);
-    const [offerA] = await openOffers();
-    await ageOffer(offerA.id);
-    const b = await seedEmployee();
-    await joinWaitlist(db, actorOf(b), { date: d(1) }).catch(() => null);
-    // B não conseguiu entrar (mesa "disponível" pela retenção vencida). Faz a fila real: A reservada de novo por oferta manual não cabe. Usa outra pessoa em espera via cancelamento novo.
-    const r = await planWeek(db, actorOf(c), { idempotencyKey: randomUUID(), days: [{ date: d(1), intent: "onsite", resourceId: desk.id }] });
-    expect(r.ok).toBe(true);
-    expect((await entriesOf(a.id))[0].status).toBe("expired");
-    // quem está em espera e reserva direto sai da fila
-    const desk2 = await seedDesk("F002");
+    const f2 = await seedDesk("F002");
+    const key = randomUUID();
+    const r = await planWeek(db, actorOf(c), { idempotencyKey: key, days: [{ date: d(1), intent: "onsite", resourceId: f2.id }] });
+    expect(r.ok).toBe(false);
+    expect(r.conflicts[0]).toMatchObject({ date: d(1), resourceCode: "F002" });
+    expect(r.conflicts[0].reason).toMatch(/fila de espera/);
+    const [offer] = await openOffers();
+    expect(offer.resourceId).toBe(f2.id);
+    expect(offer.entryId).toBe((await entriesOf(a.id))[0].id);
+    expect(await planWeek(db, actorOf(c), { idempotencyKey: key, days: [{ date: d(1), intent: "onsite", resourceId: f2.id }] })).toEqual(r);
+    expect(await openOffers()).toHaveLength(1);
+    // W em espera (A já tem oferta): W planeja a semana com uma mesa nova e consegue; a inscrição de W é encerrada
     const w = await seedEmployee();
-    const filler = await seedEmployee();
-    await bookDesk(db, actorOf(filler), { employeeId: filler.id, resourceId: desk2.id, date: d(2), idempotencyKey: randomUUID() });
-    for (const f of await availableDesksFor(db, w.id, d(2))) {
-      const p = await seedEmployee();
-      await bookDesk(db, actorOf(p), { employeeId: p.id, resourceId: f.id, date: d(2), idempotencyKey: randomUUID() });
-    }
-    await joinWaitlist(db, actorOf(w), { date: d(2) });
-    const bk = await cancelDesk(db, actorOf(filler), (await db.select().from(deskBooking).where(and(eq(deskBooking.employeeId, filler.id), eq(deskBooking.status, "confirmed"))))[0].id);
-    void bk;
-    // w recebeu oferta; recusa e volta a entrar? Não: após recusar, a mesa está livre e DEC-25 recusa. Fluxo: aceita.
-    const [ow] = await openOffers();
-    await acceptOffer(db, actorOf(w), ow.id);
-    expect((await entriesOf(w.id))[0].status).toBe("accepted");
+    await joinWaitlist(db, actorOf(w), { date: d(1) });
+    const f3 = await seedDesk("F003");
+    const rw = await planWeek(db, actorOf(w), { idempotencyKey: randomUUID(), days: [{ date: d(1), intent: "onsite", resourceId: f3.id }] });
+    expect(rw.ok).toBe(true);
+    const [we] = await entriesOf(w.id);
+    expect(we.status).toBe("cancelled");
+    expect(we.closeReason).toMatch(/planejamento da semana/);
+  });
+
+  it("REQ-26: a oferta pula a candidata inelegível e vai à próxima elegível da fila", async () => {
+    const group = await directorsGroupId();
+    const m1 = await seedEmployee({ orgCondition: "director" });
+    const m2 = await seedEmployee({ orgCondition: "director" });
+    await db.insert(accessGroupMember).values({ groupId: group, employeeId: m1.id, validFrom: today, reason: "t" });
+    await db.insert(accessGroupMember).values({ groupId: group, employeeId: m2.id, validFrom: today, reason: "t" });
+    const g = await seedDesk("G001");
+    await db.insert(exclusiveAssignment).values({ resourceId: g.id, mode: "group", accessGroupId: group, validFrom: today, reason: "t", responsible: "RH" });
+    const mb = await bookDesk(db, actorOf(m1), { employeeId: m1.id, resourceId: g.id, date: d(1), idempotencyKey: randomUUID() });
+    await fullOffice(d(1));
+    const common = await seedEmployee();
+    await joinWaitlist(db, actorOf(common), { date: d(1) });
+    await joinWaitlist(db, actorOf(m2), { date: d(1) });
+    await cancelDesk(db, actorOf(m1), mb.bookingId);
+    const [offer] = await openOffers();
+    expect(offer.entryId).toBe((await entriesOf(m2.id))[0].id);
+    expect((await entriesOf(common.id))[0].status).toBe("waiting");
   });
 
   it("DIR-025-T1 e DIR-006: titular cancela a mesa exclusiva com fila em espera: ninguém recebe oferta, a mesa segue exclusiva e a inscrição em espera", async () => {

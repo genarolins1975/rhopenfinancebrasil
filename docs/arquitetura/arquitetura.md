@@ -14,7 +14,7 @@ Referência: 28/09/2026. Projeto novo, sem stack anterior a respeitar. Direção
 | Acesso a dados | Drizzle ORM com driver `pg` | `drizzle-orm` 0.45.3, `drizzle-kit` 0.31.11, `pg` 8.23.0 | 21/09/2026, 21/09/2026 e 08/08/2026 | 1.0 está em release candidate; ficar na linha estável |
 | Autenticação | Better Auth | 1.7.6 | 24/09/2026 | Plugins: two factor, admin, have i been pwned; SSO depois. Peer dependencies aceitam Next 16, `drizzle-orm` 0.45 e `pg` 8 |
 | Hash de senha | Argon2id via `@node-rs/argon2` | 2.2.1 | 10/09/2026 | Better Auth usa scrypt por padrão; será substituído por `password.hash` e `password.verify` |
-| Fila e agendamento | `pg-boss` | 12.35.0, exige Node 22.12 ou superior | 26/09/2026 | Roda sobre o próprio PostgreSQL |
+| Fila e agendamento | Worker próprio sobre o PostgreSQL (`for update skip locked`); `pg-boss` avaliado e não adotado (`DEC-27`) | não se aplica | 29/09/2026 | Varreduras do escritório no mesmo worker da outbox |
 | Validação | zod | 4.6.5 | 13/09/2026 | |
 | Datas | `date-fns` e `@date-fns/tz` | 4.4.0 e 1.5.0 | 29/05/2026 e 21/05/2026 | Interpretação em `America/Sao_Paulo` |
 | Estilo | Tailwind CSS com tokens em variáveis CSS | 4.3.3 | 16/07/2026 | |
@@ -94,7 +94,7 @@ Segredos fora do repositório, por ambiente. Chave de cifra do CPF e chave do HM
 
 ## Notificações confiáveis
 
-Toda notificação nasce como linha em `outbox_event` na mesma transação da operação de negócio. Na Etapa 1 um worker próprio (`pnpm worker:outbox`, `for update skip locked`, `DEC-16`) consome a outbox; `pg-boss` entra na Etapa 3 com os agendamentos. O worker entrega com chave de idempotência, registra tentativa, erro e próxima tentativa, e expõe falhas no painel administrativo. Email indisponível não corrompe a reserva nem produz confirmação falsa: a interface mostra "confirmada" com base no banco e "notificação pendente" com base na outbox.
+Toda notificação nasce como linha em `outbox_event` na mesma transação da operação de negócio. Um worker próprio (`pnpm worker:outbox`, `for update skip locked`, `DEC-16`) consome a outbox e, desde a Etapa 3, roda a cada minuto as varreduras do escritório (ofertas vencidas, mesas livres com fila, inscrições de datas passadas, liberação por falta de confirmação quando ativada); `pg-boss` não foi adotado porque a correção não depende de agendamento (`DEC-27`). O worker entrega com chave de idempotência, registra tentativa, erro e próxima tentativa, e expõe falhas no painel administrativo. Email indisponível não corrompe a reserva nem produz confirmação falsa: a interface mostra "confirmada" com base no banco e "notificação pendente" com base na outbox.
 
 ## Armazenamento de anexos
 
@@ -109,7 +109,7 @@ Preços de lista consultados nas páginas oficiais em 28/09/2026, em dólares, s
 | A | Vercel Pro (USD 20 por seat de desenvolvedor, com USD 20 de crédito de uso) mais Neon Launch (compute USD 0,106 por CU hora, armazenamento USD 0,35 por GB mês, restauração pontual USD 0,20 por GB mês) | Entre USD 30 e USD 80 para a carga estimada de uma associação, dependendo do consumo |
 | B | Railway Pro (USD 20 com USD 20 de uso incluído; CPU cerca de USD 20 por vCPU mês, memória cerca de USD 10 por GB mês, volume USD 0,15 por GB mês) com PostgreSQL no próprio Railway | Entre USD 20 e USD 60 |
 | C | Supabase Pro (USD 25, banco de 8 GB, backups diários de 7 dias; restauração pontual USD 100 adicionais) mais hospedagem da aplicação em A ou B | Entre USD 45 e USD 130 |
-| D | Servidor virtual com Docker Compose (aplicação, PostgreSQL, `pg-boss`) | Depende do provedor; exige operação própria de backup e atualização |
+| D | Servidor virtual com Docker Compose (aplicação, worker e PostgreSQL) | Depende do provedor; exige operação própria de backup e atualização |
 
 Pontos a validar antes de escolher: região de dados no Brasil, política de backup e restauração, contrato de tratamento de dados com o provedor, disponibilidade da extensão `btree_gist` e da configuração de `timezone` por papel, custo de email transacional e de armazenamento privado. Recomendação preliminar: opção A ou B para piloto, por baixo custo e operação simples; decisão registrada como pendente.
 

@@ -45,7 +45,7 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 | `DIR-034` retenção vencida não trava mesa nem pessoa; oferta nasce no cancelamento | `booking`, `waitlist` | `office/shared.ts` (`expireHolds`) | `DIR-034-T1` em `booking.test.ts`; `DIR-034-T2` em `waitlist.test.ts` (WL-04-T2) | testado (29/09/2026) |
 | `DIR-035` resposta sem identificadores de titular | `availability`, `app` | `availability/service.ts` | `DIR-035-T1` em `booking.test.ts`; `office.spec.ts` | testado (29/09/2026) |
 | `DIR-036` estado derivado; encerrar não contorna a sobreposição | `exclusivity`, `db` | trigger `exclusive_assignment_validity`, constraint de exclusão | `DIR-036-T1` em `exclusivity.test.ts`; `DIR-036-T2` em `exclusivity.test.ts`; `DIR-036-T3` em `office-db.test.ts` | testado (29/09/2026) |
-| Modelo: extensão e constraints existem no catálogo | `src/db/migrations` | `DB-01` em `tests/integration/db.test.ts` | I | testado (29/09/2026) para as Etapas 1 e 2 |
+| Modelo: extensão e constraints existem no catálogo | `src/db/migrations` | `DB-01` em `tests/integration/db.test.ts` (Etapas 1 e 2) e em `tests/integration/etapa3-db.test.ts` (fila, oferta, confirmação de uso: triggers, coerência no commit, `DELETE` negado, lock só na inserção) | I | testado (29/09/2026) |
 | Modelo: lock imposto por trigger | `db` | migração `0004` | `DIR-024-T2` em `office-db.test.ts` (pares reserva e trava, integrante, fechamento, desativação, manutenção, recurso) | testado (29/09/2026) |
 | Modelo: trigger de vigência da atribuição | `db` | migração `0004` | `DIR-036-T3` em `office-db.test.ts` | testado (29/09/2026) |
 | Modelo: suspensão mantém reservas, desativação exige tratamento | `db`, `employees` | triggers, `employees/service.ts` | `EMP-02-T1` em `office-db.test.ts` e `exclusivity.test.ts` | testado (29/09/2026) |
@@ -112,5 +112,7 @@ Referência: 28/09/2026. Coluna "Implementação" aponta o módulo previsto enqu
 | Desativação e suspensão tiram a pessoa da fila; retenção da pessoa desativada passa à próxima | `waitlist`, `employees` | `waitlist.test.ts`; R10 | I, C | testado (29/09/2026) |
 | Meu time só com subordinados diretos que autorizaram; título segue a visibilidade | `team` | `team.test.ts`; `operation.spec.ts` | I, E | testado (29/09/2026) |
 | Confirmação de sala pelo QR; confirmação imutável | `checkin` | `checkin.test.ts` | I | testado (29/09/2026) |
-| Parâmetros da fila e da confirmação auditados, QR por recurso | `workplace`, telas | `operation.spec.ts` | E | testado (29/09/2026) |
+| Parâmetros da fila e da confirmação validados e auditados; QR por recurso | `workplace`, telas | `etapa3-db.test.ts` (faixas, expediente, booleano, auditoria antes e depois, permissão); `operation.spec.ts` (tela e QR) | I, E | testado (29/09/2026) |
 | Integração de calendário corporativo | não implementada | não se aplica | | pendente de fonte oficial (`RSK-31`) |
+| Achados confirmados da revisão independente da Etapa 3 (concorrência, exclusividade, autorização, tempo, interface) | vários | `tests/integration/etapa3-revisao.test.ts` (um caso por achado); corridas com mesa exclusiva em `waitlist-concurrency.test.ts` (R10b); `tests/unit/spaces-rules.test.ts` | I, C, U | testado (29/09/2026) |
+| Oferta pula candidata inelegível e vai à próxima elegível (`REQ-26`) | `waitlist` | `waitlist.test.ts` | I | testado (29/09/2026) |
