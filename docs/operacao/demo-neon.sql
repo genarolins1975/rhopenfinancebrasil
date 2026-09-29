@@ -24,6 +24,6 @@ CREATE DATABASE rh_demo OWNER rh_owner;
 -- Bloco 3: fuso do banco. Rode sozinho.
 ALTER DATABASE rh_demo SET timezone = 'America/Sao_Paulo';
 
--- Para recomeçar a demonstração do zero (apaga tudo do banco rh_demo): rode os dois comandos abaixo, um de cada vez, e
--- depois os Blocos 2 e 3; em seguida, faça um novo deploy de produção na Vercel.
+-- Para recomeçar a demonstração do zero (apaga tudo do banco rh_demo): rode o comando abaixo, sozinho, e depois os
+-- Blocos 2 e 3; em seguida, siga a seção "Recomeçar do zero" de demo-vercel.md.
 -- DROP DATABASE rh_demo WITH (FORCE);

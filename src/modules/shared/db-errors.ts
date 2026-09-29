@@ -49,6 +49,17 @@ export function safeErrorInfo(e: unknown): Record<string, unknown> {
   return { kind: typeof e };
 }
 
+/**
+ * Texto de erro para saída de script (build, migração, carga de demonstração): nunca a mensagem crua do driver, que
+ * carrega a consulta e os parâmetros (hash de senha, token, CPF cifrado). Mensagens de validação passam como estão.
+ */
+export function safeErrorText(e: unknown): string {
+  const info = safeErrorInfo(e);
+  if (info.kind === "pg") return `erro de banco ${String(info.code)}${info.constraint ? ` (restrição ${String(info.constraint)})` : ""}${info.table ? ` na tabela ${String(info.table)}` : ""}`;
+  if (typeof info.message === "string") return info.message;
+  return String(info.kind);
+}
+
 /** Executa uma operação de banco convertendo erros do driver em erros de domínio. */
 export async function withDbErrors<T>(fn: () => Promise<T>): Promise<T> {
   try {

@@ -346,3 +346,38 @@ Correções aplicadas no branch de trabalho, migração manual `0016`, decisões
 ### Situação do aceite da Etapa 3
 
 Executor: entregue com as correções das três rodadas aplicadas e testadas. Revisores: as três rodadas aceitas com correções; as da terceira rodada verificadas pelas baterias do Executor e pelos testes que falham no código anterior, sem quarta rodada independente, como na Etapa 2. Responsável pelo produto: validação pendente.
+
+## Demonstração do conceito em rhopenfinancebrasil.com (`DEC-45`)
+
+Data: 29/09/2026. Executor: sessão principal. Revisor: duas lentes independentes (segurança e privacidade; operação do deploy), com ensaio real do build de produção em bancos isolados (`rh_demo_r1`, `rh_demo_r2`) e refutação de cada achado por agente distinto.
+
+### Relato do Executor
+
+Preparação do repositório para publicar a demonstração na Vercel Pro com Neon, sem publicar nada: ambiente `APP_ENV=demo` (faixa em todas as telas, email desligado, sem indexação), ciclo de operação compartilhado entre o processo de fundo e a rota agendada `/api/cron/operacao`, build de produção com migração, conferência do banco e dados fictícios idempotentes, `vercel.json`, SQL de preparação do Neon e roteiro (`operacao/demo-vercel.md`). Ensaios executados: build de produção em banco vazio e repetido (idempotente), sem segredo da rota (recusado), sem a URL do dono (sem migração, banco conferido), prévia (não toca o banco); aplicação em modo demonstração com login pelo navegador (colaboradora no mapa; administração levada ao cadastro do segundo fator); rota agendada com 401 sem segredo e 200 com segredo; SQL de preparação rodado com papel sem superusuário.
+
+### Revisão independente (29/09/2026)
+
+17 achados relatados, 16 confirmados e 1 refutado (o indicador temporário de segundo fator durante a carga não dá poder novo a ninguém e o estado interrompido já é tratado); nenhum bloqueante, 3 médios, 13 baixos.
+
+| ID | Severidade | Achado | Tratamento |
+|---|---|---|---|
+| DV-01 | MÉDIA | Com a branch de produção igual à de trabalho, todo commit seria publicado e migraria o banco sem autorização | Corrigido: publicação só da branch `demo`, que avança por ato do responsável; `vercel.json` desliga deploy das branches `claude/...`; `DEC-45` |
+| DV-02 | MÉDIA | Tarefa a cada minuto impede o banco de dormir e esgota a cota gratuita do Neon por volta do 17º dia | Corrigido: a cada 15 minutos em dias úteis, das 08:00 às 19:59 de Brasília; cota documentada no roteiro |
+| DV-03 | MÉDIA | Migração dentro do build: esquema novo sob código antigo em falha de build e credencial do dono no ambiente de execução | Corrigido em parte, por decisão: sem a URL do dono o build não migra e diz isso; o roteiro manda apagá-la depois do primeiro deploy e exige migração compatível com o código anterior; a produção separa a migração (`DEC-45`) |
+| DV-04 | BAIXA | Falha de banco no build imprimia a consulta com parâmetros (hash de senha, link de convite) | Corrigido: saída de script sem consulta nem parâmetros (`safeErrorText`); teste de unidade |
+| DV-05 | BAIXA | Credenciais e senhas de demonstração em variáveis legíveis; integração Neon da Vercel injeta a credencial do dono do projeto | Corrigido no roteiro: variáveis secretas marcadas Sensitive, só em Production, apagadas depois do primeiro deploy; projeto do Neon criado direto em neon.com |
+| DV-06 | BAIXA | Com email desligado, a tela atribuía o bloqueio à lista de destinatários | Corrigido: "Não enviado: email desligado neste ambiente de demonstração"; a faixa avisa que nenhum email é enviado |
+| DV-07 | BAIXA | Sem `CRON_SECRET`, a outbox pararia em silêncio | Corrigido: o build de produção recusa a falta do segredo; roteiro manda conferir execução com 200 |
+| DV-08 | BAIXA | `bootstrap:admin --force` aceito em `APP_ENV=demo` | Corrigido: `--force` só em desenvolvimento e teste |
+| DV-09 | BAIXA | Emails das contas publicados e senha compartilhada: travamento e tomada de conta durante a apresentação | Registrado no roteiro, com as mitigações e o procedimento de recomeço |
+| DV-10 | BAIXA | Senha de demonstração vazada deixava a carga pela metade | Corrigido: consulta de vazamento antes de gravar; sem teste automatizado (a consulta fica desligada no banco de teste) |
+| DV-11 | BAIXA | Pool sem tratador de erro derrubaria o processo quando o banco encerrasse conexão ociosa | Corrigido: tratador que registra só o código do erro |
+| DV-12 | BAIXA | Integração Neon pela aba Storage conflita com o roteiro | Corrigido: o roteiro não a usa e diz por quê |
+| DV-13 | BAIXA | Conexão direta justificada por premissa incorreta; o pool do Neon é compatível com `DATABASE_TZ_OPTION=off` | Corrigido: aplicação com pool, migração com conexão direta; ensaio local só com conexão direta (o pool do Neon será exercitado no primeiro deploy) |
+| DV-14 | BAIXA | Passos do roteiro inexecutáveis como escritos e regra de senha inexata | Corrigido: variáveis na tela de importação, branch de produção `demo` depois da importação, "no máximo 10 dígitos no total", comentário do SQL |
+| DV-15 | BAIXA | Conferência do banco testava só `DELETE` na auditoria | Corrigido: `UPDATE`, `DELETE` e `TRUNCATE`, mais a URL do dono no mesmo banco; teste de integração |
+| DV-16 | BAIXA | Rota agendada e conferência do banco sem teste | Corrigido: testes de integração da rota (401 e 200 só com contagens) e da conferência (conforme, papel dono, bancos diferentes) |
+
+### Situação
+
+Preparação pronta no repositório; publicação, branch `demo` e DNS dependem da autorização do responsável, a registrar no `DEC-45`.

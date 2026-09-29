@@ -112,6 +112,10 @@ Testes executados em 29/09/2026 no ambiente desta sessão, sobre o código final
 
 Fora da Etapa 3, por desenho ou pendência: integração de calendário corporativo (fonte oficial não confirmada, `RSK-31`); validação do expediente e do prazo da oferta (`PAR-43`, `RSK-29`); ofertas imediatas nas mudanças de política de exclusividade, cobertas pela varredura (`DEC-39`); leitor de tela manual.
 
+## Demonstração do conceito (`DEC-45`)
+
+Preparação pronta no repositório para publicar a demonstração em rhopenfinancebrasil.com na Vercel Pro com Neon, com dados fictícios, email desligado e faixa de demonstração; revisão independente com 16 achados, todos tratados (`testes/aceite.md`). Roteiro em `operacao/demo-vercel.md`. Nada publicado: a publicação, a branch `demo` e o DNS aguardam autorização do responsável.
+
 ## Próximo passo
 
 Validação da Etapa 3 pelo responsável. Depois dela, Etapa 4 conforme `operacao/plano-de-entregas.md`.

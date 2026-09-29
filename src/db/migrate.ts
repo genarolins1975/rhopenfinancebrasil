@@ -2,6 +2,7 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
+import { safeErrorText } from "@/modules/shared/db-errors";
 
 /** Aplica as migrações SQL como papel dono. Nunca roda com o papel da aplicação. */
 export async function runMigrations(url = process.env.DATABASE_OWNER_URL): Promise<void> {
@@ -21,7 +22,7 @@ if (process.argv[1]?.endsWith("migrate.ts")) {
       process.exit(0);
     })
     .catch((e) => {
-      console.error("falha ao migrar:", e instanceof Error ? e.message : e);
+      console.error("falha ao migrar:", safeErrorText(e));
       process.exit(1);
     });
 }

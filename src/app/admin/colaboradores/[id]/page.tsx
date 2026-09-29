@@ -110,7 +110,7 @@ export default async function ColaboradorPage({ params, searchParams }: { params
               <ul className="space-y-1 text-sm">
                 {emp.invitations.map((i) => (
                   <li key={i.id}>
-                    {i.deliveryStatus === "sent" && i.sentAt ? `Enviado em ${formatLocal(i.sentAt)}` : i.deliveryStatus === "blocked" ? "Bloqueado: destinatário fora da lista permitida deste ambiente" : i.deliveryStatus === "failed" ? "Falha na entrega: tentativas esgotadas, reenvie o convite" : "Enfileirado, aguardando envio"}
+                    {i.deliveryStatus === "sent" && i.sentAt ? `Enviado em ${formatLocal(i.sentAt)}` : i.deliveryStatus === "blocked" ? (process.env.EMAIL_TRANSPORT === "none" ? "Não enviado: email desligado neste ambiente de demonstração" : "Bloqueado: destinatário fora da lista permitida deste ambiente") : i.deliveryStatus === "failed" ? "Falha na entrega: tentativas esgotadas, reenvie o convite" : "Enfileirado, aguardando envio"}
                     , válido até {formatLocal(i.expiresAt)}: {i.usedAt ? "usado" : i.revokedAt ? "revogado" : i.expired ? "expirado" : "válido"}
                   </li>
                 ))}

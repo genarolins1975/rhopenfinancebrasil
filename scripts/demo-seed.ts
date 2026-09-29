@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { accessGroup, authUser, employee, employeeOrgAssignment, employeePermission, employeeRole, employeeSensitive, employmentPeriod, resource } from "@/db/schema";
 import { addDays, localToday } from "@/modules/shared/dates";
+import { safeErrorText } from "@/modules/shared/db-errors";
 
 /*
  * Dados de demonstração (DEC-45). Só roda com APP_ENV=demo e banco sem nenhuma pessoa; nunca apaga nada.
@@ -39,11 +40,15 @@ export async function seedDemo(): Promise<DemoSeedResult> {
   const password = process.env.DEMO_PASSWORD ?? "";
   if (adminPassword === password) throw new Error("DEMO_ADMIN_PASSWORD e DEMO_PASSWORD precisam ser diferentes");
   const domain = (process.env.DEMO_EMAIL_DOMAIN ?? "demo.rhopenfinancebrasil.com").toLowerCase();
-  // Todas as senhas passam pela política do produto antes de qualquer gravação (sem carga pela metade).
-  const { checkPasswordPolicy } = await import("@/modules/identity/password");
+  // Todas as senhas passam pela política do produto e pela consulta de senhas vazadas (quando ligada) antes de qualquer
+  // gravação: sem carga pela metade.
+  const { checkPasswordPolicy, isPasswordBreached } = await import("@/modules/identity/password");
   for (const p of PERSONAS) {
     const check = checkPasswordPolicy(p.admin ? adminPassword : password, { email: `${p.key}@${domain}`, name: p.name });
     if (!check.ok) throw new Error(`${p.admin ? "DEMO_ADMIN_PASSWORD" : "DEMO_PASSWORD"} recusada pela política de senha para a conta ${p.key}: ${check.reason}`);
+  }
+  for (const [name, value] of [["DEMO_ADMIN_PASSWORD", adminPassword], ["DEMO_PASSWORD", password]] as const) {
+    if (await isPasswordBreached(value)) throw new Error(`${name} aparece em vazamentos conhecidos de senhas; escolha outra`);
   }
 
   const { protectCpf, syntheticCpf } = await import("@/modules/employees/cpf");
@@ -132,7 +137,7 @@ if (process.argv[1]?.endsWith("demo-seed.ts")) {
     console.log(r.skipped ? `dados de demonstração não criados: ${r.reason}` : `dados de demonstração criados: ${r.accounts.length} contas (${r.accounts.join(", ")}), ${r.bookings} reservas`);
     process.exit(0);
   })().catch((e) => {
-    console.error("falha nos dados de demonstração:", e instanceof Error ? e.message : e);
+    console.error("falha nos dados de demonstração:", safeErrorText(e));
     process.exit(1);
   });
 }

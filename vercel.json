@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm vercel-build",
   "ignoreCommand": "[ \"$VERCEL_ENV\" != \"production\" ]",
+  "git": { "deploymentEnabled": { "claude/*": false, "claude/**": false } },
   "regions": ["gru1"],
-  "crons": [{ "path": "/api/cron/operacao", "schedule": "* * * * *" }]
+  "crons": [{ "path": "/api/cron/operacao", "schedule": "*/15 11-22 * * 1-5" }]
 }

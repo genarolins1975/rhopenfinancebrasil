@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { env } from "@/modules/shared/env";
+import { logger } from "@/modules/shared/logger";
 import * as schema from "./schema";
 
 declare global {
@@ -16,6 +17,9 @@ function pool(): Pool {
       // Cada sessão informa o fuso; o papel e o banco também o fixam. Defesa em profundidade.
       ...(env().DATABASE_TZ_OPTION === "on" ? { options: "-c timezone=America/Sao_Paulo" } : {}),
     });
+    // Conexão ociosa encerrada pelo servidor (reinício, suspensão do compute, recriação do banco): o pool descarta o
+    // cliente; sem este ouvinte, o evento derrubaria o processo. Só o código do erro vai para o log.
+    globalThis.__rhPool.on("error", (e) => logger.warn({ code: (e as { code?: string }).code ?? null }, "conexão ociosa do banco encerrada"));
   }
   return globalThis.__rhPool;
 }

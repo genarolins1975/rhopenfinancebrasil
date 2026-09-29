@@ -28,8 +28,8 @@ async function main() {
     process.exit(2);
   }
   const appEnv = process.env.APP_ENV ?? "development";
-  if (values.force && (appEnv === "production" || appEnv === "homolog")) {
-    console.error("--force não é permitido em homologação nem em produção; use o procedimento de acesso emergencial documentado");
+  if (values.force && appEnv !== "development" && appEnv !== "test") {
+    console.error("--force só é permitido em desenvolvimento e teste; use o procedimento de acesso emergencial documentado");
     process.exit(1);
   }
   const email = values.email.trim().toLowerCase();
