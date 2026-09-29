@@ -27,7 +27,8 @@ export default async function EscritorioPage({ searchParams }: { searchParams: P
   const map = await publishedMap(db).catch(() => null);
   const items = loaded?.items ?? [];
   const zones = [...new Set(items.map((i) => i.resource.zoneName).filter((z): z is string => !!z))];
-  const filtered = items.filter((i) => (!sp.zona || i.resource.zoneName === sp.zona) && (!sp.estado || i.availability.code === sp.estado));
+  const stateKey = (a: (typeof items)[number]["availability"]) => (a.offerPending ? "offered" : a.code);
+  const filtered = items.filter((i) => (!sp.zona || i.resource.zoneName === sp.zona) && (!sp.estado || stateKey(i.availability) === sp.estado));
   const states = new Map(items.map((i) => [i.resource.id, i]));
   const key = randomUUID();
   const ctx = loaded?.ctx;
@@ -72,7 +73,7 @@ export default async function EscritorioPage({ searchParams }: { searchParams: P
           <Select id="estado" name="estado" defaultValue={sp.estado ?? ""}>
             <option value="">Todos</option>
             {Object.entries(STATE_STYLE)
-              .filter(([k]) => ["available", "reserved", "mine", "exclusive", "blocked", "maintenance"].includes(k))
+              .filter(([k]) => ["available", "reserved", "mine", "offered", "exclusive", "blocked", "maintenance"].includes(k))
               .map(([k, v]) => (
                 <option key={k} value={k}>
                   {v.text}
@@ -119,7 +120,7 @@ export default async function EscritorioPage({ searchParams }: { searchParams: P
       {canQueue ? (
         <div className="mb-4">
           <Card title="Nenhuma mesa disponível para você nesta data">
-            <p className="mb-3 text-sm">Entre na fila de espera. Quando uma mesa for liberada, a primeira pessoa elegível da fila recebe a oferta com prazo para aceitar. Mesas de uso exclusivo nunca são oferecidas pela fila.</p>
+            <p className="mb-3 text-sm">Entre na fila de espera. Quando uma mesa for liberada, a primeira pessoa elegível da fila recebe a oferta com prazo para aceitar. Mesa de uso exclusivo só é oferecida a quem pode usá-la.</p>
             <JoinQueueForm date={date} zones={queueZones} />
           </Card>
         </div>

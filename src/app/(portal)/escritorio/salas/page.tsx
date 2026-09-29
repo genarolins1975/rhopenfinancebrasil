@@ -23,7 +23,10 @@ export default async function SalasPage({ searchParams }: { searchParams: Promis
   const current = await requireCurrent();
   const sp = await searchParams;
   const def = suggestedSlot(new Date());
-  const date = isValidIsoDate(sp.data) ? sp.data : addDays(localToday(), def.dayOffset);
+  // Link com a data de hoje aberto depois das 23:00 (QR, tela do recurso): sem horário pedido, a busca vai ao dia seguinte,
+  // como a busca sem parâmetros, em vez de um trecho de hoje já encerrado (segunda revisão, ID-08).
+  const today = localToday();
+  const date = isValidIsoDate(sp.data) && !(sp.data === today && def.dayOffset === 1 && !sp.inicio) ? sp.data : addDays(today, def.dayOffset);
   const start = sp.inicio && HHMM.test(sp.inicio) ? sp.inicio : def.start;
   const end = sp.fim && END.test(sp.fim) ? sp.fim : def.end;
   const capacity = Number(sp.capacidade) > 0 ? Math.min(99, Math.floor(Number(sp.capacidade))) : null;

@@ -30,11 +30,15 @@ export default async function RecursoPage({ params, searchParams }: { params: Pr
       <PageHeader title={`${r.type === "desk" ? "Mesa" : r.type === "room" ? "Sala" : "Cabine"} ${r.code}`} lead={`${r.zoneName ?? "Sem zona"}. Estado para você em ${formatLocalDate(date)}.`} actions={<Link href={`/escritorio?data=${date}`} className="underline">Voltar ao escritório</Link>} />
       <div className="grid gap-6 md:grid-cols-2">
         <Card title="Estado">
-          <p className="text-lg font-semibold">
-            <span aria-hidden="true">{style.icon} </span>
-            {a.label}
-          </p>
-          <p className="mt-1 text-sm text-text-muted">Razão: {a.reason}.</p>
+          {r.type === "desk" ? (
+            <>
+              <p className="text-lg font-semibold">
+                <span aria-hidden="true">{(a.offerPending ? STATE_STYLE.offered : style).icon} </span>
+                {a.label}
+              </p>
+              <p className="mt-1 text-sm text-text-muted">Razão: {a.reason}.</p>
+            </>
+          ) : null}
           {a.publicReason ? <p className="mt-1 text-sm">{a.publicReason}</p> : null}
           {a.exclusiveMine ? (
             <div className="mt-3">
@@ -50,7 +54,7 @@ export default async function RecursoPage({ params, searchParams }: { params: Pr
           <div className="mt-4">
             {r.type !== "desk" ? (
               <p className="text-sm">
-                Salas e cabines são reservadas por intervalo em{" "}
+                A ocupação de salas e cabines muda ao longo do dia. Veja a agenda e reserve por intervalo em{" "}
                 <Link href={`/escritorio/salas?data=${date}`} className="underline">
                   Salas e cabines
                 </Link>

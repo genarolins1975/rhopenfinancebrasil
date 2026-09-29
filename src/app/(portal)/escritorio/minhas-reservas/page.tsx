@@ -2,9 +2,8 @@ import Link from "next/link";
 import { Alert, Card, EmptyState, PageHeader, StatusBadge, Table, td, th } from "@/components/ui";
 import { db } from "@/db/client";
 import { habitualDesk, listMyBookings } from "@/modules/booking/service";
-import { usageOfDeskBookings, usageOfSpaceBookings } from "@/modules/checkin/service";
+import { pendingUseConfirmation, usageOfDeskBookings, usageOfSpaceBookings } from "@/modules/checkin/service";
 import { requireCurrent } from "@/modules/identity/session";
-import { readSettings } from "@/modules/office/shared";
 import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { mySpaceBookings } from "@/modules/spaces/service";
 import { myQueue } from "@/modules/waitlist/service";
@@ -26,14 +25,14 @@ export default async function MinhasReservasPage() {
   const deskUse = await usageOfDeskBookings(db, upcoming.filter((b) => b.date === today).map((b) => b.id));
   const spaceUse = await usageOfSpaceBookings(db, spaces.upcoming.filter((s) => s.date === today).map((s) => s.id));
   const confirmedDesks = upcoming.filter((b) => b.status === "confirmed");
-  const settings = await readSettings(db);
+  const deadline = await pendingUseConfirmation(db, current.employee.id);
   return (
     <>
       <PageHeader title="Minhas reservas" lead="Mesas, salas, ofertas e fila de espera. Cancelar reflete no mapa na hora." actions={<Link href="/escritorio" className="underline">Ir ao escritório</Link>} />
       {habitual ? <p className="mb-4 text-sm text-text-muted">Sua mesa habitual: {habitual.code}. Cancelar uma reserva nela não altera a exclusividade.</p> : null}
-      {settings.checkinReleaseEnabled && confirmedDesks.some((b) => b.date === today) ? (
+      {deadline ? (
         <div className="mb-4">
-          <Alert kind="warning">Confirme o uso da reserva de hoje até {settings.checkinReleaseTime}. Reserva de mesa compartilhada feita antes desse horário e sem confirmação é liberada para outra pessoa. Mesa de uso exclusivo nunca é liberada.</Alert>
+          <Alert kind="warning">Confirme o uso da sua reserva de mesa de hoje até {deadline}. Sem confirmação até esse horário, a mesa é liberada para outra pessoa.</Alert>
         </div>
       ) : null}
       {offers.length ? (

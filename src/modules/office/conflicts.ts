@@ -3,7 +3,7 @@ import type { DbOrTx, Tx } from "@/db/client";
 import { deskBooking, employee, resource, spaceBooking } from "@/db/schema";
 import { recordAudit } from "@/modules/audit/audit";
 import { enqueueOutbox } from "@/modules/notifications/outbox";
-import { bookingChangedEmail, spaceBookingChangedEmail } from "@/modules/notifications/templates";
+import { bookingChangedEmail, spaceBookingChangedEmail, waitlistChangedEmail } from "@/modules/notifications/templates";
 import { formatLocalDate } from "@/modules/shared/dates";
 import { ConflictError, ValidationError } from "@/modules/shared/errors";
 import { explainFor } from "@/modules/availability/service";
@@ -153,7 +153,7 @@ export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: In
           eventType: "email.waitlist",
           aggregateType: "desk_booking",
           aggregateId: c.bookingId,
-          payload: { message: bookingChangedEmail(emp.email, emp.name, `A mesa ${c.resourceCode} oferecida a você para ${formatLocalDate(c.date)} deixou de estar disponível. ${opts.notice} Você continua na fila de espera dessa data. ${d.message?.trim() ?? ""}`.trim()) },
+          payload: { message: waitlistChangedEmail(emp.email, emp.name, `A mesa ${c.resourceCode} oferecida a você para ${formatLocalDate(c.date)} deixou de estar disponível. ${opts.notice} Você continua na fila de espera dessa data. ${d.message?.trim() ?? ""}`.trim()) },
           idempotencyKey: `waitlist.withdrawn:${c.bookingId}`,
         });
       }

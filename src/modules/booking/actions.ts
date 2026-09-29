@@ -22,7 +22,11 @@ export async function bookDeskAction(_prev: ActionState, fd: FormData): Promise<
     const r = await bookDesk(db, actor, { employeeId: current.employee.id, resourceId: str(fd, "resourceId"), date, idempotencyKey: str(fd, "idempotencyKey") });
     revalidatePath("/escritorio");
     revalidatePath("/inicio");
-    return { ok: true, message: `Mesa ${r.resourceCode} reservada para ${date.split("-").reverse().join("/")}.`, data: { bookingId: r.bookingId, back } };
+    // PAR-06 ativa: quem reserva para hoje antes do limite fica sabendo do prazo no ato (segunda revisão, ID-10).
+    const { pendingUseConfirmation } = await import("@/modules/checkin/service");
+    const deadline = r.created ? await pendingUseConfirmation(db, current.employee.id) : null;
+    const note = deadline ? ` Confirme o uso até ${deadline}; sem confirmação, a mesa é liberada para outra pessoa.` : "";
+    return { ok: true, message: `Mesa ${r.resourceCode} reservada para ${date.split("-").reverse().join("/")}.${note}`, data: { bookingId: r.bookingId, back } };
   } catch (e) {
     return unexpected(e, "reservar mesa", actor.requestId);
   }
@@ -36,7 +40,10 @@ export async function cancelDeskAction(_prev: ActionState, fd: FormData): Promis
     revalidatePath("/escritorio");
     revalidatePath("/escritorio/minhas-reservas");
     revalidatePath("/admin/reservas");
-    return { ok: true, message: `Reserva da mesa ${r.resourceCode} em ${r.date.split("-").reverse().join("/")} cancelada. A política de uso da mesa não muda com isso.` };
+    const when = r.date.split("-").reverse().join("/");
+    if (r.kind === "withdrawn") return { ok: true, message: `Oferta da mesa ${r.resourceCode} em ${when} retirada. A pessoa continua na fila, na mesma posição, e foi avisada; esta mesa não volta a ser oferecida a ela nesta data.` };
+    if (r.kind === "declined") return { ok: true, message: `Oferta da mesa ${r.resourceCode} em ${when} recusada. Você saiu da fila dessa data.` };
+    return { ok: true, message: `Reserva da mesa ${r.resourceCode} em ${when} cancelada. A política de uso da mesa não muda com isso.` };
   } catch (e) {
     return unexpected(e, "cancelar reserva", actor.requestId);
   }

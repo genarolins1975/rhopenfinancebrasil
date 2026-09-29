@@ -21,9 +21,9 @@ export async function loadPerson(db: DbOrTx, employeeId: string): Promise<Person
   return { id: row.id, status: row.status, canBookSelf: access.permissions.has("booking.self.manage") };
 }
 
-export async function personBookingOn(db: DbOrTx, employeeId: string, date: string): Promise<{ resourceId: string; id: string } | null> {
+export async function personBookingOn(db: DbOrTx, employeeId: string, date: string): Promise<{ resourceId: string; id: string; status: "confirmed" | "held" } | null> {
   const [row] = await db
-    .select({ id: deskBooking.id, resourceId: deskBooking.resourceId })
+    .select({ id: deskBooking.id, resourceId: deskBooking.resourceId, status: sql<"confirmed" | "held">`${deskBooking.status}::text` })
     .from(deskBooking)
     .where(and(eq(deskBooking.employeeId, employeeId), eq(deskBooking.bookingDate, date), activeBookingWhere()));
   return row ?? null;

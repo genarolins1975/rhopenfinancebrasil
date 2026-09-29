@@ -6,7 +6,7 @@ import { recordAudit } from "@/modules/audit/audit";
 import { explain, type Availability } from "@/modules/availability/rules";
 import { loadDayContext, loadPerson, loadResourcesOnDate, personBookingOn } from "@/modules/availability/service";
 import { enqueueOutbox } from "@/modules/notifications/outbox";
-import { bookingChangedEmail, bookingOnBehalfEmail } from "@/modules/notifications/templates";
+import { bookingChangedEmail, bookingOnBehalfEmail, waitlistChangedEmail } from "@/modules/notifications/templates";
 import { formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { type Actor, advisoryPersonDay, advisoryShareDay, assertIsoDate, assertUuid, expireHolds, lockDaysAndPeople, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
@@ -134,10 +134,12 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
 }
 
 /** Cancelamento próprio ou administrativo. Cancelar reserva do titular não altera a exclusividade (DIR-006). */
-export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input: { reason?: string; message?: string } = {}): Promise<{ resourceCode: string; date: string }> {
+export type CancelOutcome = { resourceCode: string; date: string; kind: "cancelled" | "declined" | "withdrawn" };
+
+export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input: { reason?: string; message?: string } = {}): Promise<CancelOutcome> {
   assertUuid(bookingId, "Reserva");
   // A expiração da retenção vencida precisa ser gravada mesmo quando o cancelamento é recusado: o erro sai depois do commit.
-  const outcome = await withOfficeTx(db, async (tx): Promise<{ resourceCode: string; date: string } | { expired: true }> => {
+  const outcome = await withOfficeTx(db, async (tx): Promise<CancelOutcome | { expired: true }> => {
     const [b] = await tx
       .select({ id: deskBooking.id, resourceId: deskBooking.resourceId, employeeId: deskBooking.employeeId, date: deskBooking.bookingDate, status: deskBooking.status, code: resource.code })
       .from(deskBooking)
@@ -183,7 +185,7 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
           eventType: b.status === "held" ? "email.waitlist" : "email.booking_changed",
           aggregateType: "desk_booking",
           aggregateId: bookingId,
-          payload: { message: bookingChangedEmail(emp.email, emp.name, text.trim()) },
+          payload: { message: (b.status === "held" ? waitlistChangedEmail : bookingChangedEmail)(emp.email, emp.name, text.trim()) },
           idempotencyKey: `booking.cancelled:${bookingId}`,
         });
       }
@@ -191,7 +193,7 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
     // DIR-034 e PAR-37: a mesa liberada é oferecida à próxima pessoa elegível na mesma transação. Mesa exclusiva do
     // titular não é oferecida a quem não é elegível (DIR-025): a mesma função de disponibilidade decide.
     await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidates, requestId: actor.requestId });
-    return { resourceCode: b.code, date: b.date };
+    return { resourceCode: b.code, date: b.date, kind: b.status === "held" ? (own ? "declined" : "withdrawn") : "cancelled" };
   });
   if ("expired" in outcome) throw new ConflictError("Esta reserva já não está ativa (a oferta da fila venceu).");
   return outcome;
@@ -298,7 +300,13 @@ export async function weekOverview(db: DbOrTx, employeeId: string, dates: string
     .from(deskBooking)
     .innerJoin(resource, eq(resource.id, deskBooking.resourceId))
     .where(and(eq(deskBooking.employeeId, employeeId), inArray(deskBooking.bookingDate, dates), eq(deskBooking.status, "confirmed")));
-  return dates.map((date) => ({ date, intent: intents.find((i) => i.date === date)?.intent ?? "not_informed", booking: bookings.find((b) => b.date === date) ?? null }));
+  // Oferta da fila viva: aparece como oferta, nunca como reserva (DEC-40).
+  const offers = await db
+    .select({ date: deskBooking.bookingDate, code: resource.code })
+    .from(deskBooking)
+    .innerJoin(resource, eq(resource.id, deskBooking.resourceId))
+    .where(and(eq(deskBooking.employeeId, employeeId), inArray(deskBooking.bookingDate, dates), eq(deskBooking.status, "held"), sql`${deskBooking.holdExpiresAt} > now()`));
+  return dates.map((date) => ({ date, intent: intents.find((i) => i.date === date)?.intent ?? "not_informed", booking: bookings.find((b) => b.date === date) ?? null, offer: offers.find((o) => o.date === date) ?? null }));
 }
 
 /** Mesa habitual do titular: atribuição individual vigente hoje (DIR-009). */

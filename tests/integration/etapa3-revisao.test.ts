@@ -395,14 +395,15 @@ describe("revisão independente da Etapa 3: regressão", () => {
     await expect(bookSpace(db, actorOf(a), { resourceId: room.id, date: monday(5), start: "10:00", end: "11:00", idempotencyKey: randomUUID() })).rejects.toThrow(/além do horizonte de 4 semana/);
   });
 
-  it("T-02: fechar o dia de hoje não esbarra em reserva de sala já encerrada", async () => {
+  it("T-02: fechar o dia de hoje não esbarra em reserva de sala já encerrada", async (ctx) => {
+    // A reserva encerrada vai do início do dia local até 30 segundos atrás: cai sempre em hoje. Só nos 2 primeiros minutos
+    // do dia não há intervalo encerrado possível, e o teste aparece como pulado no relatório.
+    const since = (await ownerQuery("select extract(epoch from now() - lower(local_day_range(local_today())))::int as s")).rows[0].s as number;
+    if (since < 120) ctx.skip();
     const a = await seedEmployee();
     const room = await seedDesk("SALA1", "room");
-    await ownerQuery("insert into space_booking (resource_id, employee_id, actor_employee_id, period, status) values ($1, $2, $2, tstzrange(now() - interval '3 hours', now() - interval '2 hours', '[)'), 'confirmed')", [room.id, a.id]);
+    await ownerQuery("insert into space_booking (resource_id, employee_id, actor_employee_id, period, status) values ($1, $2, $2, tstzrange(lower(local_day_range(local_today())), now() - interval '30 seconds', '[)'), 'confirmed')", [room.id, a.id]);
     const fac = await privilegedActor({ roles: ["facilities"] });
-    const now = new Date();
-    const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(now));
-    if (h < 3) return; // a reserva encerrada precisa cair no dia de hoje; antes das 03:00 ela seria de ontem
     expect((await previewCloseDay(db, fac.actor, today)).conflicts).toHaveLength(0);
     await expect(closeDay(db, fac.actor, { date: today, reason: "queda de energia" })).resolves.toBeUndefined();
   });

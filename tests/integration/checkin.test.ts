@@ -126,6 +126,8 @@ describe("confirmação de uso", () => {
     const minutesLeft = (new TZDate(new Date(), "America/Sao_Paulo").setHours(24, 0, 0, 0) - Date.now()) / 60_000;
     if (minutesLeft >= 16) expect(offer.resourceId).toBe(s1.id);
     else if (minutesLeft < 14) expect(offer).toBeUndefined();
+    // Na fronteira dos 15 minutos o relógio decide entre os dois desfechos; nunca oferta de outra mesa.
+    else expect(offer === undefined || offer.resourceId === s1.id).toBe(true);
     expect(await db.select().from(outboxEvent).where(and(eq(outboxEvent.eventType, "email.booking_changed"), eq(outboxEvent.aggregateId, b1.bookingId)))).toHaveLength(1);
     // antes do horário limite nada acontece
     await ownerQuery(`update office_settings set value = '"23:59"' where key = 'checkin_release_time'`);

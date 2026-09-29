@@ -27,7 +27,7 @@ export default async function QrPage({ params }: { params: Promise<{ code: strin
       <Card>
         {!booking ? (
           <>
-            <Alert kind="info">Você não tem reserva confirmada em {upper} hoje.</Alert>
+            <Alert kind="info">{kind === "desk" ? `Você não tem reserva confirmada em ${upper} hoje.` : `Você não tem reserva confirmada em ${upper} em andamento ou começando nos próximos 15 minutos.`}</Alert>
             <p className="mt-3 text-sm">
               <Link href={kind === "desk" ? `/escritorio/recursos/${upper}` : `/escritorio/salas?data=${localToday()}`} className="underline">
                 {kind === "desk" ? `Ver a situação de ${upper}` : "Buscar sala ou cabine"}
@@ -40,10 +40,10 @@ export default async function QrPage({ params }: { params: Promise<{ code: strin
             </p>
           </>
         ) : booking.confirmedAt ? (
-          <Alert kind="success">Uso de {upper} já confirmado hoje às {formatLocal(booking.confirmedAt, "HH:mm")}.</Alert>
+          <Alert kind="success">Uso de {upper}{booking.slot ? ` (${booking.slot})` : ""} já confirmado hoje às {formatLocal(booking.confirmedAt, "HH:mm")}.</Alert>
         ) : (
           <>
-            <p className="mb-3 text-sm">Sua reserva de hoje em {upper} está confirmada. Confirmar o uso é uma declaração sua. Não é registro de presença, ponto nem produtividade.</p>
+            <p className="mb-3 text-sm">Sua reserva de hoje em {upper}{booking.slot ? `, das ${booking.slot},` : ""} está confirmada. Confirmar o uso é uma declaração sua. Não é registro de presença, ponto nem produtividade.</p>
             <ConfirmUseForm resourceCode={upper} method="qr" />
           </>
         )}

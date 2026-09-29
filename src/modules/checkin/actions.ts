@@ -20,7 +20,8 @@ export async function confirmUseAction(_prev: ActionState, fd: FormData): Promis
     const r = await confirmUse(db, actor, { bookingId: str(fd, "bookingId") || undefined, spaceBookingId: str(fd, "spaceBookingId") || undefined, resourceCode: str(fd, "resourceCode") || undefined, method });
     revalidatePath("/escritorio/minhas-reservas");
     revalidatePath("/escritorio/qr/[code]", "page");
-    return { ok: true, message: r.already ? `Uso de ${r.resourceCode} já estava confirmado hoje.` : `Uso de ${r.resourceCode} confirmado. Isso é uma declaração sua, não registro de presença ou ponto.` };
+    const what = r.slot ? `${r.resourceCode} (${r.slot})` : r.resourceCode;
+    return { ok: true, message: r.already ? `Uso de ${what} já estava confirmado hoje.` : `Uso de ${what} confirmado. Isso é uma declaração sua, não registro de presença ou ponto.` };
   } catch (e) {
     return unexpected(e, "confirmar uso", actor.requestId);
   }

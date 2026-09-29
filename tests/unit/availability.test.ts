@@ -102,6 +102,11 @@ describe("ordem de cálculo de disponibilidade (DIR-019)", () => {
     expect(a.code).toBe("daily_limit");
     expect(a.reason).toBe("você já tem reserva neste dia");
   });
+  it("oferta da fila pendente em outra mesa: a razão diz oferta, não reserva (DEC-40)", () => {
+    const a = explain(active, desk(), ctx({ personBooking: { id: "z", resourceId: "r9", status: "held" } }));
+    expect(a.code).toBe("daily_limit");
+    expect(a.reason).toMatch(/oferta da fila pendente/);
+  });
   it("disponível para você", () => {
     expect(explain(active, desk(), ctx()).canBook).toBe(true);
   });

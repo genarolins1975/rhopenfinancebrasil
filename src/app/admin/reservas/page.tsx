@@ -51,14 +51,14 @@ export default async function ReservasAdminPage({ searchParams }: { searchParams
           Aplicar
         </button>
       </form>
-      {aba === "mesas" ? await DesksTab({ date, canManage: p.has("booking.admin.manage"), canOnBehalf: p.has("booking.on_behalf.create") }) : null}
+      {aba === "mesas" ? await DesksTab({ date, canManage: p.has("booking.admin.manage"), canOnBehalf: p.has("booking.on_behalf.create"), viewerId: current.employee.id }) : null}
       {aba === "fila" ? await QueueTab({ date, holderView: p.has("exclusive.holder.view") || p.has("booking.admin.manage") }) : null}
       {aba === "salas" ? await SpacesTab({ date, viewerId: current.employee.id }) : null}
     </>
   );
 }
 
-async function DesksTab({ date, canManage, canOnBehalf }: { date: string; canManage: boolean; canOnBehalf: boolean }) {
+async function DesksTab({ date, canManage, canOnBehalf, viewerId }: { date: string; canManage: boolean; canOnBehalf: boolean; viewerId: string }) {
   const bookings = await listBookingsAdmin(db, { date });
   const use = await usageOfDeskBookings(db, bookings.map((b) => b.id));
   const people = canOnBehalf ? await db.select({ id: employee.id, name: employee.fullName }).from(employee).where(eq(employee.status, "active")).orderBy(asc(employee.fullName)) : [];
@@ -91,7 +91,14 @@ async function DesksTab({ date, canManage, canOnBehalf }: { date: string; canMan
                   </td>
                   {canManage ? (
                     <td className={td}>
-                      <CancelForm bookingId={b.id} admin label={b.status === "held" ? "Retirar oferta (a pessoa continua na fila)" : "Cancelar com motivo"} />
+                      {b.status === "held" && b.employeeId === viewerId ? (
+                        // A própria oferta de quem opera não é "retirada": aceitar ou recusar é em Minhas reservas.
+                        <Link href="/escritorio/minhas-reservas" className="text-sm underline">
+                          Sua oferta: aceitar ou recusar em Minhas reservas
+                        </Link>
+                      ) : (
+                        <CancelForm bookingId={b.id} admin label={b.status === "held" ? "Retirar oferta (a pessoa continua na fila)" : "Cancelar com motivo"} />
+                      )}
                     </td>
                   ) : null}
                 </tr>
@@ -166,7 +173,7 @@ async function QueueTab({ date, holderView }: { date: string; holderView: boolea
             </tbody>
           </Table>
         )}
-        <p className="mt-3 text-xs text-text-muted">A oferta automática segue a ordem de entrada e a mesma regra de disponibilidade da reserva direta. Mesa de uso exclusivo nunca é oferecida pela fila.</p>
+        <p className="mt-3 text-xs text-text-muted">A oferta automática segue a ordem de entrada e a mesma regra de disponibilidade da reserva direta. Mesa de uso exclusivo só é oferecida pela fila a quem pode usá-la (titular, integrante do grupo ou beneficiário de liberação vigente).</p>
       </Card>
       <Card title="Demanda não atendida (próximos 14 dias)">
         {demand.length === 0 ? (

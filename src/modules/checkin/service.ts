@@ -6,6 +6,7 @@ import { recordAudit } from "@/modules/audit/audit";
 import { enqueueOutbox } from "@/modules/notifications/outbox";
 import { bookingChangedEmail } from "@/modules/notifications/templates";
 import { formatLocalDate, localToday, TZ } from "@/modules/shared/dates";
+import { formatSlot } from "@/modules/spaces/rules";
 import { ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { logger } from "@/modules/shared/logger";
 import { type Actor, advisoryShareDay, assertUuid, lockResources, readSettings, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
@@ -21,12 +22,14 @@ import { format } from "date-fns";
  */
 
 export type ConfirmUseInput = { bookingId?: string; spaceBookingId?: string; resourceCode?: string; method: "portal" | "qr" };
-export type ConfirmUseResult = { kind: "desk" | "space"; bookingId: string; resourceCode: string; date: string; already: boolean };
+export type ConfirmUseResult = { kind: "desk" | "space"; bookingId: string; resourceCode: string; date: string; already: boolean; slot?: string };
 
 const CODE_RE = /^[A-Z0-9-]{2,12}$/i;
 
+const slotOf = (s: { lower: string; upper: string }) => formatSlot({ start: new Date(s.lower), end: new Date(s.upper) });
+
 /** Reserva confirmada da própria pessoa hoje (por id ou pelo código do recurso do QR). Reserva alheia é inexistente. */
-async function resolveOwnBookingToday(db: DbOrTx, employeeId: string, input: ConfirmUseInput): Promise<{ kind: "desk" | "space"; id: string; code: string }> {
+async function resolveOwnBookingToday(db: DbOrTx, employeeId: string, input: ConfirmUseInput): Promise<{ kind: "desk" | "space"; id: string; code: string; slot?: string }> {
   const today = localToday();
   if (input.bookingId) {
     assertUuid(input.bookingId, "Reserva");
@@ -41,11 +44,11 @@ async function resolveOwnBookingToday(db: DbOrTx, employeeId: string, input: Con
   if (input.spaceBookingId) {
     assertUuid(input.spaceBookingId, "Reserva");
     const [s] = await db
-      .select({ id: spaceBooking.id, code: resource.code })
+      .select({ id: spaceBooking.id, code: resource.code, lower: sql<string>`lower(${spaceBooking.period})`, upper: sql<string>`upper(${spaceBooking.period})` })
       .from(spaceBooking)
       .innerJoin(resource, eq(resource.id, spaceBooking.resourceId))
       .where(and(eq(spaceBooking.id, input.spaceBookingId), eq(spaceBooking.employeeId, employeeId), eq(spaceBooking.status, "confirmed"), sql`${spaceBooking.period} && local_day_range(local_today())`));
-    if (s) return { kind: "space", id: s.id, code: s.code };
+    if (s) return { kind: "space", id: s.id, code: s.code, slot: slotOf(s) };
     throw new ValidationError("Reserva não encontrada para você hoje.");
   }
   if (input.resourceCode && CODE_RE.test(input.resourceCode)) {
@@ -59,12 +62,12 @@ async function resolveOwnBookingToday(db: DbOrTx, employeeId: string, input: Con
     // Sala pelo QR: só a reserva em andamento ou a que começa em até 15 minutos (T-05, N6); a em andamento vem primeiro,
     // mesmo já confirmada, para que uma segunda leitura responda "já confirmado" em vez de confirmar a próxima.
     const [s] = await db
-      .select({ id: spaceBooking.id, code: resource.code })
+      .select({ id: spaceBooking.id, code: resource.code, lower: sql<string>`lower(${spaceBooking.period})`, upper: sql<string>`upper(${spaceBooking.period})` })
       .from(spaceBooking)
       .innerJoin(resource, eq(resource.id, spaceBooking.resourceId))
       .where(and(eq(resource.code, code), eq(spaceBooking.employeeId, employeeId), eq(spaceBooking.status, "confirmed"), sql`upper(${spaceBooking.period}) > now()`, sql`lower(${spaceBooking.period}) <= now() + interval '15 minutes'`))
       .orderBy(asc(sql`lower(${spaceBooking.period})`));
-    if (s) return { kind: "space", id: s.id, code: s.code };
+    if (s) return { kind: "space", id: s.id, code: s.code, slot: slotOf(s) };
     const [r] = await db.select({ type: resource.type }).from(resource).where(eq(resource.code, code));
     if (r && r.type !== "desk") throw new ValidationError(`Você não tem reserva confirmada em ${code} em andamento ou começando nos próximos 15 minutos.`);
     throw new ValidationError(`Você não tem reserva confirmada em ${code} hoje.`);
@@ -94,7 +97,7 @@ export async function confirmUse(db: Db, actor: Actor, input: ConfirmUseInput): 
     if (row) {
       await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "booking.use_confirmed", entityType: target.kind === "desk" ? "desk_booking" : "space_booking", entityId: target.id, after: { method: input.method, checkinId: row.id }, requestId: actor.requestId });
     }
-    return { kind: target.kind, bookingId: target.id, resourceCode: target.code, date: localToday(), already: !row };
+    return { kind: target.kind, bookingId: target.id, resourceCode: target.code, date: localToday(), already: !row, slot: target.slot };
   });
 }
 
@@ -112,7 +115,7 @@ export async function usageOfSpaceBookings(db: DbOrTx, bookingIds: string[]): Pr
 }
 
 /** Reserva de mesa da própria pessoa hoje num recurso (tela do QR). */
-export async function ownBookingTodayOn(db: DbOrTx, employeeId: string, resourceCode: string): Promise<{ kind: "desk" | "space"; id: string; code: string; confirmedAt: Date | null } | null> {
+export async function ownBookingTodayOn(db: DbOrTx, employeeId: string, resourceCode: string): Promise<{ kind: "desk" | "space"; id: string; code: string; slot?: string; confirmedAt: Date | null } | null> {
   try {
     const t = await resolveOwnBookingToday(db, employeeId, { resourceCode, method: "qr" });
     const usage = t.kind === "desk" ? await usageOfDeskBookings(db, [t.id]) : await usageOfSpaceBookings(db, [t.id]);
@@ -125,6 +128,24 @@ export async function ownBookingTodayOn(db: DbOrTx, employeeId: string, resource
 /** Endereço que o QR impresso na mesa carrega: o servidor resolve a reserva da sessão, nunca o QR. */
 export function qrUrlFor(baseUrl: string, resourceCode: string): string {
   return `${baseUrl.replace(/\/$/, "")}/escritorio/qr/${encodeURIComponent(resourceCode)}`;
+}
+
+/**
+ * Aviso de prazo (PAR-06, PAR-44) só para quem será de fato atingido: liberação ativa, antes do limite de hoje, reserva
+ * confirmada de hoje em mesa compartilhada e nenhuma confirmação de uso de mesa hoje. Devolve o horário limite ou null.
+ */
+export async function pendingUseConfirmation(db: DbOrTx, employeeId: string, now = new Date()): Promise<string | null> {
+  const settings = await readSettings(db);
+  if (!settings.checkinReleaseEnabled) return null;
+  if (format(new TZDate(now, TZ), "HH:mm") >= settings.checkinReleaseTime) return null;
+  const today = localToday(now);
+  const rows = await db.execute(sql`
+    select 1 from desk_booking b
+     where b.employee_id = ${employeeId}::uuid and b.booking_date = ${today}::date and b.status = 'confirmed'
+       and desk_class(b.resource_id, b.booking_date) = 'shared'
+       and not exists (select 1 from checkin c join desk_booking o on o.id = c.desk_booking_id
+                        where o.employee_id = b.employee_id and o.booking_date = b.booking_date)`);
+  return rows.rows.length ? settings.checkinReleaseTime : null;
 }
 
 /**

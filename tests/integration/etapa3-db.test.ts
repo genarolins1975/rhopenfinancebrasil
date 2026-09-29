@@ -67,7 +67,7 @@ describe("DB-01 da Etapa 3: rede do banco com o papel da aplicação", () => {
     const other = await seedEmployee();
     const [otherEntry] = await db.insert(waitlistEntry).values({ employeeId: other.id, date: d(1) }).returning();
     // retenção de outra pessoa
-    expect(await dbError(() => db.insert(waitlistOffer).values({ entryId: otherEntry.id, resourceId: desk.id, holdBookingId: offer.holdBookingId, expiresAt: offer.expiresAt }))).toMatch(/offer_inconsistent|duplicate key/);
+    expect(await dbError(() => db.insert(waitlistOffer).values({ entryId: otherEntry.id, resourceId: desk.id, holdBookingId: offer.holdBookingId, expiresAt: offer.expiresAt }))).toContain("offer_inconsistent");
     // inscrição em espera, não reivindicada
     const desk2 = await seedDesk("W002");
     const msg = await dbError(() =>

@@ -11,6 +11,7 @@ export const STATE_STYLE: Record<string, { fill: string; icon: string; text: str
   available: { fill: "var(--color-state-available)", icon: "✓", text: "Disponível" },
   reserved: { fill: "var(--color-state-reserved)", icon: "●", text: "Reservada" },
   mine: { fill: "var(--color-state-mine)", icon: "★", text: "Sua reserva" },
+  offered: { fill: "var(--color-state-available)", icon: "☆", text: "Oferecida a você" },
   exclusive: { fill: "var(--color-state-exclusive)", icon: "◆", text: "Uso exclusivo — Diretoria" },
   blocked: { fill: "var(--color-state-blocked)", icon: "■", text: "Bloqueada" },
   maintenance: { fill: "var(--color-state-maintenance)", icon: "⚠", text: "Em manutenção" },
@@ -22,7 +23,7 @@ export const STATE_STYLE: Record<string, { fill: string; icon: string; text: str
 };
 
 export function Legend() {
-  const items = ["available", "reserved", "mine", "exclusive", "blocked", "maintenance"] as const;
+  const items = ["available", "reserved", "mine", "offered", "exclusive", "blocked", "maintenance"] as const;
   return (
     <ul aria-label="Legenda do mapa" className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
       {items.map((k) => (
@@ -50,7 +51,8 @@ export function OfficeMap({ map, states, date, hrefFor }: { map: NonNullable<Pub
           {map.placements.map((p) => {
             const st = states.get(p.resourceId);
             const code = st?.availability.code ?? "inactive";
-            const style = STATE_STYLE[code] ?? STATE_STYLE.inactive;
+            // Oferta da fila ainda não aceita tem estilo próprio: não é reserva (DEC-40).
+            const style = st?.availability.offerPending ? STATE_STYLE.offered : (STATE_STYLE[code] ?? STATE_STYLE.inactive);
             const label = st ? `${p.code}: ${st.availability.label}${st.availability.canBook ? ", reservar" : ""}` : `${p.code}: sem estado`;
             const x = p.x * W;
             const y = p.y * H;

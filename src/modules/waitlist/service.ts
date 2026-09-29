@@ -5,7 +5,7 @@ import { loadAccess } from "@/modules/access/can";
 import { recordAudit } from "@/modules/audit/audit";
 import { explainFor, loadDayContext, personBookingOn } from "@/modules/availability/service";
 import { enqueueOutbox } from "@/modules/notifications/outbox";
-import { bookingChangedEmail, waitlistOfferEmail, waitlistRemovedEmail } from "@/modules/notifications/templates";
+import { waitlistChangedEmail, waitlistOfferEmail, waitlistRemovedEmail } from "@/modules/notifications/templates";
 import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { pgErrorOf } from "@/modules/shared/db-errors";
@@ -72,7 +72,7 @@ async function closeEntryWithNotice(tx: Tx, entryId: string, employeeId: string,
   if (!closed) return;
   await recordAudit(tx, { actorUserId: actor?.userId ?? null, actorEmployeeId: actor?.employeeId ?? null, action: "waitlist.left", entityType: "waitlist_entry", entityId: entryId, after: { status: "cancelled", why: reason, date }, requestId: actor?.requestId });
   const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, employeeId));
-  if (emp) await enqueueOutbox(tx, { eventType: "email.waitlist", aggregateType: "waitlist_entry", aggregateId: entryId, payload: { message: bookingChangedEmail(emp.email, emp.name, text) }, idempotencyKey: `waitlist.closed:${entryId}` });
+  if (emp) await enqueueOutbox(tx, { eventType: "email.waitlist", aggregateType: "waitlist_entry", aggregateId: entryId, payload: { message: waitlistChangedEmail(emp.email, emp.name, text) }, idempotencyKey: `waitlist.closed:${entryId}` });
 }
 
 /** Fechamento do dia (DIR-033): inscrições em espera da data são encerradas com aviso; a fila não sobrevive a dia fechado. */

@@ -12,6 +12,7 @@ export type WeekDayOption = {
   short: string;
   intent: "onsite" | "remote" | "not_informed";
   bookedCode: string | null;
+  offeredCode: string | null;
   open: boolean;
   note: string | null;
   desks: Array<{ id: string; code: string; habitual: boolean }>;
@@ -54,6 +55,13 @@ export function WeekForm({ days, idempotencyKey, habitualCode }: { days: WeekDay
               Mesa (opcional)
               {d.bookedCode ? (
                 <span className="text-sm font-normal">Reservada: {d.bookedCode}</span>
+              ) : d.offeredCode ? (
+                <span className="text-sm font-normal">
+                  Mesa {d.offeredCode} oferecida a você pela fila.{" "}
+                  <a href="/escritorio/minhas-reservas" className="underline">
+                    Aceitar ou recusar
+                  </a>
+                </span>
               ) : d.open ? (
                 <Select id={`desk:${d.date}`} name={`desk:${d.date}`} defaultValue="">
                   <option value="">Sem mesa</option>

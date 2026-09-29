@@ -143,9 +143,27 @@ describe("R10: concorrência da fila de espera", () => {
     for (const h of holds) expect(h.origin).toBe("waitlist_offer");
   });
 
+  /** Rodadas 0 e 3: corrida livre; 1 e 4: o segundo lado primeiro; 2: o primeiro lado primeiro. Devolve [primeiro, segundo]. */
+  async function ordered<A, B>(i: number, first: () => Promise<A>, second: () => Promise<B>): Promise<[PromiseSettledResult<A>, PromiseSettledResult<B>]> {
+    if (i % 3 === 0) {
+      const [a, b] = await Promise.allSettled([first(), second()]);
+      return [a as PromiseSettledResult<A>, b as PromiseSettledResult<B>];
+    }
+    if (i % 3 === 1) {
+      const [b] = await Promise.allSettled([second()]);
+      const [a] = await Promise.allSettled([first()]);
+      return [a, b];
+    }
+    const [a] = await Promise.allSettled([first()]);
+    const [b] = await Promise.allSettled([second()]);
+    return [a, b];
+  }
+
   it("R10b: mesa exclusiva sob corrida (titular cancela contra liberação; aceite contra revogação; cancelamento com fila contra nova atribuição): nunca oferta de exclusiva a inelegível", async () => {
-    const { createAssignment, createException, previewRevokeException, revokeException } = await import("@/modules/exclusivity/service");
+    const { createAssignment, createException, previewAssignment, previewRevokeException, revokeException } = await import("@/modules/exclusivity/service");
     const before = await deadlocks();
+    // Desfechos observados: cada corrida precisa ser vista vencida pelos dois lados ao longo das rodadas (ID-04).
+    const won = { acceptB: 0, revokeB: 0, cancelC: 0, assignC: 0 };
     for (let i = 0; i < 5; i++) {
       await resetDb();
       const rh = await privilegedActor({ roles: ["hr"] });
@@ -169,16 +187,20 @@ describe("R10: concorrência da fila de espera", () => {
       await offerFreeDesks(db);
       expect(await violations(), `rodada ${i} a, depois da varredura`).toEqual(ZERO);
       // b) C aceita a oferta da mesa liberada enquanto o RH revoga a liberação, com decisão sobre a retenção vista na prévia
-      const exceptionId = a2.status === "fulfilled" ? a2.value : null;
+      expect(a2.status, `rodada ${i} a: liberação`).toBe("fulfilled");
+      const exceptionId = (a2 as PromiseFulfilledResult<string>).value;
       const [open] = await db.select().from(waitlistOffer).where(eq(waitlistOffer.status, "open"));
-      if (exceptionId) {
-        const preview = await previewRevokeException(db, rh.actor, exceptionId);
-        const decisions = preview.conflicts.map((k) => ({ bookingId: k.bookingId, action: "cancel" as const, reason: "revogada", expectedStatus: k.status }));
-        await Promise.allSettled([
-          open ? acceptOffer(db, actorOf(c), open.id) : Promise.resolve(null),
-          revokeException(db, rh.actor, { exceptionId, reason: "voltou" }, decisions),
-        ]);
-      }
+      expect(open?.resourceId, `rodada ${i} b: a mesa liberada foi oferecida a C antes da corrida`).toBe(x.id);
+      const preview = await previewRevokeException(db, rh.actor, exceptionId);
+      const decisions = preview.conflicts.map((k) => ({ bookingId: k.bookingId, action: "cancel" as const, reason: "revogada", expectedStatus: k.status }));
+      // Rodada 0 e 3: corrida livre. 1 e 4: a revogação chega primeiro. 2: o aceite chega primeiro. Os dois desfechos
+      // são exercitados em toda execução, além da corrida.
+      const accept = () => acceptOffer(db, actorOf(c), open.id);
+      const revoke = () => revokeException(db, rh.actor, { exceptionId, reason: "voltou" }, decisions);
+      const [bAccept, bRevoke] = await ordered(i, accept, revoke);
+      expect(bAccept.status === "fulfilled" && bRevoke.status === "fulfilled", `rodada ${i} b: os dois não podem vencer`).toBe(false);
+      if (bAccept.status === "fulfilled") won.acceptB += 1;
+      if (bRevoke.status === "fulfilled") won.revokeB += 1;
       expect(await violations(), `rodada ${i} b`).toEqual(ZERO);
       // c) nova mesa compartilhada ocupada, fila em espera; cancelamento contra atribuição exclusiva nova da mesma mesa
       const n = await seedDesk(`N${i}`);
@@ -187,15 +209,24 @@ describe("R10: concorrência da fila de espera", () => {
       const nbRow = await ownerQuery("insert into desk_booking (resource_id, employee_id, booking_date, status, origin, actor_employee_id) values ($1, $2, $3::date, 'confirmed', 'self', $2) returning id", [n.id, f2.id, date]);
       const nb = { bookingId: nbRow.rows[0].id as string };
       const c2 = await seedEmployee();
-      await joinWaitlist(db, actorOf(c2), { date }).catch(() => null);
+      await expect(joinWaitlist(db, actorOf(c2), { date }), `rodada ${i} c: inscrição`).resolves.toMatchObject({ created: true });
       const holder2 = await seedEmployee({ orgCondition: "director" });
-      await Promise.allSettled([
-        cancelDesk(db, actorOf(f2), nb.bookingId),
-        createAssignment(db, rh.actor, { resourceId: n.id, mode: "individual", holderEmployeeId: holder2.id, validFrom: date, reason: "nova", responsible: "RH" }),
-      ]);
+      const input = { resourceId: n.id, mode: "individual" as const, holderEmployeeId: holder2.id, validFrom: date, reason: "nova", responsible: "RH" };
+      // A atribuição traz as decisões da prévia (cancelar a reserva de f2), para poder vencer a corrida.
+      const cDecisions = (await previewAssignment(db, rh.actor, input)).conflicts.map((k) => ({ bookingId: k.bookingId, action: "cancel" as const, reason: "nova atribuição", expectedStatus: k.status }));
+      const [cCancel, cAssign] = await ordered(i, () => cancelDesk(db, actorOf(f2), nb.bookingId), () => createAssignment(db, rh.actor, input, cDecisions));
+      if (cCancel.status === "fulfilled") won.cancelC += 1;
+      if (cAssign.status === "fulfilled") won.assignC += 1;
+      // Atribuição vencedora: a mesa nova é exclusiva de holder2 e nunca foi oferecida a c2.
+      if (cAssign.status === "fulfilled") expect((await db.select().from(waitlistOffer).where(eq(waitlistOffer.resourceId, n.id))).length, `rodada ${i} c`).toBe(0);
       expect(await violations(), `rodada ${i} c`).toEqual(ZERO);
       void fb;
     }
     expect((await deadlocks()) - before, "deadlocks detectados pelo banco").toBe(0);
+    expect(won.revokeB, "revogação venceu ao menos uma vez").toBeGreaterThan(0);
+    expect(won.acceptB, "aceite venceu ao menos uma vez").toBeGreaterThan(0);
+    expect(won.acceptB + won.revokeB, "corrida b decidida em toda rodada").toBe(5);
+    expect(won.assignC, "atribuição venceu ao menos uma vez").toBeGreaterThan(0);
+    expect(won.cancelC, "cancelamento venceu ao menos uma vez").toBeGreaterThan(0);
   });
 });

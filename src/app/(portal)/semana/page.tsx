@@ -39,6 +39,7 @@ export default async function SemanaPage({ searchParams }: { searchParams: Promi
       short: d.short,
       intent: ov.intent,
       bookedCode: ov.booking?.code ?? null,
+      offeredCode: ov.offer?.code ?? null,
       open: ctx.officeOpen && ctx.window.open,
       note: !ctx.officeOpen ? `Escritório fechado${ctx.closedReason ? `: ${ctx.closedReason}` : ""}` : !ctx.window.open ? `Reservas abrem em ${ctx.window.opensAt ? formatLocal(ctx.window.opensAt) : "data a definir"}` : null,
       desks,

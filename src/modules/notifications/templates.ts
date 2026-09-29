@@ -70,6 +70,15 @@ export function bookingChangedEmail(to: string, name: string, text: string): Ema
   };
 }
 
+/** Aviso sobre oferta ou inscrição na fila de espera (retirada, encerramento): a pessoa não tem reserva (DEC-40). */
+export function waitlistChangedEmail(to: string, name: string, text: string): EmailMessage {
+  return {
+    to,
+    subject: "Sua oferta ou inscrição na fila de espera mudou",
+    text: [`Olá, ${name}.`, "", text, "", "Veja a fila e suas reservas em Minhas reservas no Portal do Colaborador."].join("\n"),
+  };
+}
+
 /** Aviso de reserva feita em nome da pessoa, com registro de quem fez (DIR-011). */
 export function bookingOnBehalfEmail(to: string, name: string, code: string, dateLocal: string, actorName: string): EmailMessage {
   return {

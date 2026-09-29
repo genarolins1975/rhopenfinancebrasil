@@ -82,7 +82,7 @@ export type DayContext = {
   closedReason: string | null;
   window: { open: boolean; opensAt: Date | null };
   /** Reserva ativa da pessoa em qualquer mesa na data. */
-  personBooking: { resourceId: string; id: string } | null;
+  personBooking: { resourceId: string; id: string; status?: "confirmed" | "held" } | null;
   /** Realocação e cancelamento administrativos são isentos da janela (PAR-29). */
   windowExempt?: boolean;
 };
@@ -140,7 +140,7 @@ export function explain(person: Person, r: ResourceOnDate, ctx: DayContext): Ava
   if (r.booking && r.booking.employeeId !== person.id) return { ...base, code: "reserved", label: "Reservada", reason: "reservada", canBook: false };
   if (mine && r.booking?.status === "held") return { ...base, code: "mine", label: "Oferecida a você", reason: "oferta da fila: aceite ou recuse em Minhas reservas", canBook: false, offerPending: true };
   if (mine) return { ...base, code: "mine", label: "Sua reserva", reason: "sua reserva", canBook: false };
-  if (ctx.personBooking && ctx.personBooking.resourceId !== r.id) return { ...base, code: "daily_limit", label: exclusiveMine ? "Sua mesa de uso exclusivo" : "Disponível", reason: "você já tem reserva neste dia", canBook: false };
+  if (ctx.personBooking && ctx.personBooking.resourceId !== r.id) return { ...base, code: "daily_limit", label: exclusiveMine ? "Sua mesa de uso exclusivo" : "Disponível", reason: ctx.personBooking.status === "held" ? "você tem uma oferta da fila pendente neste dia (aceite ou recuse em Minhas reservas)" : "você já tem reserva neste dia", canBook: false };
   return { ...base, code: "available", label: exclusiveMine ? "Sua mesa de uso exclusivo" : "Disponível", reason: "disponível para você", canBook: true };
 }
 
