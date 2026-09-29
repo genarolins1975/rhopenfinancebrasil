@@ -184,6 +184,24 @@ Revisor com contexto limpo, acesso ao código, ao banco de teste e às baterias;
 
 Testes executados após as correções, no mesmo ambiente: 53 de unidade, 134 de integração (seis novos: R4 da desativação com liberação vigente, realocação com retenção vencida e prévia com mesas livres, capacidade contra `desk_class`, parâmetros configuráveis, identidade imutável e `DELETE` revogado, R9 com dez rodadas de liberação contra desativação) e 44 de ponta a ponta com axe (22 por projeto, nenhum pulado; o cenário de exclusividade cobre as três opções do diálogo, a realocação com mais de dez mesas livres e a prévia aberta no celular sem rolagem horizontal), todos aprovados; tipos, lint e build sem erros; `.log-test.ndjson` sem "Failed query" nem "params". Migração `0005` aplicada em rh_dev e rh_test.
 
-### Reapresentação
+### Reapresentação (29/09/2026)
+
+Segundo Revisor independente, contexto limpo: baterias oficiais (53, 134 e 44 aprovados, nenhum pulado, `office_settings` com quatro linhas após cada bateria), 20 cenários de integração num banco isolado, 3 de ponta a ponta, consultas com os dois papéis e leitura do log do servidor PostgreSQL. Dos 15 achados, 12 confirmados corrigidos e 3 corrigidos em parte; 7 achados residuais. Veredito: ACEITO COM CORREÇÕES, obrigatórias 1 a 3, recomendadas 4 a 7.
+
+| Nº | Severidade | Achado | Tratamento na mesma data |
+|---|---|---|---|
+| 1 | MÉDIA | Caminhos que tratam reservas de terceiros tomavam o dia e a pessoa depois do recurso (via triggers e chave estrangeira); dez deadlocks na bateria oficial, absorvidos pela nova tentativa; o teste R9 não os detectava | Corrigido: `lockDaysAndPeople` toma o dia e `for share` de cada pessoa das reservas conhecidas (e do titular anterior em transferência e reabertura) antes dos recursos, em trava, transferência, liberação, revogação, remoção de integrante, manutenção, desativação de recurso, fechamento de dia e desativação de pessoa; R9 refeito com cinco combinações em seis rodadas e prova pelo contador `pg_stat_database.deadlocks` e pela ausência de nova tentativa no log |
+| 2 | BAIXA | Histórico expunha o nome do beneficiário de liberação a quem só tem `exclusive.view` | Corrigido |
+| 3 | MÉDIA | Integrante desativado seguia "vigente" no grupo; grupo sem integrante ativo não aparecia em vínculo a revisar | Corrigido: desativação encerra a vigência no grupo com auditoria; `listGroups` e a lista derivada consideram só pessoa ativa; `addGroupMember` confere a situação dentro da transação com a pessoa travada; teste |
+| 4 | BAIXA | Aviso de cancelamento por desativação com texto de "vínculo em revisão" para as reservas da própria pessoa | Corrigido: avisos distintos por origem; teste |
+| 5 | BAIXA | Reabrir a antecessora não conferia titular ativo nem o travava antes do recurso | Corrigido: `assertHolder` e `for share` do titular anterior antes dos recursos; com ele inativo, só resta liberar; teste e rodada concorrente em R9 |
+| 6 | BAIXA | `DELETE` do papel da aplicação ainda concedido em inventário, zonas, grupos, parâmetros e posições | Corrigido: migração `0006`; intenção, requisição de semana e outbox seguem apagáveis por retenção, registrado na migração |
+| 7 | BAIXA | Documentação acima do provado (ordem única de locks, realocação pelo navegador, `DIR-018` ponta a ponta, rótulo T5) | Corrigido: R9 prova a ausência de deadlock; o ponta a ponta do desktop confirma com realocação pelo navegador e o do celular com cancelamento; matriz ajustada |
+
+### Relato do Executor na segunda reapresentação (29/09/2026)
+
+Testes executados após as correções, no mesmo ambiente: 53 de unidade, 136 de integração (dois novos: integrante desativado no grupo com aviso por origem, e reabertura recusada com titular inativo; R9 refeito com prova de ausência de deadlock pelo contador do banco e pelo log) e 44 de ponta a ponta com axe (22 por projeto, nenhum pulado; o desktop confirma a atribuição com realocação pelo navegador e o celular com cancelamento), todos aprovados; tipos, lint e build sem erros; `.log-test.ndjson` sem "Failed query", sem "params" e sem "nova tentativa". Migrações `0005` e `0006` aplicadas em rh_dev e rh_test.
+
+### Terceira verificação
 
 Em execução em 29/09/2026.

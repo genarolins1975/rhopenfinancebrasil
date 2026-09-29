@@ -118,6 +118,16 @@ export async function shareLockEmployee(tx: Tx, employeeId: string): Promise<{ i
   return { id: row.id, status: row.status, fullName: row.full_name };
 }
 
+/**
+ * Passos 3 e 4 do protocolo para operações que tratam reservas de terceiros: lock compartilhado de cada dia
+ * e `for share` de cada pessoa envolvida, em ordem, antes dos recursos. Os triggers tomariam o dia e a chave da
+ * pessoa depois do recurso, o que inverte a ordem contra desativação e fechamento de dia.
+ */
+export async function lockDaysAndPeople(tx: Tx, input: { dates: string[]; people: string[] }): Promise<void> {
+  for (const d of [...new Set(input.dates)].sort()) await advisoryShareDay(tx, d);
+  for (const p of [...new Set(input.people)].sort()) await shareLockEmployee(tx, p);
+}
+
 export async function advisoryShareDay(tx: Tx, date: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtext(${"office_day:" + date}))`);
 }

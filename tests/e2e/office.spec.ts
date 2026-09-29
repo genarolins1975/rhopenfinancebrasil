@@ -149,7 +149,17 @@ test.describe("administração do escritório", () => {
     await form3.getByLabel(/Responsável/).fill("Diretoria executiva");
     await form3.getByRole("button", { name: "Ver impacto" }).click();
     const preview3 = page.getByRole("region", { name: "Prévia de impacto" }).first();
-    await preview3.getByLabel("Ação").selectOption("cancel");
+    // desktop: realocação pelo navegador para a primeira mesa livre; celular: cancelamento com comunicação
+    const realloc = testInfo.project.name !== "celular";
+    let targetCode = "";
+    if (realloc) {
+      await preview3.getByLabel("Ação").selectOption("realloc");
+      const target = preview3.getByLabel("Mesa de destino");
+      targetCode = (await target.locator("option").nth(1).textContent())?.trim() ?? "";
+      await target.selectOption({ label: targetCode });
+    } else {
+      await preview3.getByLabel("Ação").selectOption("cancel");
+    }
     await preview3.getByLabel("Motivo").fill("mesa passa à diretoria");
     await preview3.getByLabel("Mensagem à pessoa").fill("Pedimos desculpas pelo transtorno.");
     await preview3.getByRole("button", { name: "Confirmar atribuição" }).click();
@@ -157,7 +167,7 @@ test.describe("administração do escritório", () => {
     await expect(page.getByText("Atribuição vigente: Diretor Segundo")).toBeVisible();
     await page.goto(`/admin/escritorio/mesas/exclusividade?aba=historico&mesa=${code}`);
     await expect(page.getByRole("table", { name: "Eventos de auditoria da mesa" })).toContainText("exclusivity.assignment_created");
-    await expect(page.getByRole("table", { name: "Eventos de auditoria da mesa" })).toContainText("booking.cancelled_by_conflict");
+    await expect(page.getByRole("table", { name: "Eventos de auditoria da mesa" })).toContainText(realloc ? "booking.reallocated" : "booking.cancelled_by_conflict");
     // o colaborador vê a mesa exclusiva e sua reserva sumiu
     await page.context().clearCookies();
     await login(page, state().comum.email);
@@ -165,6 +175,7 @@ test.describe("administração do escritório", () => {
     await expect(page.getByRole("button", { name: "Reservar" })).toHaveCount(0);
     await page.goto("/escritorio/minhas-reservas");
     await expect(page.getByRole("table", { name: "Reservas futuras" }).or(page.getByText("Nenhuma reserva futura"))).not.toContainText(code);
+    if (realloc) await expect(page.getByRole("table", { name: "Reservas futuras" })).toContainText(targetCode);
   });
 
   test("recursos, planta, reservas administrativas e conflitos pendentes vazios; sem rolagem horizontal", async ({ page }) => {

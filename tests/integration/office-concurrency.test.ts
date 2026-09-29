@@ -6,7 +6,6 @@ import { deskBooking, exclusiveAssignment } from "@/db/schema";
 import { bookDesk } from "@/modules/booking/service";
 import { createAssignment } from "@/modules/exclusivity/service";
 import { closeDay, openDay } from "@/modules/workplace/service";
-import { createException } from "@/modules/exclusivity/service";
 import { deactivateEmployee } from "@/modules/employees/service";
 import { addDays, localToday } from "@/modules/shared/dates";
 import { privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
@@ -99,24 +98,117 @@ describe("concorrência do escritório", () => {
     expect(await invalidBookings()).toBe(0);
   });
 
-  it("R9: liberação com realocação contra desativação da mesma pessoa, 10 rodadas: ordem única de locks, sem deadlock vazando; estado coerente", async () => {
-    for (let i = 0; i < 10; i++) {
-      const rh = await privilegedActor({ roles: ["hr"], permissions: ["booking.on_behalf.create", "booking.admin.manage"] });
-      const holder = await seedEmployee({ orgCondition: "director" });
-      const guest = await seedEmployee();
-      const desk = await seedDesk();
-      const target = await seedDesk();
-      const id = await createAssignment(db, rh.actor, { resourceId: desk.id, mode: "individual", holderEmployeeId: holder.id, validFrom: today, reason: "x", responsible: "RH" });
-      const hb = await bookDesk(db, actorOf(holder), { employeeId: holder.id, resourceId: desk.id, date: d(2), idempotencyKey: randomUUID() });
-      const [x, dctv] = await Promise.allSettled([
-        createException(db, rh.actor, { assignmentId: id, kind: "release_to_employee", beneficiaryEmployeeId: guest.id, startsOn: d(1), endsOn: d(3), reason: "viagem" }, [{ bookingId: hb.bookingId, action: "realloc", reason: "liberação", targetResourceId: target.id }]),
-        deactivateEmployee(db, rh.actor, holder.id, { reason: "desligamento" }),
-      ]);
-      for (const r of [x, dctv]) {
-        if (r.status === "rejected") expect(String(r.reason.message), `rodada ${i}`).not.toMatch(/deadlock|Failed query|40P01/);
+  it("R9: caminhos de conflito contra desativação e fechamento de dia, sem deadlock: o contador do banco não cresce e não há nova tentativa", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { Pool } = await import("pg");
+    const owner = new Pool({ connectionString: process.env.DATABASE_OWNER_URL, max: 1 });
+    const deadlocks = async () => {
+      await new Promise((r) => setTimeout(r, 700));
+      const r = await owner.query("select deadlocks::int as n from pg_stat_database where datname = current_database()");
+      return (r.rows[0] as { n: number }).n;
+    };
+    const logFile = process.env.LOG_CAPTURE_FILE!;
+    const logMark = (() => {
+      try {
+        return readFileSync(logFile, "utf8").length;
+      } catch {
+        return 0;
       }
-      expect(dctv.status, `rodada ${i}: a desativação sempre conclui`).toBe("fulfilled");
+    })();
+    const before = await deadlocks();
+    const { createException, transferAssignment, cancelAssignment, addGroupMember, removeGroupMember, batchAssign } = await import("@/modules/exclusivity/service");
+    const { createStatusPeriod } = await import("@/modules/workplace/service");
+    const { directorsGroupId } = await import("./helpers");
+    for (let i = 0; i < 6; i++) {
+      const rh = await privilegedActor({ roles: ["hr"], permissions: ["booking.on_behalf.create", "booking.admin.manage", "resource.status.manage", "resource.manage"] });
+      // a) liberação nominal com realocação da reserva do titular contra desativação do titular
+      {
+        const holder = await seedEmployee({ orgCondition: "director" });
+        const guest = await seedEmployee();
+        const desk = await seedDesk();
+        const target = await seedDesk();
+        const id = await createAssignment(db, rh.actor, { resourceId: desk.id, mode: "individual", holderEmployeeId: holder.id, validFrom: today, reason: "x", responsible: "RH" });
+        const hb = await bookDesk(db, actorOf(holder), { employeeId: holder.id, resourceId: desk.id, date: d(2), idempotencyKey: randomUUID() });
+        const [x, dctv] = await Promise.allSettled([
+          createException(db, rh.actor, { assignmentId: id, kind: "release_to_employee", beneficiaryEmployeeId: guest.id, startsOn: d(1), endsOn: d(3), reason: "viagem" }, [{ bookingId: hb.bookingId, action: "realloc", reason: "liberação", targetResourceId: target.id }]),
+          deactivateEmployee(db, rh.actor, holder.id, { reason: "desligamento" }),
+        ]);
+        expect(dctv.status, `rodada ${i} a`).toBe("fulfilled");
+        void x;
+      }
+      // b) transferência com realocação contra desativação do titular anterior
+      {
+        const h1 = await seedEmployee({ orgCondition: "director" });
+        const h2 = await seedEmployee({ orgCondition: "director" });
+        const desk = await seedDesk();
+        const target = await seedDesk();
+        const id = await createAssignment(db, rh.actor, { resourceId: desk.id, mode: "individual", holderEmployeeId: h1.id, validFrom: today, reason: "x", responsible: "RH" });
+        const hb = await bookDesk(db, actorOf(h1), { employeeId: h1.id, resourceId: desk.id, date: d(3), idempotencyKey: randomUUID() });
+        const [t, dctv] = await Promise.allSettled([
+          transferAssignment(db, rh.actor, { assignmentId: id, newHolderEmployeeId: h2.id, from: d(2), reason: "troca", responsible: "RH" }, [{ bookingId: hb.bookingId, action: "realloc", reason: "transferência", targetResourceId: target.id }]),
+          deactivateEmployee(db, rh.actor, h1.id, { reason: "desligamento" }),
+        ]);
+        expect(dctv.status, `rodada ${i} b`).toBe("fulfilled");
+        void t;
+      }
+      // c) reabertura da antecessora contra desativação do titular anterior: nunca nasce atribuição para pessoa inativa
+      {
+        const h1 = await seedEmployee({ orgCondition: "director" });
+        const h2 = await seedEmployee({ orgCondition: "director" });
+        const desk = await seedDesk();
+        const id = await createAssignment(db, rh.actor, { resourceId: desk.id, mode: "individual", holderEmployeeId: h1.id, validFrom: today, reason: "x", responsible: "RH" });
+        const succ = await transferAssignment(db, rh.actor, { assignmentId: id, newHolderEmployeeId: h2.id, from: d(2), reason: "troca", responsible: "RH" });
+        const [c, dctv] = await Promise.allSettled([cancelAssignment(db, rh.actor, { assignmentId: succ, reason: "desistiu", successorDecision: "reopen" }), deactivateEmployee(db, rh.actor, h1.id, { reason: "desligamento" })]);
+        expect(dctv.status, `rodada ${i} c`).toBe("fulfilled");
+        const open = await db.select({ holder: exclusiveAssignment.holderEmployeeId, needsReview: exclusiveAssignment.needsReview }).from(exclusiveAssignment).where(eq(exclusiveAssignment.resourceId, desk.id));
+        const forH1 = open.filter((o) => o.holder === h1.id && !o.needsReview);
+        // ou a reabertura perdeu (recusada por titular inativo), ou venceu e a desativação marcou a revisão
+        expect(forH1.every((o) => o.needsReview) || c.status === "rejected" || forH1.length <= 1).toBe(true);
+        const rows = await db.execute(sql`select count(*)::int as n from exclusive_assignment a join employee e on e.id = a.holder_employee_id where a.resource_id = ${desk.id} and a.cancelled_at is null and (a.valid_to is null or a.valid_to >= local_today()) and e.status = 'deactivated' and a.needs_review = false`);
+        expect((rows.rows[0] as { n: number }).n, `rodada ${i} c: atribuição vigente sem revisão para pessoa desativada`).toBe(0);
+      }
+      // d) fechamento do dia com cancelamento contra manutenção com cancelamento na mesma data
+      {
+        const p = await seedEmployee();
+        const desk = await seedDesk();
+        const date = d(4);
+        await openDay(db, rh.actor, { date, reason: "" });
+        const b = await bookDesk(db, actorOf(p), { employeeId: p.id, resourceId: desk.id, date, idempotencyKey: randomUUID() });
+        const [cd, sp] = await Promise.allSettled([
+          closeDay(db, rh.actor, { date, reason: "feriado" }, [{ bookingId: b.bookingId, action: "cancel", reason: "feriado" }]),
+          createStatusPeriod(db, rh.actor, { resourceId: desk.id, status: "maintenance", startsOn: date, endsOn: date, reason: "reparo" }, [{ bookingId: b.bookingId, action: "cancel", reason: "reparo" }]),
+        ]);
+        void cd;
+        void sp;
+      }
+      // e) remoção de integrante com realocação contra trava de grupo em lote
+      {
+        const group = await directorsGroupId();
+        const m = await seedEmployee({ orgCondition: "director" });
+        const mid = await addGroupMember(db, rh.actor, { groupId: group, employeeId: m.id, validFrom: today, reason: "x" });
+        const g1 = await seedDesk();
+        const g2 = await seedDesk();
+        await batchAssign(db, rh.actor, [{ resourceId: g1.id, mode: "group", accessGroupId: group, validFrom: today, reason: "x", responsible: "RH" }]);
+        const mb = await bookDesk(db, actorOf(m), { employeeId: m.id, resourceId: g1.id, date: d(5), idempotencyKey: randomUUID() });
+        const [rm, ba] = await Promise.allSettled([
+          removeGroupMember(db, rh.actor, { memberId: mid, validTo: d(1), reason: "saiu" }, [{ bookingId: mb.bookingId, action: "cancel", reason: "saída" }]),
+          batchAssign(db, rh.actor, [{ resourceId: g2.id, mode: "group", accessGroupId: group, validFrom: today, reason: "x", responsible: "RH" }]),
+        ]);
+        void rm;
+        void ba;
+      }
       expect(await invalidBookings()).toBe(0);
     }
+    const after = await deadlocks();
+    expect(after - before, "deadlocks detectados pelo banco durante o teste").toBe(0);
+    const tail = (() => {
+      try {
+        return readFileSync(logFile, "utf8").slice(logMark);
+      } catch {
+        return "";
+      }
+    })();
+    expect(tail.includes("nova tentativa da transação do escritório"), "nenhuma transação precisou de nova tentativa").toBe(false);
+    await owner.end();
   });
 });

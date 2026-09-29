@@ -4,7 +4,7 @@ import { deskBooking, employee, floorPlanPlacement, floorPlanVersion, officeCale
 import { recordAudit } from "@/modules/audit/audit";
 import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ValidationError } from "@/modules/shared/errors";
-import { type Actor, advisoryExclusiveDay, assertIsoDate, assertPermission, assertUuid, lockResources, withOfficeTx } from "@/modules/office/shared";
+import { type Actor, advisoryExclusiveDay, assertIsoDate, assertPermission, assertUuid, lockDaysAndPeople, lockResources, withOfficeTx } from "@/modules/office/shared";
 import { applyConflictDecisions, type ConflictDecision, type IncompatibleBooking, listActiveBookings } from "@/modules/office/conflicts";
 
 /* Inventário. */
@@ -101,6 +101,8 @@ export async function createStatusPeriod(db: Db, actor: Actor, input: PeriodInpu
   if (input.endsOn && input.endsOn < input.startsOn) throw new ValidationError("O término não pode ser anterior ao início.");
   if (!input.reason.trim()) throw new ValidationError("Informe o motivo.");
   return withOfficeTx(db, async (tx) => {
+    const known = await listActiveBookings(tx, { resourceIds: [input.resourceId], from: input.startsOn, to: input.endsOn ?? null });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: known.map((k) => k.employeeId) });
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [input.resourceId, ...targets]);
     const conflicts = await listActiveBookings(tx, { resourceIds: [input.resourceId], from: input.startsOn, to: input.endsOn ?? null });
@@ -156,6 +158,8 @@ export async function retireResource(db: Db, actor: Actor, resourceId: string, i
   if (retiredOn < localToday()) throw new ValidationError("A desativação vale de hoje em diante.");
   if (!input.reason.trim()) throw new ValidationError("Informe o motivo.");
   return withOfficeTx(db, async (tx) => {
+    const known = await listActiveBookings(tx, { resourceIds: [resourceId], from: retiredOn, to: null });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: known.map((k) => k.employeeId) });
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [resourceId, ...targets]);
     const [current] = await tx.select().from(resource).where(eq(resource.id, resourceId));
@@ -197,6 +201,7 @@ export async function closeDay(db: Db, actor: Actor, input: { date: string; reas
   return withOfficeTx(db, async (tx) => {
     await advisoryExclusiveDay(tx, input.date);
     const conflicts = await listActiveBookings(tx, { from: input.date, to: input.date });
+    await lockDaysAndPeople(tx, { dates: [], people: conflicts.map((c) => c.employeeId) });
     await lockResources(tx, conflicts.map((c) => c.resourceId));
     await applyConflictDecisions(tx, actor, conflicts.map((c) => ({ ...c, why: "escritório fechado" })), decisions, { excludeResourceIds: [], notice: `O escritório estará fechado em ${formatLocalDate(input.date)}.` });
     await tx

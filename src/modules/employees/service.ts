@@ -294,6 +294,11 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
   if (!ISO_DATE.test(exitDate)) throw new ValidationError("Data de saída inválida.");
   await assertMayChangeStatusOf(db, actor, employeeId);
   const userId = await withOfficeTx(db, async (tx) => {
+    // Ordem do protocolo: dias das reservas envolvidas, depois a pessoa (for update), depois terceiros e recursos.
+    const { deactivationOfficePreview, applyDeactivationEffects } = await import("@/modules/exclusivity/service");
+    const { lockDaysAndPeople } = await import("@/modules/office/shared");
+    const eff = await deactivationOfficePreview(tx, employeeId);
+    await lockDaysAndPeople(tx, { dates: [...eff.ownBookings, ...eff.thirdPartyBookings].map((b) => b.date), people: [] });
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status === "deactivated") throw new ValidationError("Pessoa já desativada.");
@@ -301,8 +306,7 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
     if (open && exitDate < open.hireDate) throw new ValidationError("A data de saída não pode ser anterior à admissão.");
     await tx.update(employee).set({ status: "deactivated", deactivatedAt: new Date(), deactivatedBy: actor.employeeId, updatedAt: new Date() }).where(eq(employee.id, employeeId));
     // Escritório (DIR-018, PAR-25): reservas futuras canceladas com comunicação; vínculos exclusivos marcados para revisão.
-    const { applyDeactivationEffects } = await import("@/modules/exclusivity/service");
-    const office = await applyDeactivationEffects(tx, actor, employeeId, input.reason);
+    const office = await applyDeactivationEffects(tx, actor, employeeId, input.reason, exitDate);
     await revokeActiveInvitations(tx, employeeId);
     await revokeAllGrants(tx, employeeId, actor.employeeId);
     await tx

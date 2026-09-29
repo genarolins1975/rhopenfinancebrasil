@@ -43,6 +43,13 @@
       "when": 1790657084772,
       "tag": "0005_escritorio_rede",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790657085772,
+      "tag": "0006_escritorio_delete",
+      "breakpoints": true
     }
   ]
 }

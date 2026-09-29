@@ -9,7 +9,7 @@ import { exclusivityEmail } from "@/modules/notifications/templates";
 import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { applyConflictDecisions, type ConflictDecision, type IncompatibleBooking, listActiveBookings } from "@/modules/office/conflicts";
-import { type Actor, assertIsoDate, assertPermission, assertUuid, lockResources, readSettings, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
+import { type Actor, assertIsoDate, assertPermission, assertUuid, lockDaysAndPeople, lockResources, readSettings, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
 
 /*
  * Exclusividade da diretoria (DIR-001 a DIR-036). Toda mutação: locks na ordem documentada, prévia de impacto
@@ -162,11 +162,10 @@ export async function batchAssign(db: Db, actor: Actor, inputs: AssignmentInput[
     throw new ValidationError("Um titular recebe uma única mesa por lote.");
   }
   return withOfficeTx(db, async (tx) => {
-    // Ordem documentada: pessoas e grupos antes dos recursos, recursos em ordem crescente.
-    for (const i of inputs) {
-      if (i.mode === "individual") await shareLockEmployee(tx, i.holderEmployeeId!);
-      else await tx.execute(sql`select 1 from access_group where id = ${i.accessGroupId} for share`);
-    }
+    // Ordem documentada: dias, pessoas (reservas incompatíveis conhecidas e titular) e grupos antes dos recursos, em ordem crescente.
+    const known = await listActiveBookings(tx, { resourceIds: inputs.map((i) => i.resourceId), from: inputs.map((i) => i.validFrom).sort()[0], to: null });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: [...known.map((k) => k.employeeId), ...inputs.filter((i) => i.mode === "individual").map((i) => i.holderEmployeeId!)] });
+    for (const i of inputs) if (i.mode === "group") await tx.execute(sql`select 1 from access_group where id = ${i.accessGroupId} for share`);
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [...inputs.map((i) => i.resourceId), ...targets]);
     const ids: string[] = [];
@@ -225,7 +224,8 @@ export async function transferAssignment(db: Db, actor: Actor, input: TransferIn
   return withOfficeTx(db, async (tx) => {
     const [a] = await tx.select().from(exclusiveAssignment).where(eq(exclusiveAssignment.id, input.assignmentId));
     if (!a) throw new ValidationError("Atribuição não encontrada.");
-    await shareLockEmployee(tx, input.newHolderEmployeeId);
+    const known = await listActiveBookings(tx, { resourceIds: [a.resourceId], from: input.from, to: a.validTo });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: [...known.map((k) => k.employeeId), a.holderEmployeeId!, input.newHolderEmployeeId] });
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [a.resourceId, ...targets]);
     const again = await previewTransfer(tx, actor, input);
@@ -268,10 +268,17 @@ export async function cancelAssignment(db: Db, actor: Actor, input: { assignment
     const [a] = await tx.select().from(exclusiveAssignment).where(eq(exclusiveAssignment.id, input.assignmentId));
     if (!a) throw new ValidationError("Atribuição não encontrada.");
     if (a.validFrom <= localToday()) throw new ConflictError("Só atribuição agendada, ainda não iniciada, pode ser anulada. Para as demais, encerre.");
+    const [pred] = a.transferredFromId ? await tx.select().from(exclusiveAssignment).where(eq(exclusiveAssignment.id, a.transferredFromId)) : [null];
+    if (a.transferredFromId && !input.successorDecision) throw new ConflictError("Esta atribuição é sucessora de uma transferência. Decida: liberar a mesa ao conjunto compartilhado ou reabrir para o titular anterior.");
+    if (input.successorDecision === "reopen" && pred?.holderEmployeeId) {
+      // Reabrir exige titular anterior ativo e travado antes do recurso (PAR-23).
+      await assertHolder(tx, pred.holderEmployeeId).catch(() => {
+        throw new ConflictError("O titular anterior não está ativo: não é possível reabrir. Escolha liberar a mesa.");
+      });
+      await shareLockEmployee(tx, pred.holderEmployeeId);
+    }
     await lockResources(tx, [a.resourceId]);
     if (a.transferredFromId) {
-      if (!input.successorDecision) throw new ConflictError("Esta atribuição é sucessora de uma transferência. Decida: liberar a mesa ao conjunto compartilhado ou reabrir para o titular anterior.");
-      const [pred] = await tx.select().from(exclusiveAssignment).where(eq(exclusiveAssignment.id, a.transferredFromId));
       await tx.update(exclusiveAssignment).set({ endReason: "transfer_cancelled" }).where(eq(exclusiveAssignment.id, a.transferredFromId));
       await tx.update(exclusiveAssignment).set({ cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: input.reason.trim() }).where(eq(exclusiveAssignment.id, a.id));
       if (input.successorDecision === "reopen" && pred?.holderEmployeeId) {
@@ -326,7 +333,8 @@ export async function createException(db: Db, actor: Actor, input: ExceptionInpu
   return withOfficeTx(db, async (tx) => {
     const [a] = await tx.select().from(exclusiveAssignment).where(eq(exclusiveAssignment.id, input.assignmentId));
     if (!a) throw new ValidationError("Atribuição não encontrada.");
-    if (input.beneficiaryEmployeeId) await shareLockEmployee(tx, input.beneficiaryEmployeeId);
+    const known = await listActiveBookings(tx, { resourceIds: [a.resourceId], from: input.startsOn, to: input.endsOn });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: [...known.map((k) => k.employeeId), ...(input.beneficiaryEmployeeId ? [input.beneficiaryEmployeeId] : [])] });
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [a.resourceId, ...targets]);
     const again = await previewException(tx, actor, input);
@@ -360,6 +368,8 @@ export async function revokeException(db: Db, actor: Actor, input: { exceptionId
     const [x] = await tx.select().from(accessException).where(eq(accessException.id, input.exceptionId));
     if (!x) throw new ValidationError("Liberação não encontrada.");
     if (x.revokedAt) throw new ConflictError("Liberação já revogada.");
+    const known = await listActiveBookings(tx, { resourceIds: [x.resourceId], from: x.startsOn > localToday() ? x.startsOn : localToday(), to: x.endsOn });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: known.map((k) => k.employeeId) });
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [x.resourceId, ...targets]);
     const again = await previewRevokeException(tx, actor, input.exceptionId);
@@ -380,7 +390,7 @@ export async function listGroups(db: DbOrTx) {
     .innerJoin(employee, eq(employee.id, accessGroupMember.employeeId))
     .orderBy(asc(employee.fullName));
   const today = localToday();
-  return groups.map((g) => ({ ...g, members: members.filter((m) => m.groupId === g.id).map((m) => ({ ...m, state: m.validFrom > today ? "agendado" : m.validTo && m.validTo < today ? "encerrado" : "vigente" })) }));
+  return groups.map((g) => ({ ...g, members: members.filter((m) => m.groupId === g.id).map((m) => ({ ...m, state: m.status !== "active" ? (m.status === "suspended" ? "suspenso" : "encerrado") : m.validFrom > today ? "agendado" : m.validTo && m.validTo < today ? "encerrado" : "vigente" })) }));
 }
 
 export async function addGroupMember(db: Db, actor: Actor, input: { groupId: string; employeeId: string; validFrom: string; reason: string }): Promise<string> {
@@ -390,10 +400,11 @@ export async function addGroupMember(db: Db, actor: Actor, input: { groupId: str
   assertIsoDate(input.validFrom, "Início");
   if (input.validFrom < localToday()) throw new ValidationError("A vigência começa hoje ou depois.");
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo.");
-  const [emp] = await db.select({ status: employee.status, orgCondition: employee.orgCondition }).from(employee).where(eq(employee.id, input.employeeId));
-  if (!emp || emp.status !== "active") throw new ValidationError("Só pessoa ativa entra no grupo.");
-  if (emp.orgCondition !== "director") throw new ValidationError("Só pessoa com condição organizacional de diretor entra no grupo da diretoria (PAR-23).");
   return withOfficeTx(db, async (tx) => {
+    await shareLockEmployee(tx, input.employeeId);
+    const [emp] = await tx.select({ status: employee.status, orgCondition: employee.orgCondition }).from(employee).where(eq(employee.id, input.employeeId));
+    if (!emp || emp.status !== "active") throw new ValidationError("Só pessoa ativa entra no grupo.");
+    if (emp.orgCondition !== "director") throw new ValidationError("Só pessoa com condição organizacional de diretor entra no grupo da diretoria (PAR-23).");
     await tx.execute(sql`select 1 from access_group where id = ${input.groupId} for update`);
     const [open] = await tx.select({ id: accessGroupMember.id }).from(accessGroupMember).where(and(eq(accessGroupMember.groupId, input.groupId), eq(accessGroupMember.employeeId, input.employeeId), or(isNull(accessGroupMember.validTo), gte(accessGroupMember.validTo, input.validFrom))));
     if (open) throw new ConflictError("A pessoa já integra o grupo neste período.");
@@ -421,8 +432,10 @@ export async function removeGroupMember(db: Db, actor: Actor, input: { memberId:
   await withOfficeTx(db, async (tx) => {
     const [m] = await tx.select().from(accessGroupMember).where(eq(accessGroupMember.id, input.memberId));
     if (!m) throw new ValidationError("Integrante não encontrado.");
-    await tx.execute(sql`select 1 from access_group where id = ${m.groupId} for update`);
     const desks = await tx.select({ resourceId: exclusiveAssignment.resourceId }).from(exclusiveAssignment).where(and(eq(exclusiveAssignment.accessGroupId, m.groupId), isNull(exclusiveAssignment.cancelledAt), or(isNull(exclusiveAssignment.validTo), gte(exclusiveAssignment.validTo, localToday()))));
+    const known = await listActiveBookings(tx, { resourceIds: desks.map((d) => d.resourceId), employeeIds: [m.employeeId], from: addDays(input.validTo, 1), to: null });
+    await lockDaysAndPeople(tx, { dates: known.map((k) => k.date), people: [m.employeeId] });
+    await tx.execute(sql`select 1 from access_group where id = ${m.groupId} for update`);
     const targets = decisions.map((d) => d.targetResourceId).filter((v): v is string => !!v);
     await lockResources(tx, [...desks.map((d) => d.resourceId), ...targets]);
     const again = await previewRemoveMember(tx, actor, input);
@@ -507,7 +520,11 @@ export async function needsReviewList(db: DbOrTx): Promise<Array<AssignmentRow &
       if (r.needsReview) out.push({ ...r, why: "marcada para revisão" });
       else if (!h || h.status !== "active") out.push({ ...r, why: `titular ${h?.status === "suspended" ? "suspenso" : "não ativo"}` });
     } else {
-      const members = await db.select({ id: accessGroupMember.id }).from(accessGroupMember).where(and(sql`${accessGroupMember.groupId} = (select access_group_id from exclusive_assignment where id = ${r.id})`, lte(accessGroupMember.validFrom, today), or(isNull(accessGroupMember.validTo), gte(accessGroupMember.validTo, today))));
+      const members = await db
+        .select({ id: accessGroupMember.id })
+        .from(accessGroupMember)
+        .innerJoin(employee, eq(employee.id, accessGroupMember.employeeId))
+        .where(and(sql`${accessGroupMember.groupId} = (select access_group_id from exclusive_assignment where id = ${r.id})`, eq(employee.status, "active"), lte(accessGroupMember.validFrom, today), or(isNull(accessGroupMember.validTo), gte(accessGroupMember.validTo, today))));
       if (members.length === 0 && r.state === "active") out.push({ ...r, why: "grupo sem integrante vigente" });
     }
   }
@@ -561,30 +578,38 @@ export async function deactivationOfficePreview(db: DbOrTx, employeeId: string):
  * do lock da pessoa: reservas futuras da pessoa e de terceiros sob liberação canceladas com comunicação e auditoria;
  * atribuições individuais marcadas para revisão (a mesa permanece restrita); gestor direto comunicado.
  */
-export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId: string, reason: string): Promise<{ bookingsCancelled: number; thirdPartyCancelled: number; assignmentsFlagged: number }> {
+export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId: string, reason: string, exitDate = localToday()): Promise<{ bookingsCancelled: number; thirdPartyCancelled: number; assignmentsFlagged: number; membershipsEnded: number }> {
+  // Quem chama já tomou os dias (antes do lock da pessoa). Aqui: terceiros das reservas conhecidas, depois recursos.
   const preview = await deactivationOfficePreview(tx, employeeId);
   const all = [...preview.ownBookings, ...preview.thirdPartyBookings];
+  await lockDaysAndPeople(tx, { dates: [], people: preview.thirdPartyBookings.map((b) => b.employeeId) });
   await lockResources(tx, [...all.map((b) => b.resourceId), ...preview.assignments.map((a) => a.resourceId)]);
   // Releitura depois dos locks: o conjunto pode ter mudado.
   const again = await deactivationOfficePreview(tx, employeeId);
-  const conflicts = [...again.ownBookings, ...again.thirdPartyBookings];
-  await applyConflictDecisions(
-    tx,
-    actor,
-    conflicts,
-    conflicts.map((b) => ({ bookingId: b.bookingId, action: "cancel" as const, reason: b.employeeId === employeeId ? `desativação: ${reason}` : `desativação do titular da mesa: ${reason}` })),
-    { excludeResourceIds: [], notice: "A mesa passou a vínculo em revisão pelo RH." },
-  );
+  const decide = (b: IncompatibleBooking) => ({ bookingId: b.bookingId, action: "cancel" as const, reason: b.employeeId === employeeId ? `desativação: ${reason}` : `desativação do titular da mesa: ${reason}` });
+  await applyConflictDecisions(tx, actor, again.ownBookings, again.ownBookings.map(decide), { excludeResourceIds: [], notice: "Cancelada em razão da desativação do cadastro." });
+  await applyConflictDecisions(tx, actor, again.thirdPartyBookings, again.thirdPartyBookings.map(decide), { excludeResourceIds: [], notice: "A mesa passou a vínculo em revisão pelo RH." });
+  // Integrante de grupo desativado deixa de ser vigente no grupo (DIR-032): vigência encerrada na data de saída.
+  const endOn = localToday();
+  const memberships = await tx
+    .update(accessGroupMember)
+    .set({ validTo: sql`greatest(${accessGroupMember.validFrom}, ${endOn}::date)`, removedBy: actor.employeeId, reason: `desativação: ${reason}` })
+    .where(and(eq(accessGroupMember.employeeId, employeeId), or(isNull(accessGroupMember.validTo), gte(accessGroupMember.validTo, endOn))))
+    .returning({ id: accessGroupMember.id, groupId: accessGroupMember.groupId });
+  void exitDate;
+  for (const m of memberships) {
+    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "exclusivity.group_member_removed", entityType: "access_group", entityId: m.groupId, before: { memberId: m.id, employeeId }, after: { validTo: localToday(), why: "pessoa desativada" }, reason, requestId: actor.requestId });
+  }
   const flagged = again.assignments.length ? await tx.update(exclusiveAssignment).set({ needsReview: true }).where(inArray(exclusiveAssignment.id, again.assignments.map((a) => a.id))).returning({ id: exclusiveAssignment.id }) : [];
   for (const f of flagged) {
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "exclusivity.review_marked", entityType: "exclusive_assignment", entityId: f.id, after: { needsReview: true, why: "titular desativado" }, reason, requestId: actor.requestId });
   }
   // PAR-25: gestor direto comunicado do tratamento das reservas.
   const [person] = await tx.select({ name: employee.fullName, managerEmployeeId: employee.managerEmployeeId }).from(employee).where(eq(employee.id, employeeId));
-  if (person?.managerEmployeeId && (conflicts.length || flagged.length)) {
+  if (person?.managerEmployeeId && (again.ownBookings.length || again.thirdPartyBookings.length || flagged.length)) {
     await notify(tx, person.managerEmployeeId, employeeId, `deactivation.manager:${employeeId}:${Date.now()}`, `${person.name} foi desativada(o). Reservas futuras canceladas: ${again.ownBookings.length}; reservas de terceiros afetadas: ${again.thirdPartyBookings.length}; mesas exclusivas em revisão: ${flagged.length}.`);
   }
-  return { bookingsCancelled: again.ownBookings.length, thirdPartyCancelled: again.thirdPartyBookings.length, assignmentsFlagged: flagged.length };
+  return { bookingsCancelled: again.ownBookings.length, thirdPartyCancelled: again.thirdPartyBookings.length, assignmentsFlagged: flagged.length, membershipsEnded: memberships.length };
 }
 
 export async function history(db: DbOrTx, resourceId: string) {

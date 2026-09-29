@@ -369,7 +369,7 @@ describe("correções da revisão da Etapa 2", () => {
     expect(rows.find((r) => r.employeeId === p.id && r.status === "confirmed")?.resourceId).toBe(target.id);
   });
 
-  it("capacidade por classe sem dupla contagem (DIR-026-T1, T2, T4): igual ao desk_class do banco", async () => {
+  it("capacidade por classe sem dupla contagem (DIR-026-T1, T2, T4, T5): igual ao desk_class do banco", async () => {
     const rh = await rhWithMfa();
     const holder = await seedEmployee({ orgCondition: "director" });
     const holder2 = await seedEmployee({ orgCondition: "director" });
@@ -450,5 +450,41 @@ describe("correções da revisão da Etapa 2", () => {
     const { accessException } = await import("@/db/schema");
     expect(await rule(db.update(accessException).set({ endsOn: d(5) }).where(eq(accessException.id, x)))).toBe("exception_identity_immutable");
     await revokeException(db, rh.actor, { exceptionId: x, reason: "ok" });
+  });
+
+  it("integrante desativado deixa de ser vigente no grupo; mesa de grupo sem integrante ativo entra em vínculo a revisar (DIR-032)", async () => {
+    const rh = await rhWithMfa();
+    const group = await directorsGroupId();
+    const m1 = await seedEmployee({ orgCondition: "director" });
+    await addGroupMember(db, rh.actor, { groupId: group, employeeId: m1.id, validFrom: today, reason: "x" });
+    const g1 = await seedDesk("G9");
+    await batchAssign(db, rh.actor, [{ resourceId: g1.id, mode: "group", accessGroupId: group, validFrom: today, reason: "x", responsible: "RH" }]);
+    await book(m1, g1.id, d(2));
+    await deactivateEmployee(db, rh.actor, m1.id, { reason: "desligamento" });
+    const { listGroups } = await import("@/modules/exclusivity/service");
+    const g = (await listGroups(db)).find((x) => x.id === group)!;
+    const member = g.members.find((m) => m.employeeId === m1.id)!;
+    expect(member.state).toBe("encerrado");
+    expect(member.validTo).toBe(today);
+    expect((await needsReviewList(db)).map((r) => [r.code, r.why])).toEqual([["G9", "grupo sem integrante vigente"]]);
+    const audits = (await db.select({ a: auditEvent.action }).from(auditEvent)).map((x) => x.a);
+    expect(audits).toContain("exclusivity.group_member_removed");
+    // aviso à própria pessoa fala da desativação, não de vínculo em revisão
+    const mails = (await db.select().from(outboxEvent)).map((m) => JSON.stringify(m.payload));
+    expect(mails.some((t) => t.includes(m1.email) && t.includes("desativação do cadastro"))).toBe(true);
+    expect(mails.some((t) => t.includes(m1.email) && t.includes("vínculo em revisão"))).toBe(false);
+  });
+
+  it("reabrir a antecessora exige titular anterior ativo; com ele desativado só resta liberar", async () => {
+    const rh = await rhWithMfa();
+    const h1 = await seedEmployee({ orgCondition: "director" });
+    const h2 = await seedEmployee({ orgCondition: "director" });
+    const desk = await seedDesk();
+    const id = await createAssignment(db, rh.actor, { resourceId: desk.id, mode: "individual", holderEmployeeId: h1.id, validFrom: today, reason: "x", responsible: "RH" });
+    const succ = await transferAssignment(db, rh.actor, { assignmentId: id, newHolderEmployeeId: h2.id, from: d(2), reason: "troca", responsible: "RH" });
+    await deactivateEmployee(db, rh.actor, h1.id, { reason: "desligamento" });
+    await expect(cancelAssignment(db, rh.actor, { assignmentId: succ, reason: "desistiu", successorDecision: "reopen" })).rejects.toThrow(/não está ativo/);
+    await cancelAssignment(db, rh.actor, { assignmentId: succ, reason: "desistiu", successorDecision: "release" });
+    expect((await listAssignments(db, { resourceId: desk.id })).map((a) => [a.holderName, a.endReason])).toEqual([[h1.name, "transfer_cancelled"]]);
   });
 });

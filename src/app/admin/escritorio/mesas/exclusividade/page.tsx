@@ -305,7 +305,7 @@ export default async function ExclusividadePage({ searchParams }: { searchParams
                     <li key={a.id}>
                       {a.mode === "individual" ? (holderView ? a.holderName : "titular") : a.groupName}: {formatLocalDate(a.validFrom)} {a.validTo ? `até ${formatLocalDate(a.validTo)}` : "sem término"} ({a.state}
                       {a.endReason ? `, ${a.endReason}` : ""}); responsável: {a.responsible}; motivo: {a.reason}
-                      {a.exceptions.length ? ` · liberações: ${a.exceptions.map((x) => `${x.kind === "release_to_shared" ? "compartilhado" : x.beneficiaryName} ${formatLocalDate(x.startsOn)} a ${formatLocalDate(x.endsOn)}${x.revokedAt ? " (revogada)" : ""}`).join("; ")}` : ""}
+                      {a.exceptions.length ? ` · liberações: ${a.exceptions.map((x) => `${x.kind === "release_to_shared" ? "compartilhado" : holderView ? x.beneficiaryName : "pessoa (nome restrito)"} ${formatLocalDate(x.startsOn)} a ${formatLocalDate(x.endsOn)}${x.revokedAt ? " (revogada)" : ""}`).join("; ")}` : ""}
                     </li>
                   ))}
                 </ul>
