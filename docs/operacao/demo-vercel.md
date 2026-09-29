@@ -30,7 +30,7 @@ No GitHub, no repositório `genarolins1975/rhopenfinancebrasil`, crie a branch `
 
 1. **Add New, Project**, importe o repositório. A Vercel detecta Next.js e pnpm; o `vercel.json` do repositório define o build, a região, a tarefa agendada e o bloqueio de deploy das branches de trabalho.
 2. Na tela de importação, não cadastre variáveis: ali elas valeriam para todos os ambientes. Conclua a importação; o primeiro deploy de um projeto novo é sempre de produção e falha sem variáveis, o que é esperado.
-3. Em **Settings, Environments, Production, Branch Tracking**, defina a branch de produção como `demo`. Em **Settings, Environment Variables**, cadastre as variáveis abaixo só em **Production**: as marcadas na tabela com o tipo **Secret** (valor ilegível depois de salvo; é o antigo Sensitive, trocado pela Vercel em 24/08/2026) e as demais com o tipo **Config**. Depois, em **Deployments**, crie um deploy de produção a partir da branch `demo`.
+3. Em **Settings, Environments, Production, Branch Tracking**, defina a branch de produção como `demo`. Em **Settings, Environment Variables**, cadastre as variáveis abaixo só em **Production**: as marcadas na tabela com o tipo **Secret** (valor ilegível depois de salvo; é o antigo Sensitive, trocado pela Vercel em 24/08/2026) e as demais com o tipo **Config**. Depois, publique juntando a branch de trabalho na `demo` por pull request no GitHub (base `demo`), o que gera um commit novo com o seu nome; a Vercel publica cada commit novo da `demo` e ignora commit que já teve deploy. Deploy cancelado não aparece na lista de **Deployments**; o estado de um commit aparece na janela **Create Deployment**.
 
 | Variável | Valor | Secret |
 |---|---|---|
