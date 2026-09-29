@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { runMigrations } from "@/db/migrate";
 import { checkDatabase } from "@/modules/operations/db-check";
+import { dbUrlProblem, maskDbUrl } from "@/modules/operations/db-url";
 import { safeErrorText } from "@/modules/shared/db-errors";
 
 /*
@@ -19,6 +20,12 @@ async function main() {
     throw new Error("CRON_SECRET ausente ou com menos de 32 caracteres: sem ele a rota agendada responde 401 e a outbox não anda (gere com openssl rand -hex 32)");
   }
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL ausente");
+  // Variável Secret não pode ser lida de volta: URL fora do formato é apontada aqui, com toda senha mascarada.
+  for (const [name, user] of [["DATABASE_URL", "rh_app"], ["DATABASE_OWNER_URL", "rh_owner"]] as const) {
+    const value = process.env[name];
+    const problem = value === undefined ? null : dbUrlProblem(value, appEnv === "demo" ? user : undefined);
+    if (problem) throw new Error(`${name} fora do formato (${problem}). Valor com senhas mascaradas: ${maskDbUrl(value!)}`);
+  }
   const owner = process.env.DATABASE_OWNER_URL;
   if (owner) {
     await runMigrations(owner);
