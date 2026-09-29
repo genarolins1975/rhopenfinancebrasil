@@ -35,7 +35,7 @@ CREATE DATABASE rh_demo OWNER rh_owner;
 -- Bloco 3: fuso do banco. Rode sozinho.
 ALTER DATABASE rh_demo SET timezone = 'America/Sao_Paulo';
 
--- Bloco 4: limpeza. Rode depois de guardar as senhas no cofre e montar as duas URLs. Depois dele, as senhas não
+-- Bloco 4: limpeza. Rode no banco neondb, depois de guardar as senhas no cofre e montar as duas URLs. Depois dele, as senhas não
 -- aparecem de novo.
 DROP TABLE _senhas_demo;
 
