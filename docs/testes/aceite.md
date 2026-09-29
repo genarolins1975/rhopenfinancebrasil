@@ -220,3 +220,102 @@ Testes executados após as correções, no mesmo ambiente: 53 de unidade; 136 de
 ### Situação do aceite da Etapa 2
 
 Executor: entregue com as correções das três rodadas aplicadas e testadas. Revisores: aceita com correções nas três rodadas; todas as correções aplicadas; as da terceira rodada verificadas pelas baterias do Executor (integração em três execuções consecutivas, como exigido pelo Revisor), sem quarta rodada independente. Responsável pelo produto: validada em 29/09/2026.
+
+## Etapa 3 (operação)
+
+Data: 29/09/2026. Executor: sessão principal. Revisores: subagentes independentes com contexto limpo, em duas rodadas, cada lente com banco de teste isolado (`rh_test_r1` a `rh_test_r10`), acesso ao código, às baterias e aos papéis da aplicação e dono.
+
+### Relato do Executor
+
+Escopo entregue conforme `operacao/plano-de-entregas.md`: fila de espera com oferta transacional nascida na transação que libera a mesa (`DIR-034`, `PAR-37`), prazo em horas úteis (`PAR-05`, `PAR-43`) e varredura no worker da outbox a cada minuto (`DEC-27`); confirmação de uso pelo portal e pelo QR, com liberação por falta de confirmação desativada por padrão (`PAR-06`, `PAR-44`); salas e cabines por intervalo com agenda e horizonte próprio (`PAR-45`); Meu time com compartilhamento opt-in (`DEC-28`); painel administrativo de reservas, fila e salas; indicador de demanda não atendida. Migrações `0007` (gerada) e `0008` (funções, triggers, grants e parâmetros).
+
+Testes executados na entrega (commit `83220ed`), no ambiente da sessão (PostgreSQL 16 local, Chromium pré-instalado): 61 de unidade e 54 de ponta a ponta com axe (desktop e celular), todos aprovados; integração com os 23 arquivos do projeto aprovados (162 de 162 na última execução antes do commit; a execução sobre o próprio commit misturou testes descartáveis que os revisores gravavam na mesma pasta, por isso a contagem dela não é usada aqui); tipos, lint e build sem erros.
+
+### Revisão independente, primeira rodada (29/09/2026)
+
+Seis lentes em paralelo (concorrência, exclusividade, autorização, tempo, interface, banco com documentação e testes), cada achado reproduzido e submetido a refutação por agentes distintos, com síntese final. 51 achados relatados, 49 confirmados e 2 refutados (T-08 e EXC-08, conformes às decisões registradas); 38 após deduplicação: nenhum bloqueante, 2 altos, 17 médios e 19 baixos. Nenhuma invariante do `CLAUDE.md` violada no estado entregue: em todos os casos em que a oferta tentou ir para quem não tinha direito, os triggers deferidos da `0004` recusaram o commit. Veredito: ACEITO COM CORREÇÕES.
+
+| Nº | Severidade | Achado | Tratamento |
+|---|---|---|---|
+| 1 | ALTA | Com `PAR-06` ativa, reservas feitas depois do limite, inclusive o aceite de oferta, eram liberadas na varredura seguinte; a tela não mostrava prazo | Corrigido: instante limite do dia; só reserva confirmada antes dele é liberada (aceite conta do `decided_at`); prazo em Minhas reservas; `PAR-44`; `DIR-006-T2` refeito |
+| 2 | ALTA | Salas e cabines só reserváveis até a semana seguinte | Corrigido: horizonte próprio por semanas (`DEC-26`, `PAR-45`); teste com semanas +2 a +4 aceitas e +5 recusada |
+| 3 | MÉDIA | Desativação de titular com mesa liberada e fila falhava: a mesa era oferecida antes de entrar em revisão | Corrigido: fila da pessoa encerrada primeiro, revisão marcada antes das ofertas; teste |
+| 4 | MÉDIA | A primeira da fila perdia a mesa para a segunda ao reservar direto | Corrigido: a reserva direta cede só a inscrições anteriores (`DEC-31` revista); teste |
+| 5 | MÉDIA | Corrida entre confirmação de uso e liberação | Corrigido: lock da linha da reserva nas duas pontas; teste com intercalação fixada |
+| 6 | MÉDIA | Confirmação de uso não acompanhava a realocação | Corrigido: a liberação poupa quem declarou uso em qualquer mesa do dia; teste |
+| 7 | MÉDIA | Decisão dada para retenção aplicada à reserva aceita depois da prévia | Corrigido: decisão leva a situação vista na prévia (`DEC-34`); teste |
+| 8 | MÉDIA | Fechar o dia de hoje impossível depois de qualquer reserva de sala encerrada | Corrigido: migração `0011`; teste |
+| 9 | MÉDIA | Cancelar retenção pela aba Mesas tirava a pessoa da fila, com email de reserva cancelada | Corrigido: "Retirar oferta" mantém a posição e avisa (`DEC-35`) |
+| 10 | MÉDIA | Retirar alguém da fila não avisava a pessoa | Corrigido: aviso com o motivo; ação administrativa própria |
+| 11 | MÉDIA | Oferta não aceita aparecia como reserva no Início, no mapa e no detalhe | Corrigido (`DEC-40`) |
+| 12 | MÉDIA | Visibilidade "Todos" do título de sala revelava o nome de quem reservou | Corrigido: nome só para a própria pessoa e a administração (`DEC-36`) |
+| 13 | MÉDIA | Titular com a mesa exclusiva livre consumia mesa compartilhada da fila | Corrigido (`DEC-38`) |
+| 14 | MÉDIA | Inscrição e reserva simultâneas da mesma pessoa (`PAR-30`) | Corrigido: lock consultivo por pessoa e dia (`DEC-32`); teste de 20 rodadas |
+| 15 | MÉDIA | Trigger de lock da oferta travava a mesa fora de ordem na cascata; deadlock | Corrigido: lock só na inserção (`0009`, `DEC-33`) |
+| 16 | MÉDIA | Deadlock entre a reivindicação da fila e a reserva direta da mesma pessoa | Corrigido: ordem única inscrição e depois índice único; teste com intercalação fixada |
+| 17 | MÉDIA | QR de sala resolvia reserva encerrada | Corrigido: só reserva não encerrada |
+| 18 | MÉDIA | Data impossível passava pela validação e expunha SQL | Corrigido: validação por ida e volta da data; só mensagem de domínio na tela; teste |
+| 19 | MÉDIA | `WL-04-T3` não exercitava o ramo que declarava | Corrigido: teste reescrito |
+| 20 | BAIXA | Pedido forjado em mesa exclusiva acionava a fila | Corrigido: elegibilidade de quem reserva primeiro (`DEC-31`) |
+| 21 | BAIXA | Oferta manual e aba Fila revelavam vínculo com mesa exclusiva | Corrigido: oferta manual só de mesa compartilhada, resposta única (`DEC-36`) |
+| 22 | BAIXA | Fechamento de dia decidia sobre retenção já cancelada | Corrigido: releitura sob lock; reserva inativa não recebe decisão, email nem auditoria |
+| 23 | BAIXA | Mudanças de política pelo diálogo liberavam a mesa sem oferta na mesma transação | Mantido e registrado (`DEC-39`): a varredura oferece em até um minuto e a reserva direta respeita a fila |
+| 24 | BAIXA | Consentimento do Meu time sobrevivia à desativação e à readmissão | Corrigido (`DEC-37`, migração `0010`) |
+| 25 | BAIXA | Idempotência da reserva de sala sob concorrência | Corrigido: releitura depois do lock; teste |
+| 26 | BAIXA | Inscrição de data passada nunca encerrada | Corrigido: varredura encerra (`DEC-41`) |
+| 27 | BAIXA | Último trecho do dia não reservável; busca padrão inválida depois das 22h | Corrigido: fim 24:00 e trecho sugerido; testes de unidade |
+| 28 | BAIXA | QR de sala levava à tela de mesa | Corrigido: QR de sala leva a Salas |
+| 29 | BAIXA | Coluna Oferta mostrava oferta retirada como viva | Corrigido: rótulo pela situação |
+| 30 | BAIXA | Cancelar reserva de sala já encerrada no painel | Corrigido |
+| 31 | BAIXA | Capacidade e zona de sala fora da auditoria | Corrigido; teste |
+| 32 | BAIXA | Indicador de demanda contava oferta vencida; janela com 15 datas | Corrigido |
+| 33 | BAIXA | Rede do banco da fila parcial | Corrigido: migração `0012` (ordem de entrada, coerência no commit, oferta decidida congelada) |
+| 34 | BAIXA | Concorrência com mesa exclusiva sem teste | Corrigido: R10b |
+| 35 | BAIXA | Triggers e `REVOKE` da `0008` sem teste | Corrigido: `etapa3-db.test.ts` |
+| 36 | BAIXA | Testes dependentes do horário | Corrigido em parte; concluído na segunda rodada (ID-07) |
+| 37 | BAIXA | Código morto e asserções fracas em `waitlist.test.ts` | Corrigido |
+| 38 | BAIXA | Documentação desatualizada (worker, triggers, grants) | Corrigido |
+
+### Relato do Executor na reapresentação (29/09/2026)
+
+Correções em worktree isolada (commits `4b302cd` a `ac2206d`), migrações `0009` a `0012`, decisões `DEC-32` a `DEC-41`. Testes executados no banco isolado `rh_test_r7`: 68 de unidade, 196 de integração (25 arquivos; `waitlist-concurrency` em oito execuções consecutivas) e 54 de ponta a ponta com axe em duas execuções, com build da worktree contra `rh_test`, todos aprovados.
+
+### Revisão independente, segunda rodada: reverificação (29/09/2026)
+
+Três lentes (regras e privacidade; concorrência e banco; interface, documentação e testes), contexto limpo, bancos `rh_test_r8` a `rh_test_r10`, sobre o código corrigido. Dos 51 achados da primeira rodada: 40 confirmados corrigidos, 10 corrigidos em parte (AUT-03, AUT-04, T-08, CONC-04, BDT-04, INT-03, INT-04, INT-06, INT-11, BDT-08) e 1 mantido por decisão (EXC-07, `DEC-39`). Baterias executadas pelas lentes, todas aprovadas: integração completa (196 testes em 25 arquivos, lente de concorrência e banco), arquivos da Etapa 3 (57 e 48 testes, nas outras duas lentes), unidade (68), tipos e lint; nenhuma rodou build nem ponta a ponta. Achados novos: 23, três deles relatados por duas lentes (retirada de oferta refeita pela varredura, segunda leitura do QR de sala, aviso duplo no fechamento de dia), o que dá 20 distintos.
+
+| ID | Severidade | Achado | Tratamento |
+|---|---|---|---|
+| RP-01 | MÉDIA | Encerramento por mesa exclusiva livre tirava da fila integrante de grupo e titular com a mesa liberada | Corrigido: só titular individual sem liberação vigente e fora de revisão (`DEC-38` revista); dois testes |
+| RP-02 | MÉDIA | Oferta para fim de semana feita à noite em dia útil vencia de madrugada | Corrigido: prazo útil quando termina antes da data; senão, minutos corridos do início do horário comercial da data (`PAR-43` revisto); testes de unidade |
+| RP-03, ID-01 | MÉDIA | "Retirar oferta" era desfeito pela varredura: a mesma mesa voltava à mesma pessoa | Corrigido: estado `withdrawn` (migrações `0013` e `0014`) e exclusão da mesa para a inscrição na data (`DEC-42`); email próprio da fila; a própria oferta de quem opera não aparece como retirada; mensagens distintas de retirada e recusa; teste |
+| RP-04 | BAIXA | Retirar oferta já vencida devolvia a pessoa à fila | Corrigido: a retenção vencida expira com a inscrição; teste |
+| RP-05 | BAIXA | Oferta manual a titular com mesa própria livre falhava com motivo falso | Corrigido: resposta neutra quando a mesa era reservável (`DEC-36` revista); teste |
+| RP-06, ID-02 | MÉDIA | Segunda leitura do QR de sala confirmava a próxima reserva do dia | Corrigido: só a reserva em andamento ou que começa em até 15 minutos; segunda leitura responde "já confirmado"; horário na tela e na mensagem; dois testes |
+| RP-07 | BAIXA | Autorização do Meu time revivia com a volta do gestor anterior; sem gestor, a tela anunciava compartilhamento inexistente | Corrigido: trigger `employee_manager_changed` zera a autorização em qualquer troca (`0015`, `DEC-37`); ativação sem gestor recusada; teste |
+| RP-08, ID-09 | BAIXA | Fechar o dia enviava dois avisos e encerrava inscrições sem ator | Corrigido: aviso único e ator registrado; teste |
+| CB-01 | MÉDIA | Desativação oferecia mesa de oferta vencida sem travá-la no protocolo (resto de CONC-04) | Corrigido: mesas das ofertas abertas da pessoa no passo de recursos (`DEC-43`); teste com intercalação fixada e contador de deadlocks |
+| CB-02 | MÉDIA | Duas desativações simultâneas de pessoas na fila da mesma data em deadlock | Corrigido: desativações serializadas por lock consultivo antes de qualquer outro (`DEC-43`); teste de seis rodadas |
+| CB-03 | MÉDIA | Prazo, origem, pessoa e mesa da retenção alteráveis pela linha da reserva (resto de BDT-04) | Corrigido: migração `0015` (identidade da reserva imutável, reserva encerrada não reabre, retenção no prazo da oferta); teste |
+| CB-04 | BAIXA | Decisão sem a situação da prévia valia para qualquer situação | Corrigido: situação obrigatória vinda da tela (`DEC-44`); teste |
+| CB-05 | BAIXA | Reserva que perdia a inscrição para oferta concorrente recebia erro genérico | Corrigido: "uma mesa acabou de ser oferecida a você"; teste com intercalação fixada |
+| ID-03 | MÉDIA | Estado e matriz citavam registro de aceite inexistente; matriz declarava "um caso por achado" | Corrigido: esta seção; matriz reescrita com o que tem e o que não tem teste automatizado |
+| ID-04 | MÉDIA | R10b e `etapa3-db` com asserções que passavam sem exercitar o caso | Corrigido: R10b com decisões da prévia e os dois desfechos de cada corrida exigidos; mensagem exata no banco |
+| ID-05 | BAIXA | Textos diziam que mesa exclusiva nunca é oferecida pela fila | Corrigido: "só a quem pode usá-la"; modelo de dados com `DEC-31`, `DEC-38` e `DEC-42` |
+| ID-06 | BAIXA | Oferta ainda apresentada como reserva no mapa, na semana, na razão das outras mesas e no assunto dos emails | Corrigido: estilo, legenda e filtro próprios; oferta na semana; razão própria; email da fila (`DEC-40` ampliada); teste de unidade |
+| ID-07 | BAIXA | Testes dependentes do horário passavam sem asserção | Corrigido: T-02 e T-05 com períodos relativos ao relógio do banco; `DIR-006-T2` afirma o desfecho na fronteira |
+| ID-08 | BAIXA | Busca de salas com a data de hoje depois das 23h inválida; tela de recurso de sala com estado de mesa | Corrigido |
+| ID-10 | BAIXA | Aviso de prazo de confirmação impreciso e ausente no ato da reserva | Corrigido: só para quem será atingido e na mensagem da reserva de hoje (`DEC-44`) |
+
+Os 14 casos de `etapa3-revisao2.test.ts` foram executados também contra o código anterior à correção (commit `ac2206d`, banco `rh_test_r7`): os 14 falham, cada um pelo motivo do seu achado; no código corrigido, os 14 passam.
+
+### Relato do Executor na segunda reapresentação (29/09/2026)
+
+Correções em worktree isolada (commits `e1f359a` e `2a7834f`), migrações `0013` a `0015`, decisões `DEC-42` a `DEC-44`, integradas ao branch de trabalho. Testes executados sobre o código final, com `rh_dev` e `rh_test` migrados até a `0015`: 71 de unidade; 211 de integração (26 arquivos) em três execuções consecutivas, todas aprovadas, com o contador `pg_stat_database.deadlocks` de `rh_test` inalterado em cada execução e zero linhas de "nova tentativa", "Failed query" ou "params" em `.log-test.ndjson`; 54 de ponta a ponta com axe (27 por projeto, nenhum pulado) contra o build de produção; tipos, lint e build sem erros. O servidor registrou duas vezes "The destination stream closed early" durante a bateria de ponta a ponta, aviso do Next quando o navegador sai da página durante o streaming, sem falha de teste.
+
+A verificação adversarial dos achados novos da segunda rodada (reprodução e refutação por agentes distintos) foi interrompida por reinício do ambiente depois de 22 dos 37 agentes previstos; os achados foram tratados pelo Executor com base nas evidências das lentes e nos testes que falham no código anterior. A terceira rodada, sobre o código final, cobre essa lacuna.
+
+### Situação do aceite da Etapa 3
+
+Executor: entregue com as correções das duas rodadas aplicadas e testadas. Revisores: primeira rodada aceita com correções; segunda rodada de reverificação com 20 achados novos distintos, todos tratados. Terceira rodada independente sobre o código final: em andamento. Responsável pelo produto: validação pendente.
+
