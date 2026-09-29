@@ -17,8 +17,14 @@ Roteiro para publicar o portal como demonstração do conceito, com dados fictí
 2. Abra o **SQL Editor** do projeto, no banco padrão (`neondb`), e rode os Blocos 1, 2 e 3 do arquivo `demo-neon.sql` deste diretório, um de cada vez. O editor pode rodar cada comando numa conexão própria; o arquivo foi escrito para isso, e o Bloco 1 pode ser rodado de novo sem estrago.
 3. Guarde as duas senhas que o Bloco 1 mostra (`senha_rh_owner`, `senha_rh_app`) num cofre de senhas. Não devem ir para email, chat, print nem planilha. Depois do passo 4, rode o Bloco 4 com o banco `neondb` selecionado no topo do editor (a tabela fica nele), que apaga a tabela onde elas ficaram; a partir daí, não aparecem de novo.
 4. Em **Connect**, escolha o banco `rh_demo` e copie os dois endereços do servidor: o **com pool** (com `-pooler` no nome) e o **direto** (sem `-pooler`). Monte as duas URLs:
-   * `DATABASE_URL` (aplicação, com pool): `postgresql://rh_app:<senha_rh_app>@<servidor com -pooler>/rh_demo?sslmode=require`
-   * `DATABASE_OWNER_URL` (migrações, direta): `postgresql://rh_owner:<senha_rh_owner>@<servidor sem -pooler>/rh_demo?sslmode=require`
+   * `DATABASE_URL` (aplicação, com pool): `postgresql://rh_app:SENHA_RH_APP@SERVIDOR_COM_POOLER/rh_demo?sslmode=require`
+   * `DATABASE_OWNER_URL` (migrações, direta): `postgresql://rh_owner:SENHA_RH_OWNER@SERVIDOR_SEM_POOLER/rh_demo?sslmode=require`
+
+   Troque as partes em maiúsculas pelos valores reais, sem deixar sinais de `<`, `>`, parênteses, espaços ou `:` depois do servidor. Um sinal desses faz o build parar com `ERR_INVALID_URL`. Para montar sem erro de digitação, rode no Terminal do Mac a linha abaixo (uma vez para cada URL, trocando `rh_owner` por `rh_app` na segunda): ela pede a senha sem mostrá-la, pede o servidor, limpa sinais indevidos e copia a URL pronta para colar na Vercel.
+
+   ```
+   read -rs 'P?Senha (cole e tecle Enter; ela não aparece): '; echo; read -r 'H?Servidor (cole e tecle Enter): '; P=${P//[<> ]/}; H=${H//[<> ]/}; print -rn -- "postgresql://rh_owner:${P}@${H}/rh_demo?sslmode=require" | pbcopy; echo "Senha com ${#P} caracteres (o certo é 64). Servidor usado: ${H}"; unset P
+   ```
 
 Cota do plano gratuito do Neon (documentação do Neon consultada em 29/09/2026): 100 CU-horas por projeto por mês; esgotada a cota, o banco fica suspenso até o ciclo seguinte. O banco dorme depois de 5 minutos sem consulta. Com a tarefa a cada 15 minutos só em horário comercial e uso de demonstração, o consumo fica dentro da cota. Se a demonstração for usada o dia todo, avalie o plano pago por uso.
 
