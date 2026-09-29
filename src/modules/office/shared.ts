@@ -79,6 +79,8 @@ const DB_RULE_MESSAGES: Record<string, string> = {
   hold_incoherent: "A retenção da fila só vira reserva com a oferta aceita. Nada foi aplicado.",
   booking_identity_immutable: "Pessoa, mesa, data e origem de uma reserva não mudam. Para trocar de mesa, use a realocação.",
   booking_already_closed: "Esta reserva já não está ativa.",
+  offer_beyond_day: "A oferta não pode durar além do fim do dia da reserva. Nada foi aplicado.",
+  offer_deadline_immutable: "O prazo de uma oferta aberta não é estendido. Nada foi aplicado.",
 };
 
 /** Converte erro do banco em erro de domínio: regra de trigger, exclusão, unicidade, deadlock ou tempo de lock. */

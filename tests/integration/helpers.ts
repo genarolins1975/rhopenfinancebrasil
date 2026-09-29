@@ -153,15 +153,18 @@ export async function seedHold(opts: { resourceId: string; employeeId: string; d
   const c = await ownerPool.connect();
   try {
     await c.query("begin");
-    const future = new Date(Date.now() + 3_600_000);
+    // Prazo futuro: gravado direto. Prazo passado: nasce um minuto à frente e é encurtado (a rede só permite encurtar).
+    const future = opts.expiresAt.getTime() > Date.now() + 1000 ? opts.expiresAt : new Date(Date.now() + 60_000);
     const e = await c.query("insert into waitlist_entry (employee_id, date) values ($1, $2::date) returning id", [opts.employeeId, opts.date]);
     const entryId = e.rows[0].id as string;
     await c.query("update waitlist_entry set status = 'offered' where id = $1", [entryId]);
     const b = await c.query("insert into desk_booking (resource_id, employee_id, booking_date, status, origin, actor_employee_id, hold_expires_at) values ($1, $2, $3::date, 'held', 'waitlist_offer', $2, $4) returning id", [opts.resourceId, opts.employeeId, opts.date, future]);
     const holdBookingId = b.rows[0].id as string;
     const o = await c.query("insert into waitlist_offer (entry_id, resource_id, hold_booking_id, expires_at) values ($1, $2, $3, $4) returning id", [entryId, opts.resourceId, holdBookingId, future]);
-    await c.query("update desk_booking set hold_expires_at = $2 where id = $1", [holdBookingId, opts.expiresAt]);
-    await c.query("update waitlist_offer set expires_at = $2 where hold_booking_id = $1", [holdBookingId, opts.expiresAt]);
+    if (future !== opts.expiresAt) {
+      await c.query("update desk_booking set hold_expires_at = $2 where id = $1", [holdBookingId, opts.expiresAt]);
+      await c.query("update waitlist_offer set expires_at = $2 where hold_booking_id = $1", [holdBookingId, opts.expiresAt]);
+    }
     await c.query("commit");
     return { holdBookingId, entryId, offerId: o.rows[0].id as string };
   } catch (err) {

@@ -154,7 +154,7 @@ export default async function EscritorioPage({ searchParams }: { searchParams: P
               <tbody>
                 {filtered.map((i) => {
                   const a = i.availability;
-                  const style = STATE_STYLE[a.code] ?? STATE_STYLE.inactive;
+                  const style = a.offerPending ? STATE_STYLE.offered : (STATE_STYLE[a.code] ?? STATE_STYLE.inactive);
                   return (
                     <tr key={i.resource.id}>
                       <td className={td}>

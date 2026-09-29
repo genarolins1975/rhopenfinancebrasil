@@ -124,6 +124,9 @@ describe("classe da mesa (DIR-026)", () => {
   it("exceção ao compartilhado devolve a mesa ao conjunto compartilhado nessa data", () => {
     expect(deskClass({ retired: false, period: null, policy: { assignment: individual(), exception: { id: "x", kind: "release_to_shared", beneficiaryEmployeeId: null }, members: new Set() } })).toBe("shared");
   });
+  it("mesa em revisão com liberação ao compartilhado vigente continua exclusiva (DIR-018, 0015)", () => {
+    expect(deskClass({ retired: false, period: null, policy: { assignment: individual({ needsReview: true }), exception: { id: "x", kind: "release_to_shared", beneficiaryEmployeeId: null }, members: new Set() } })).toBe("exclusive");
+  });
   it("liberação nominal mantém a mesa fora do compartilhado", () => {
     expect(deskClass({ retired: false, period: null, policy: { assignment: individual(), exception: { id: "x", kind: "release_to_employee", beneficiaryEmployeeId: other }, members: new Set() } })).toBe("exclusive");
   });

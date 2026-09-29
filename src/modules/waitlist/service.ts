@@ -77,6 +77,18 @@ async function closeEntryWithNotice(tx: Tx, entryId: string, employeeId: string,
 
 /** Fechamento do dia (DIR-033): inscrições em espera da data são encerradas com aviso; a fila não sobrevive a dia fechado. */
 export async function closeQueueForDate(tx: Tx, actor: Actor, date: string, reason: string): Promise<number> {
+  // Oferta vencida e ainda não varrida (o diálogo só lista retenção viva): expira a retenção e a oferta e devolve a
+  // inscrição a espera, para que ela seja encerrada abaixo com o aviso único de fechamento e o ator (terceira revisão).
+  const stale = await tx.execute(sql`
+    select o.id as offer_id, o.hold_booking_id, o.resource_id, e.id as entry_id
+      from waitlist_offer o join waitlist_entry e on e.id = o.entry_id
+     where e.date = ${date}::date and e.status = 'offered' and o.status = 'open' and o.expires_at <= now()`);
+  for (const r of stale.rows as Array<{ offer_id: string; hold_booking_id: string; resource_id: string; entry_id: string }>) {
+    await tx.update(deskBooking).set({ status: "expired" }).where(and(eq(deskBooking.id, r.hold_booking_id), eq(deskBooking.status, "held")));
+    await tx.update(waitlistOffer).set({ status: "expired", decidedAt: new Date() }).where(and(eq(waitlistOffer.id, r.offer_id), eq(waitlistOffer.status, "open")));
+    await tx.update(waitlistEntry).set({ status: "waiting" }).where(and(eq(waitlistEntry.id, r.entry_id), eq(waitlistEntry.status, "offered")));
+    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "waitlist.offer_expired", entityType: "waitlist_offer", entityId: r.offer_id, before: { status: "open" }, after: { status: "expired", entryId: r.entry_id, resourceId: r.resource_id, date, why: "escritório fechado com a oferta já vencida" }, requestId: actor.requestId });
+  }
   const rows = await tx.select({ id: waitlistEntry.id, employeeId: waitlistEntry.employeeId }).from(waitlistEntry).where(and(eq(waitlistEntry.date, date), eq(waitlistEntry.status, "waiting")));
   for (const r of rows) {
     await closeEntryWithNotice(tx, r.id, r.employeeId, date, `escritório fechado: ${reason}`, `O escritório estará fechado em ${formatLocalDate(date)} (${reason}). Sua inscrição na fila de espera dessa data foi encerrada.`, actor);
@@ -137,10 +149,12 @@ export async function offerNext(
     if (own) entries = entries.filter((e) => e.createdAt.getTime() < own.createdAt.getTime() || (e.createdAt.getTime() === own.createdAt.getTime() && e.id < own.id));
   }
   for (const e of entries) {
-    // Quem tem mesa de uso exclusivo livre para si na data (titular ou integrante) não consome mesa compartilhada da fila.
+    // Titular de mesa individual, sem liberação vigente, com a própria mesa livre na data não consome mesa compartilhada da
+    // fila (DEC-38). O aviso traz a data e o código da mesa própria: é dado da própria pessoa.
     const own = await ownExclusiveFree(tx, e.employeeId, input.date);
     if (own && own !== input.resourceId) {
-      await closeEntryWithNotice(tx, e.id, e.employeeId, input.date, "mesa de uso exclusivo disponível", "Sua mesa de uso exclusivo está disponível nesta data. Reserve por ela no Portal do Colaborador; a inscrição na fila foi encerrada.");
+      const [mine] = await tx.select({ code: resource.code }).from(resource).where(eq(resource.id, own));
+      await closeEntryWithNotice(tx, e.id, e.employeeId, input.date, "mesa de uso exclusivo disponível", `Sua mesa ${mine?.code ?? ""} de uso exclusivo está livre em ${formatLocalDate(input.date)}. Reserve por ela no Portal do Colaborador; a sua inscrição na fila de espera dessa data foi encerrada.`);
       continue;
     }
     // DIR-025: a mesma função de disponibilidade da reserva direta decide; mesa exclusiva sem exceção nunca é oferecida.
@@ -357,6 +371,8 @@ export async function offerManually(db: Db, actor: Actor, input: { entryId: stri
     // pode servir para descobrir quem é titular ou integrante de mesa exclusiva (exclusive.holder.view).
     const cls = await tx.execute(sql`select desk_class(${input.resourceId}::uuid, ${entry.date}::date) as c`);
     if ((cls.rows[0] as { c: string | null }).c !== "shared") throw new ConflictError("Só mesa do conjunto compartilhado, operacional na data, é oferecida manualmente pela fila.");
+    const [gone] = await tx.select({ id: waitlistOffer.id }).from(waitlistOffer).where(and(eq(waitlistOffer.entryId, input.entryId), eq(waitlistOffer.resourceId, input.resourceId), eq(waitlistOffer.status, "withdrawn")));
+    if (gone) throw new ConflictError("A oferta desta mesa foi retirada desta pessoa pela administração nesta data (DEC-42). Escolha outra mesa.");
     const made = await offerNext(tx, { resourceId: input.resourceId, date: entry.date, candidateIds: [entry.employeeId], offeredBy: actor.employeeId, requestId: actor.requestId });
     if (!made) {
       const { availability } = await explainFor(tx, entry.employeeId, input.resourceId, entry.date);
@@ -390,8 +406,9 @@ export async function declineOfferOfHold(tx: Tx, actor: Actor, holdBookingId: st
 }
 
 /**
- * Oferta retirada por decisão administrativa (manutenção, bloqueio, fechamento de dia, exclusividade, desativação de
- * titular): a retenção já foi cancelada por quem chama; a oferta vence e a inscrição volta a esperar, sem perder a posição.
+ * Oferta retirada por decisão administrativa (aba Mesas, manutenção, bloqueio, fechamento de dia, exclusividade,
+ * desativação de titular): a retenção já foi cancelada por quem chama; a oferta vira `withdrawn` e a inscrição volta a
+ * esperar, sem perder a posição; aquela mesa não volta a ser oferecida a ela na data (DEC-42).
  */
 export async function withdrawOfferOfHold(tx: Tx, actor: Actor, holdBookingId: string, reason: string): Promise<void> {
   const [offer] = await tx.update(waitlistOffer).set({ status: "withdrawn", decidedAt: new Date() }).where(and(eq(waitlistOffer.holdBookingId, holdBookingId), eq(waitlistOffer.status, "open"))).returning({ id: waitlistOffer.id, entryId: waitlistOffer.entryId });
@@ -424,10 +441,12 @@ export async function queueDatesOf(db: DbOrTx, employeeId: string): Promise<stri
 }
 
 /** Mesas que a administração pode oferecer manualmente à pessoa: disponíveis para ela e da classe compartilhada. */
-export async function manualOfferOptions(db: DbOrTx, employeeId: string, date: string): Promise<Array<{ id: string; code: string }>> {
+export async function manualOfferOptions(db: DbOrTx, employeeId: string, date: string, entryId?: string): Promise<Array<{ id: string; code: string }>> {
   const { stateForPerson } = await import("@/modules/availability/service");
   const { items } = await stateForPerson(db, employeeId, date, { types: ["desk"] });
-  return items.filter((i) => i.availability.canBook && i.deskClass === "shared").map((i) => ({ id: i.resource.id, code: i.resource.code }));
+  // Mesa cuja oferta foi retirada desta inscrição pela administração não é opção (DEC-42).
+  const withdrawn = entryId ? new Set((await db.select({ r: waitlistOffer.resourceId }).from(waitlistOffer).where(and(eq(waitlistOffer.entryId, entryId), eq(waitlistOffer.status, "withdrawn")))).map((x) => x.r)) : new Set<string>();
+  return items.filter((i) => i.availability.canBook && i.deskClass === "shared" && !withdrawn.has(i.resource.id)).map((i) => ({ id: i.resource.id, code: i.resource.code }));
 }
 
 /* Leitura. */
@@ -466,8 +485,8 @@ export type QueueRow = {
   status: string;
   createdAt: Date;
   preferences: Preferences;
-  /** `exclusive`: a mesa ofertada é de classe exclusiva na data; a tela oculta o código a quem não tem exclusive.holder.view. */
-  offer: { id: string; resourceCode: string; expiresAt: Date; status: string; live: boolean; exclusive: boolean } | null;
+  /** A tela mostra o código da mesa ofertada só a quem tem exclusive.holder.view ou booking.admin.manage (DEC-36). */
+  offer: { id: string; resourceCode: string; expiresAt: Date; status: string; live: boolean } | null;
 };
 
 /** Fila de uma data para a administração: posição por ordem de inscrição; ofertas com situação e prazo. */
@@ -480,7 +499,7 @@ export async function listQueue(db: DbOrTx, filter: { date: string }): Promise<Q
     .orderBy(asc(waitlistEntry.createdAt));
   if (rows.length === 0) return [];
   const offers = await db
-    .select({ id: waitlistOffer.id, entryId: waitlistOffer.entryId, expiresAt: waitlistOffer.expiresAt, status: waitlistOffer.status, code: resource.code, offeredAt: waitlistOffer.offeredAt, exclusive: sql<boolean>`desk_class(${waitlistOffer.resourceId}, ${filter.date}::date) = 'exclusive'` })
+    .select({ id: waitlistOffer.id, entryId: waitlistOffer.entryId, expiresAt: waitlistOffer.expiresAt, status: waitlistOffer.status, code: resource.code, offeredAt: waitlistOffer.offeredAt })
     .from(waitlistOffer)
     .innerJoin(resource, eq(resource.id, waitlistOffer.resourceId))
     .where(inArray(waitlistOffer.entryId, rows.map((r) => r.entryId)))
@@ -493,7 +512,7 @@ export async function listQueue(db: DbOrTx, filter: { date: string }): Promise<Q
     return {
       ...r,
       preferences: (r.preferences ?? {}) as Preferences,
-      offer: o ? { id: o.id, resourceCode: o.code, expiresAt: o.expiresAt, status: o.status, live: o.status === "open" && o.expiresAt.getTime() > now, exclusive: !!o.exclusive } : null,
+      offer: o ? { id: o.id, resourceCode: o.code, expiresAt: o.expiresAt, status: o.status, live: o.status === "open" && o.expiresAt.getTime() > now } : null,
     };
   });
 }

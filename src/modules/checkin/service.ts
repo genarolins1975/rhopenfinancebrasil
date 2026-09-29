@@ -65,7 +65,7 @@ async function resolveOwnBookingToday(db: DbOrTx, employeeId: string, input: Con
       .select({ id: spaceBooking.id, code: resource.code, lower: sql<string>`lower(${spaceBooking.period})`, upper: sql<string>`upper(${spaceBooking.period})` })
       .from(spaceBooking)
       .innerJoin(resource, eq(resource.id, spaceBooking.resourceId))
-      .where(and(eq(resource.code, code), eq(spaceBooking.employeeId, employeeId), eq(spaceBooking.status, "confirmed"), sql`upper(${spaceBooking.period}) > now()`, sql`lower(${spaceBooking.period}) <= now() + interval '15 minutes'`))
+      .where(and(eq(resource.code, code), eq(spaceBooking.employeeId, employeeId), eq(spaceBooking.status, "confirmed"), sql`${spaceBooking.period} && local_day_range(local_today())`, sql`upper(${spaceBooking.period}) > now()`, sql`lower(${spaceBooking.period}) <= now() + interval '15 minutes'`))
       .orderBy(asc(sql`lower(${spaceBooking.period})`));
     if (s) return { kind: "space", id: s.id, code: s.code, slot: slotOf(s) };
     const [r] = await db.select({ type: resource.type }).from(resource).where(eq(resource.code, code));

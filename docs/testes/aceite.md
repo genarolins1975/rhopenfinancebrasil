@@ -267,8 +267,8 @@ Seis lentes em paralelo (concorrência, exclusividade, autorização, tempo, int
 | 28 | BAIXA | QR de sala levava à tela de mesa | Corrigido: QR de sala leva a Salas |
 | 29 | BAIXA | Coluna Oferta mostrava oferta retirada como viva | Corrigido: rótulo pela situação |
 | 30 | BAIXA | Cancelar reserva de sala já encerrada no painel | Corrigido |
-| 31 | BAIXA | Capacidade e zona de sala fora da auditoria | Corrigido; teste |
-| 32 | BAIXA | Indicador de demanda contava oferta vencida; janela com 15 datas | Corrigido |
+| 31 | BAIXA | Capacidade e zona de sala fora da auditoria | Corrigido; teste acrescentado na terceira rodada (TR-15), que apontou a falta dele |
+| 32 | BAIXA | Indicador de demanda contava oferta vencida; janela com 15 datas | Corrigido; teste acrescentado na terceira rodada (TR-15) |
 | 33 | BAIXA | Rede do banco da fila parcial | Corrigido: migração `0012` (ordem de entrada, coerência no commit, oferta decidida congelada) |
 | 34 | BAIXA | Concorrência com mesa exclusiva sem teste | Corrigido: R10b |
 | 35 | BAIXA | Triggers e `REVOKE` da `0008` sem teste | Corrigido: `etapa3-db.test.ts` |
@@ -315,7 +315,34 @@ Correções em worktree isolada (commits `e1f359a` e `2a7834f`), migrações `00
 
 A verificação adversarial dos achados novos da segunda rodada (reprodução e refutação por agentes distintos) foi interrompida por reinício do ambiente depois de 22 dos 37 agentes previstos; os achados foram tratados pelo Executor com base nas evidências das lentes e nos testes que falham no código anterior. A terceira rodada, sobre o código final, cobre essa lacuna.
 
+### Revisão independente, terceira rodada (29/09/2026)
+
+Três lentes (concorrência e banco; regras e privacidade; interface, documentação e testes), contexto limpo, sobre o código final (commit `7e2a4d0`), bancos `rh_test_r12` a `rh_test_r14`; cada achado novo reproduzido e submetido a refutação por agentes distintos, com síntese final. Baterias executadas pelas lentes, todas aprovadas: integração completa (211 testes em 26 arquivos, em dois bancos), arquivos da Etapa 3 (56 e 73 testes), `waitlist-concurrency` e `office-concurrency` em três execuções, unidade (71), tipos e lint; nenhuma rodou build nem ponta a ponta. Os 33 itens da segunda rodada foram reconferidos um a um, cobrindo a verificação interrompida: 30 corrigidos por completo e 3 em parte (AUT-04, ID-03, ID-10, resíduos baixos). Achados novos: 19 relatos confirmados, 15 distintos, nenhum refutado; nenhum bloqueante, 2 altos, 13 baixos. Nenhuma invariante do `CLAUDE.md` violada no estado revisado. Veredito: ACEITO COM CORREÇÕES, com os dois altos e os três resíduos a corrigir, com teste, antes do aceite.
+
+| ID | Severidade | Achado | Tratamento |
+|---|---|---|---|
+| TR-01 | ALTA | "Retirar oferta" sem a situação vista: com aceite concorrente ou tela desatualizada, cancelava a reserva confirmada e dizia, em tela, email e auditoria, que a pessoa continuava na fila | Corrigido: o formulário envia a situação exibida; a ação recusa sem ela; o serviço compara com a situação relida sob lock e, se mudou, nada cancela; aviso, auditoria e desfecho saem da situação relida (`DEC-42`, `DEC-44`); dois testes (corrida com intercalação fixada e tela desatualizada) |
+| TR-02 | ALTA | `deskClass` do serviço contava como compartilhada a mesa em revisão com liberação vigente, ao contrário do `desk_class` do banco: capacidade e rótulos errados (`DIR-026`) | Corrigido: mesa em revisão é exclusiva também no serviço; teste de integração comparando serviço, banco e `capacityOn`; teste de unidade |
+| TR-03 | BAIXA | Autorização do Meu time revivia quando o próprio gestor era desativado e readmitido | Corrigido: a desativação zera as autorizações dadas à pessoa como gestora, com o número na auditoria (`DEC-37`); teste |
+| TR-04 | BAIXA | Aba Fila mostrava "oferta aberta" só nas ofertas de mesa exclusiva, revelando o vínculo (resíduo de AUT-04) | Corrigido: "oferta aberta" em toda oferta para quem não tem as permissões (`DEC-36`); campo sem uso removido |
+| TR-05 | BAIXA | Fechar o dia com oferta vencida e não varrida deixava a inscrição viva; depois vinha aviso falso de vencimento, sem ator | Corrigido: o fechamento expira essas ofertas e encerra as inscrições com o aviso de fechamento e o ator; teste |
+| TR-06 | BAIXA | Mesa retirada continuava nas opções da oferta manual e era recusada com "tente mais tarde"; o diálogo não avisava o efeito da retirada | Corrigido: mesa retirada fora das opções e recusada com o motivo; aviso no diálogo; `DEC-42` e guia; teste |
+| TR-07 | BAIXA | QR de sala perdeu o filtro do dia: entre 23:45 e 24:00, a reserva da meia-noite aparecia como de hoje e o banco recusava | Corrigido: filtro do dia restaurado junto com a janela de 15 minutos; sem teste automatizado (depende do relógio do banco) |
+| TR-08 | BAIXA | Cancelamento que encontrava a reserva encerrada por outra transação respondia sempre "a oferta da fila venceu" | Corrigido: a mensagem informa a causa real; a mesa liberada por oferta vencida vai à próxima pessoa na mesma transação (pista registrada pela revisão); dois testes |
+| TR-09 | BAIXA | Rede do banco aceitava estender juntos os prazos da oferta e da retenção, reabrir oferta vencida e reescrever o encerramento da reserva | Corrigido: migração `0016` (prazo até o fim do dia, só encurtar, encerramento congelado); teste |
+| TR-10 | BAIXA | Lock global de desativação sob `lock_timeout` de 3 s: lote esgotava as tentativas com erro genérico | Corrigido em parte, por decisão: lock mantido, com espera própria de 12 s, sem nova tentativa e resposta específica; limite registrado na `DEC-43` e no guia; sem teste automatizado |
+| TR-11 | BAIXA | Aviso de prazo de confirmação anexado à reserva de outra data (resíduo de ID-10) | Corrigido: só na reserva feita para hoje; sem teste automatizado (mensagem da ação) |
+| TR-12 | BAIXA | Reserva em nome que perdia a inscrição para oferta concorrente respondia ao operador "uma mesa acabou de ser oferecida a você" | Corrigido: resposta sobre "esta pessoa"; teste |
+| TR-13 | BAIXA | Aviso de encerramento da `DEC-38` sem data nem mesa | Corrigido: data e código da mesa própria; teste |
+| TR-14 | BAIXA | Oferta com ★ e cor de "Disponível" na lista e no mapa; cartão dizia "Reservada para você" | Corrigido: cor própria, ☆ na lista e no mapa, "Retida para você até" (`DEC-40`); sem teste automatizado (tela) |
+| TR-15 | BAIXA | Documentação de aceite, matriz, registro e estado com teste inexistente e contagens divergentes (resíduo de ID-03) | Corrigido: testes dos achados 31 e 32 da primeira rodada; contagens alinhadas (primeira rodada 38 distintos; segunda 20 distintos de 23 relatos e 10 parciais; terceira 15 distintos); matriz com a lista exata de casos por achado; pontuação do estado |
+
+Os 13 casos de `etapa3-revisao3.test.ts` foram executados também contra o código anterior à correção (commit `7e2a4d0`, banco `rh_test_r12`): os 11 casos de TR-01 a TR-13 falham, cada um pelo motivo do seu achado; os 2 de TR-15 passam lá, como esperado, porque cobrem a falta de teste e não um defeito. No código corrigido, os 13 passam.
+
+### Relato do Executor na terceira reapresentação (29/09/2026)
+
+Correções aplicadas no branch de trabalho, migração manual `0016`, decisões `DEC-36` a `DEC-38` e `DEC-40` a `DEC-44` revistas. Testes executados sobre o código corrigido, com `rh_dev` e `rh_test` migrados até a `0016`: 72 de unidade; 225 de integração (27 arquivos) em três execuções consecutivas, todas aprovadas, com o contador `pg_stat_database.deadlocks` de `rh_test` inalterado e zero linhas de "nova tentativa", "Failed query" ou "params" em `.log-test.ndjson`; 54 de ponta a ponta com axe (27 por projeto, nenhum pulado) contra o build de produção; tipos, lint e build sem erros. O servidor registrou três vezes o aviso "The destination stream closed early", sem falha de teste. A primeira execução da bateria de integração revelou que um caso antigo de `etapa3-db` estendia o prazo da oferta para provar o desalinhamento, o que a `0016` passou a recusar antes; o caso foi refeito (encurtar desalinha e é recusado no commit; estender é recusado na hora) e a validação completa foi repetida do início. Depois dela, só o texto da resposta para oferta já vencida foi ajustado ("mesa liberada, oferecida à próxima pessoa elegível, se houver"); tipos, lint e os dois arquivos de regressão afetados (27 testes) foram reexecutados e aprovados.
+
 ### Situação do aceite da Etapa 3
 
-Executor: entregue com as correções das duas rodadas aplicadas e testadas. Revisores: primeira rodada aceita com correções; segunda rodada de reverificação com 20 achados novos distintos, todos tratados. Terceira rodada independente sobre o código final: em andamento. Responsável pelo produto: validação pendente.
-
+Executor: entregue com as correções das três rodadas aplicadas e testadas. Revisores: as três rodadas aceitas com correções; as da terceira rodada verificadas pelas baterias do Executor e pelos testes que falham no código anterior, sem quarta rodada independente, como na Etapa 2. Responsável pelo produto: validação pendente.

@@ -113,6 +113,13 @@
       "when": 1790689531650,
       "tag": "0015_etapa3_rede_reserva",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790689532650,
+      "tag": "0016_etapa3_rede_prazos",
+      "breakpoints": true
     }
   ]
 }

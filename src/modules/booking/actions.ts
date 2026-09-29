@@ -24,7 +24,8 @@ export async function bookDeskAction(_prev: ActionState, fd: FormData): Promise<
     revalidatePath("/inicio");
     // PAR-06 ativa: quem reserva para hoje antes do limite fica sabendo do prazo no ato (segunda revisão, ID-10).
     const { pendingUseConfirmation } = await import("@/modules/checkin/service");
-    const deadline = r.created ? await pendingUseConfirmation(db, current.employee.id) : null;
+    const { localToday } = await import("@/modules/shared/dates");
+    const deadline = r.created && date === localToday() ? await pendingUseConfirmation(db, current.employee.id) : null;
     const note = deadline ? ` Confirme o uso até ${deadline}; sem confirmação, a mesa é liberada para outra pessoa.` : "";
     return { ok: true, message: `Mesa ${r.resourceCode} reservada para ${date.split("-").reverse().join("/")}.${note}`, data: { bookingId: r.bookingId, back } };
   } catch (e) {
@@ -36,7 +37,10 @@ export async function cancelDeskAction(_prev: ActionState, fd: FormData): Promis
   const current = await requireCurrent();
   const actor = actorOf(current);
   try {
-    const r = await cancelDesk(db, actor, str(fd, "bookingId"), { reason: str(fd, "reason") || undefined, message: str(fd, "message") || undefined });
+    // A tela envia a situação que mostrou; sem ela (página antiga ou outro cliente), a decisão pode valer para outra coisa.
+    const status = str(fd, "status");
+    if (status !== "held" && status !== "confirmed") return { error: "A tela está desatualizada. Atualize a página e tente de novo." };
+    const r = await cancelDesk(db, actor, str(fd, "bookingId"), { reason: str(fd, "reason") || undefined, message: str(fd, "message") || undefined, expectedStatus: status });
     revalidatePath("/escritorio");
     revalidatePath("/escritorio/minhas-reservas");
     revalidatePath("/admin/reservas");

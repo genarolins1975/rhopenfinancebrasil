@@ -134,7 +134,7 @@ describe("segunda revisão independente da Etapa 3: regressão", () => {
     const [offer] = await openOffers();
     await ageOpenOffers(offer.id);
     const fac = await privilegedActor({ roles: ["facilities"] });
-    await expect(cancelDesk(db, fac.actor, offer.holdBookingId, { reason: "visita" })).rejects.toThrow(/já não está ativa/);
+    await expect(cancelDesk(db, fac.actor, offer.holdBookingId, { reason: "visita" })).rejects.toThrow(/já tinha vencido/);
     expect((await db.select().from(waitlistOffer).where(eq(waitlistOffer.id, offer.id)))[0].status).toBe("expired");
     expect((await entryOf(a.id)).status).toBe("expired");
     expect(await db.select().from(outboxEvent).where(eq(outboxEvent.idempotencyKey, `waitlist.withdrawn:${offer.holdBookingId}`))).toHaveLength(0);

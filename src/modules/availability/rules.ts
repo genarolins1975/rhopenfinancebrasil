@@ -53,7 +53,9 @@ export function deskClass(r: { retired: boolean; period: { status: "maintenance"
   if (r.retired) return "retired";
   if (r.period?.status === "maintenance") return "maintenance";
   if (r.period?.status === "admin_block") return "blocked";
-  if (r.policy.assignment && r.policy.exception?.kind !== "release_to_shared") return "exclusive";
+  // Mesa em revisão (titular desativado): ninguém é elegível, nem pela liberação ao compartilhado; conta como exclusiva
+  // (DIR-018, DIR-026), como o desk_class da migração 0015.
+  if (r.policy.assignment && (r.policy.assignment.needsReview || r.policy.exception?.kind !== "release_to_shared")) return "exclusive";
   return "shared";
 }
 

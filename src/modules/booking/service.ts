@@ -45,14 +45,16 @@ async function revalidate(tx: Tx, employeeId: string, resourceId: string, date: 
  * Depois de encerrar a inscrição: uma oferta concorrente pode ter reivindicado a inscrição e retido outra mesa para a
  * pessoa na data. A releitura (nova instrução, já vê o commit da oferta) troca o erro genérico de unicidade pela razão real.
  */
-async function assertNoFreshOffer(tx: Tx, employeeId: string, date: string): Promise<void> {
+async function assertNoFreshOffer(tx: Tx, employeeId: string, date: string, onBehalf = false): Promise<void> {
   const [b] = await tx
     .select({ status: deskBooking.status, origin: deskBooking.origin })
     .from(deskBooking)
     .where(and(eq(deskBooking.employeeId, employeeId), eq(deskBooking.bookingDate, date), or(eq(deskBooking.status, "confirmed"), and(eq(deskBooking.status, "held"), sql`${deskBooking.holdExpiresAt} > now()`))));
   if (!b) return;
-  if (b.status === "held" && b.origin === "waitlist_offer") throw new ConflictError(`Uma mesa acabou de ser oferecida a você pela fila de espera em ${formatLocalDate(date)}. Veja a oferta em Minhas reservas.`);
-  throw new ConflictError(`Você já tem reserva em ${formatLocalDate(date)}.`);
+  if (b.status === "held" && b.origin === "waitlist_offer") {
+    throw new ConflictError(onBehalf ? `Uma mesa acabou de ser oferecida a esta pessoa pela fila de espera em ${formatLocalDate(date)}; a reserva em nome não foi feita.` : `Uma mesa acabou de ser oferecida a você pela fila de espera em ${formatLocalDate(date)}. Veja a oferta em Minhas reservas.`);
+  }
+  throw new ConflictError(onBehalf ? `Esta pessoa já tem reserva em ${formatLocalDate(date)}; a reserva em nome não foi feita.` : `Você já tem reserva em ${formatLocalDate(date)}.`);
 }
 
 export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<BookResult> {
@@ -99,7 +101,7 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
     if (offered) return { offeredToQueue: code };
     // A inscrição da pessoa é encerrada antes da reserva: mesma ordem da oferta (inscrição, depois a reserva), sem deadlock.
     await closeWaitingEntryOf(tx, actor, input.employeeId, input.date, "reserva direta feita");
-    await assertNoFreshOffer(tx, input.employeeId, input.date);
+    await assertNoFreshOffer(tx, input.employeeId, input.date, onBehalf);
     const [row] = await tx
       .insert(deskBooking)
       .values({
@@ -136,10 +138,17 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
 /** Cancelamento próprio ou administrativo. Cancelar reserva do titular não altera a exclusividade (DIR-006). */
 export type CancelOutcome = { resourceCode: string; date: string; kind: "cancelled" | "declined" | "withdrawn" };
 
-export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input: { reason?: string; message?: string } = {}): Promise<CancelOutcome> {
+type Inactive = { inactive: "expired_now" | "cancelled" | "expired" | "gone" };
+
+/**
+ * Cancelamento próprio ou administrativo. `expectedStatus` é a situação que a tela mostrou (DEC-34 aplicada ao
+ * cancelamento, terceira revisão): se a reserva mudou desde então (oferta aceita), nada é cancelado e a resposta pede
+ * nova leitura. Tudo o que sai (auditoria, aviso, desfecho) vem da situação relida depois dos locks.
+ */
+export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input: { reason?: string; message?: string; expectedStatus?: "held" | "confirmed" } = {}): Promise<CancelOutcome> {
   assertUuid(bookingId, "Reserva");
   // A expiração da retenção vencida precisa ser gravada mesmo quando o cancelamento é recusado: o erro sai depois do commit.
-  const outcome = await withOfficeTx(db, async (tx): Promise<CancelOutcome | { expired: true }> => {
+  const outcome = await withOfficeTx(db, async (tx): Promise<CancelOutcome | Inactive> => {
     const [b] = await tx
       .select({ id: deskBooking.id, resourceId: deskBooking.resourceId, employeeId: deskBooking.employeeId, date: deskBooking.bookingDate, status: deskBooking.status, code: resource.code })
       .from(deskBooking)
@@ -161,31 +170,40 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
     await lockDaysAndPeople(tx, { dates: [], people: [b.employeeId, actor.employeeId] });
     const candidates = (await lockQueueCandidates(tx, b.date)).filter((c) => c !== b.employeeId);
     await lockResources(tx, [b.resourceId]);
-    // Releitura depois dos locks: cancelamento concorrente ou vencimento entre a leitura e o lock. Retenção vencida é
-    // expirada com a cascata da fila (DIR-034) e não é retirada nem cancelada: a inscrição sai como vencida (N4).
-    await expireHolds(tx, { resourceId: b.resourceId, employeeId: b.employeeId, date: b.date });
+    // Releitura depois dos locks: cancelamento concorrente, aceite ou vencimento entre a leitura e o lock. Retenção vencida
+    // é expirada com a cascata da fila (DIR-034) e não é retirada nem cancelada: a inscrição sai como vencida; a mesa
+    // liberada vai à próxima pessoa na mesma transação.
+    const expiredNow = await expireHolds(tx, { resourceId: b.resourceId, employeeId: b.employeeId, date: b.date });
     const [now] = await tx.select({ status: deskBooking.status }).from(deskBooking).where(eq(deskBooking.id, bookingId));
-    if (!now || (now.status !== "confirmed" && now.status !== "held")) return { expired: true as const };
+    if (!now || (now.status !== "confirmed" && now.status !== "held")) {
+      if (expiredNow > 0) await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidates, requestId: actor.requestId });
+      const why: Inactive["inactive"] = now?.status === "expired" && b.status === "held" && expiredNow > 0 ? "expired_now" : now?.status === "cancelled" ? "cancelled" : now?.status === "expired" ? "expired" : "gone";
+      return { inactive: why };
+    }
+    const st = now.status as "held" | "confirmed";
+    if (input.expectedStatus && input.expectedStatus !== st) {
+      throw new ConflictError(st === "confirmed" ? "A oferta foi aceita pela pessoa depois que a tela foi aberta: agora é uma reserva confirmada. Atualize a tela e decida de novo." : "A situação desta reserva mudou desde que a tela foi aberta. Atualize a tela e decida de novo.");
+    }
     await tx
       .update(deskBooking)
       .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: input.reason?.trim() || (own ? "cancelada pela própria pessoa" : null) })
       .where(eq(deskBooking.id, bookingId));
     // Retenção da fila cancelada por aqui. Pela própria pessoa, é recusa (sai da fila). Pela administração, é retirada da
     // oferta: a pessoa continua na fila na mesma posição e é avisada; a mesa segue à próxima pessoa (a própria, excluída).
-    if (b.status === "held" && own) await declineOfferOfHold(tx, actor, bookingId, input.reason?.trim() || "retenção cancelada");
-    if (b.status === "held" && !own) await withdrawOfferOfHold(tx, actor, bookingId, input.reason?.trim() ?? "");
-    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: own ? "booking.cancelled" : "booking.cancelled_by_admin", entityType: "desk_booking", entityId: bookingId, before: { status: b.status, resourceId: b.resourceId, date: b.date, employeeId: b.employeeId }, after: { status: "cancelled" }, reason: input.reason, requestId: actor.requestId });
+    if (st === "held" && own) await declineOfferOfHold(tx, actor, bookingId, input.reason?.trim() || "retenção cancelada");
+    if (st === "held" && !own) await withdrawOfferOfHold(tx, actor, bookingId, input.reason?.trim() ?? "");
+    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: own ? "booking.cancelled" : "booking.cancelled_by_admin", entityType: "desk_booking", entityId: bookingId, before: { status: st, resourceId: b.resourceId, date: b.date, employeeId: b.employeeId }, after: { status: "cancelled" }, reason: input.reason, requestId: actor.requestId });
     if (!own) {
       const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, b.employeeId));
       if (emp) {
-        const text = b.status === "held"
+        const text = st === "held"
           ? `A oferta da mesa ${b.code} para ${formatLocalDate(b.date)} foi retirada pela administração. Você continua na fila de espera dessa data, na mesma posição. ${input.message?.trim() ?? ""}`
           : `Sua reserva de ${formatLocalDate(b.date)} na mesa ${b.code} foi cancelada pela administração. ${input.message?.trim() ?? ""}`;
         await enqueueOutbox(tx, {
-          eventType: b.status === "held" ? "email.waitlist" : "email.booking_changed",
+          eventType: st === "held" ? "email.waitlist" : "email.booking_changed",
           aggregateType: "desk_booking",
           aggregateId: bookingId,
-          payload: { message: (b.status === "held" ? waitlistChangedEmail : bookingChangedEmail)(emp.email, emp.name, text.trim()) },
+          payload: { message: (st === "held" ? waitlistChangedEmail : bookingChangedEmail)(emp.email, emp.name, text.trim()) },
           idempotencyKey: `booking.cancelled:${bookingId}`,
         });
       }
@@ -193,9 +211,12 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
     // DIR-034 e PAR-37: a mesa liberada é oferecida à próxima pessoa elegível na mesma transação. Mesa exclusiva do
     // titular não é oferecida a quem não é elegível (DIR-025): a mesma função de disponibilidade decide.
     await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidates, requestId: actor.requestId });
-    return { resourceCode: b.code, date: b.date, kind: b.status === "held" ? (own ? "declined" : "withdrawn") : "cancelled" };
+    return { resourceCode: b.code, date: b.date, kind: st === "held" ? (own ? "declined" : "withdrawn") : "cancelled" };
   });
-  if ("expired" in outcome) throw new ConflictError("Esta reserva já não está ativa (a oferta da fila venceu).");
+  if ("inactive" in outcome) {
+    const msg = { expired_now: "Esta oferta da fila já tinha vencido: a inscrição foi encerrada como vencida e a mesa foi liberada (oferecida à próxima pessoa elegível da fila, se houver).", cancelled: "Esta reserva já foi cancelada.", expired: "Esta oferta da fila já venceu.", gone: "Esta reserva já não está ativa." }[outcome.inactive];
+    throw new ConflictError(msg);
+  }
   return outcome;
 }
 

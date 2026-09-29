@@ -28,7 +28,7 @@ export function BookForm({ resourceId, date, idempotencyKey, label = "Reservar",
   );
 }
 
-export function CancelForm({ bookingId, admin = false, label = "Cancelar reserva" }: { bookingId: string; admin?: boolean; label?: string }) {
+export function CancelForm({ bookingId, status = "confirmed", admin = false, label = "Cancelar reserva" }: { bookingId: string; status?: "held" | "confirmed"; admin?: boolean; label?: string }) {
   const [state, formAction] = useActionState(cancelDeskAction, {} as ActionState);
   if (state.ok) {
     return (
@@ -41,6 +41,7 @@ export function CancelForm({ bookingId, admin = false, label = "Cancelar reserva
     <form action={formAction} className="flex flex-col gap-2">
       <ActionMessages state={state} />
       <input type="hidden" name="bookingId" value={bookingId} />
+      <input type="hidden" name="status" value={status} />
       {admin ? (
         <>
           <Field id={`reason-${bookingId}`} label="Motivo (registrado na auditoria)">

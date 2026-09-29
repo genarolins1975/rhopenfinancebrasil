@@ -38,7 +38,10 @@ export function ConflictTable({ conflicts, allowRealloc = true }: { conflicts: C
                 {c.kind === "space" ? <span className="block text-xs text-text-muted">sala ou cabine</span> : null}
               </td>
               <td className={td}>{c.employeeName}</td>
-              <td className={td}>{c.status === "held" ? "oferta da fila (retida)" : c.origin}</td>
+              <td className={td}>
+                {c.status === "held" ? "oferta da fila (retida)" : c.origin}
+                {c.status === "held" ? <span className="block text-xs text-text-muted">Cancelar retira a oferta: a pessoa continua na fila, mas esta mesa não volta a ser oferecida a ela nesta data.</span> : null}
+              </td>
               <td className={td}>{c.why}</td>
               <td className={td}>
                 <div className="flex min-w-[220px] flex-col gap-1">

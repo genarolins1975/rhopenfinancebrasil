@@ -94,7 +94,9 @@ describe("DB-01 da Etapa 3: rede do banco com o papel da aplicação", () => {
   it("oferta não muda de inscrição, mesa, retenção, autoria nem data de oferta; decidida fica congelada; prazo desalinhado da retenção é recusado no commit", async () => {
     const { offer } = await offerScenario();
     expect(await dbError(() => db.update(waitlistOffer).set({ offeredAt: new Date(0) }).where(eq(waitlistOffer.id, offer.id)))).toContain("offer_identity_immutable");
-    expect(await dbError(() => db.update(waitlistOffer).set({ expiresAt: new Date(Date.now() + 7_200_000) }).where(eq(waitlistOffer.id, offer.id)))).toContain("offer_incoherent");
+    // Encurtar só a oferta desalinha da retenção: recusado no commit. Estender é recusado na hora (0016).
+    expect(await dbError(() => db.update(waitlistOffer).set({ expiresAt: new Date(Date.now() + 60_000) }).where(eq(waitlistOffer.id, offer.id)))).toContain("offer_incoherent");
+    expect(await dbError(() => db.update(waitlistOffer).set({ expiresAt: new Date(offer.expiresAt.getTime() + 60_000) }).where(eq(waitlistOffer.id, offer.id)))).toContain("offer_deadline_immutable");
     // decidir de forma coerente (retenção cancelada, oferta recusada, inscrição encerrada) e tentar mudar depois
     await db.transaction(async (tx) => {
       await tx.update(deskBooking).set({ status: "cancelled" }).where(eq(deskBooking.id, offer.holdBookingId));

@@ -97,7 +97,7 @@ async function DesksTab({ date, canManage, canOnBehalf, viewerId }: { date: stri
                           Sua oferta: aceitar ou recusar em Minhas reservas
                         </Link>
                       ) : (
-                        <CancelForm bookingId={b.id} admin label={b.status === "held" ? "Retirar oferta (a pessoa continua na fila)" : "Cancelar com motivo"} />
+                        <CancelForm bookingId={b.id} status={b.status === "held" ? "held" : "confirmed"} admin label={b.status === "held" ? "Retirar oferta (a pessoa continua na fila)" : "Cancelar com motivo"} />
                       )}
                     </td>
                   ) : null}
@@ -124,7 +124,7 @@ async function QueueTab({ date, holderView }: { date: string; holderView: boolea
   const demand = await unmetDemand(db);
   const live = queue.filter((q) => q.status === "waiting" || (q.status === "offered" && q.offer?.live));
   const options = new Map<string, Array<{ id: string; code: string }>>();
-  for (const q of live.filter((x) => x.status === "waiting")) options.set(q.entryId, await manualOfferOptions(db, q.employeeId, date));
+  for (const q of live.filter((x) => x.status === "waiting")) options.set(q.entryId, await manualOfferOptions(db, q.employeeId, date, q.entryId));
   // Data passada não tem fila viva: a varredura encerra essas inscrições.
   const liveOf = (q: (typeof queue)[number]) => date >= localToday() && (q.status === "waiting" || (q.status === "offered" && !!q.offer?.live));
   const positions = new Map(queue.filter(liveOf).map((q, i) => [q.entryId, i + 1]));
@@ -157,7 +157,7 @@ async function QueueTab({ date, holderView }: { date: string; holderView: boolea
                     </td>
                     <td className={td}>{q.status === "offered" && !q.offer?.live ? "oferta vencida (expira na próxima escrita)" : (ENTRY[q.status] ?? q.status)}</td>
                     <td className={td}>
-                      {q.offer && q.offer.live ? `${q.offer.exclusive && !holderView ? "oferta aberta" : q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : q.offer ? <span className="text-text-muted">última oferta {OFFER[q.offer.status] ?? q.offer.status}</span> : "—"}
+                      {q.offer && q.offer.live ? `${!holderView ? "oferta aberta" : q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : q.offer ? <span className="text-text-muted">última oferta {OFFER[q.offer.status] ?? q.offer.status}</span> : "—"}
                     </td>
                     <td className={td}>
                       {isLive ? (

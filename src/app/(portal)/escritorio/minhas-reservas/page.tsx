@@ -42,7 +42,7 @@ export default async function MinhasReservasPage() {
               {offers.map((o) => (
                 <li key={o.entryId} className="rounded-md border border-border p-3">
                   <Alert kind="info" title={`Mesa ${o.offer!.resourceCode} disponível para você em ${formatLocalDate(o.date)}`}>
-                    Reservada para você até {formatLocal(o.offer!.expiresAt)}. Sem resposta até lá, a mesa passa à próxima pessoa da fila.
+                    Retida para você até {formatLocal(o.offer!.expiresAt)}. Sem resposta até lá, a mesa passa à próxima pessoa da fila.
                   </Alert>
                   <div className="mt-3 flex flex-wrap gap-3">
                     <AcceptOfferForm offerId={o.offer!.id} />

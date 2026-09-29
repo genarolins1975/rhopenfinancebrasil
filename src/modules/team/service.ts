@@ -31,6 +31,19 @@ export async function resetShareWithManager(tx: DbOrTx, employeeId: string): Pro
   await tx.update(employeePreference).set({ shareWithManager: false, consentedManagerId: null, updatedAt: new Date() }).where(eq(employeePreference.employeeId, employeeId));
 }
 
+/**
+ * Autorizações dadas a uma pessoa como gestora: zeradas quando ela é desativada, para que a readmissão não devolva a
+ * visão sem nova autorização de cada pessoa (DEC-37, terceira revisão). Devolve quantas foram zeradas.
+ */
+export async function resetConsentsGivenTo(tx: DbOrTx, managerId: string): Promise<number> {
+  const rows = await tx
+    .update(employeePreference)
+    .set({ shareWithManager: false, consentedManagerId: null, updatedAt: new Date() })
+    .where(eq(employeePreference.consentedManagerId, managerId))
+    .returning({ employeeId: employeePreference.employeeId });
+  return rows.length;
+}
+
 /** Preferência da própria pessoa (opt-in). Auditada porque muda quem vê o quê. */
 export async function setShareWithManager(db: Db, actor: Actor, value: boolean): Promise<void> {
   await db.transaction(async (tx) => {

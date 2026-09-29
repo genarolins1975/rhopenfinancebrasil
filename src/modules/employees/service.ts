@@ -8,7 +8,7 @@ import { recordAudit } from "@/modules/audit/audit";
 import { authContext } from "@/modules/identity/auth";
 import { createInvitation, revokeActiveInvitations } from "@/modules/identity/invitations";
 import { addDays, localToday } from "@/modules/shared/dates";
-import { safeErrorInfo, withDbErrors } from "@/modules/shared/db-errors";
+import { pgErrorOf, safeErrorInfo, withDbErrors } from "@/modules/shared/db-errors";
 import { withOfficeTx } from "@/modules/office/shared";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { logger } from "@/modules/shared/logger";
@@ -300,7 +300,16 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
   const userId = await withOfficeTx(db, async (tx) => {
     // Desativações são serializadas entre si antes de qualquer outro lock: cada uma trava a própria pessoa (for update) e
     // depois as candidatas da fila (for share), e duas pessoas na fila da mesma data formariam ciclo (segunda revisão).
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('employee_deactivation'))`);
+    // Espera própria, mais longa que o lock_timeout do protocolo (PAR-34), e sem novas tentativas: uma desativação em
+    // andamento não pode derrubar as seguintes com erro genérico (terceira revisão; limite registrado na DEC-43).
+    await tx.execute(sql`set local lock_timeout = '12s'`);
+    try {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('employee_deactivation'))`);
+    } catch (e) {
+      if (pgErrorOf(e)?.code === "55P03") throw new ConflictError("Outra desativação de cadastro está em andamento. Aguarde alguns segundos e tente de novo; nada foi alterado.");
+      throw e;
+    }
+    await tx.execute(sql`set local lock_timeout = '3s'`);
     // Ordem do protocolo: dias das reservas envolvidas, depois a pessoa (for update), depois terceiros e recursos.
     const { deactivationOfficePreview, applyDeactivationEffects } = await import("@/modules/exclusivity/service");
     const { lockDaysAndPeople } = await import("@/modules/office/shared");
@@ -316,8 +325,9 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
     const office = await applyDeactivationEffects(tx, actor, employeeId, input.reason, exitDate);
     await revokeActiveInvitations(tx, employeeId);
     await revokeAllGrants(tx, employeeId, actor.employeeId);
-    const { resetShareWithManager } = await import("@/modules/team/service");
+    const { resetConsentsGivenTo, resetShareWithManager } = await import("@/modules/team/service");
     await resetShareWithManager(tx, employeeId);
+    const consentsReset = await resetConsentsGivenTo(tx, employeeId);
     await tx
       .update(employmentPeriod)
       .set({ exitDate, reason: input.reason })
@@ -326,7 +336,7 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
       .update(employeeOrgAssignment)
       .set({ validTo: exitDate })
       .where(and(eq(employeeOrgAssignment.employeeId, employeeId), isNull(employeeOrgAssignment.validTo)));
-    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "employee.deactivated", entityType: "employee", entityId: employeeId, before: { status: current.status }, after: { status: "deactivated", exitDate, ...office }, reason: input.reason, requestId: actor.requestId });
+    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "employee.deactivated", entityType: "employee", entityId: employeeId, before: { status: current.status }, after: { status: "deactivated", exitDate, ...office, teamConsentsReset: consentsReset }, reason: input.reason, requestId: actor.requestId });
     return current.userId;
   });
   await revokeSessionsAfterCommit(db, employeeId, userId);

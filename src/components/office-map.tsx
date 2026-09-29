@@ -11,7 +11,7 @@ export const STATE_STYLE: Record<string, { fill: string; icon: string; text: str
   available: { fill: "var(--color-state-available)", icon: "✓", text: "Disponível" },
   reserved: { fill: "var(--color-state-reserved)", icon: "●", text: "Reservada" },
   mine: { fill: "var(--color-state-mine)", icon: "★", text: "Sua reserva" },
-  offered: { fill: "var(--color-state-available)", icon: "☆", text: "Oferecida a você" },
+  offered: { fill: "var(--color-state-offered)", icon: "☆", text: "Oferecida a você" },
   exclusive: { fill: "var(--color-state-exclusive)", icon: "◆", text: "Uso exclusivo — Diretoria" },
   blocked: { fill: "var(--color-state-blocked)", icon: "■", text: "Bloqueada" },
   maintenance: { fill: "var(--color-state-maintenance)", icon: "⚠", text: "Em manutenção" },
