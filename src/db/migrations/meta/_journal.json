@@ -92,6 +92,27 @@
       "when": 1790684567346,
       "tag": "0012_etapa3_rede_fila",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790689529650,
+      "tag": "0013_etapa3_oferta_retirada",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790689530650,
+      "tag": "0014_etapa3_oferta_retirada_funcoes",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790689531650,
+      "tag": "0015_etapa3_rede_reserva",
+      "breakpoints": true
     }
   ]
 }

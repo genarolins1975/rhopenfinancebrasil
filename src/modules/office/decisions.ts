@@ -1,9 +1,11 @@
 import type { DbOrTx } from "@/db/client";
+import { ValidationError } from "@/modules/shared/errors";
 import type { ConflictDecision, IncompatibleBooking } from "./conflicts";
 
 /*
  * Ponte entre o diálogo de conflito na tela e as decisões do serviço. O formulário envia, por reserva incompatível:
- * decision:<id> (cancel | realloc), reason:<id>, message:<id>, target:<id>. Nada aqui decide regra; só traduz.
+ * decision:<id> (cancel | realloc), reason:<id>, message:<id>, target:<id> e status:<id> (situação vista na prévia).
+ * Nada aqui decide regra; só traduz.
  */
 
 export type ConflictView = IncompatibleBooking & { options: Array<{ id: string; code: string }> };
@@ -17,8 +19,11 @@ export function parseDecisions(fd: FormData): ConflictDecision[] {
       const x = fd.get(`${key}:${bookingId}`);
       return typeof x === "string" ? x.trim() : "";
     };
+    // A situação vista na prévia é obrigatória: decisão sem ela (página antiga, outro cliente) valeria para qualquer
+    // situação atual da reserva, inclusive oferta aceita depois da prévia.
     const status = str("status");
-    out.push({ bookingId, action: v === "realloc" ? "realloc" : "cancel", reason: str("reason"), message: str("message") || undefined, targetResourceId: str("target") || undefined, expectedStatus: status === "held" || status === "confirmed" ? status : undefined });
+    if (status !== "held" && status !== "confirmed") throw new ValidationError("A prévia desta operação está desatualizada. Gere a prévia de novo e decida cada reserva.");
+    out.push({ bookingId, action: v === "realloc" ? "realloc" : "cancel", reason: str("reason"), message: str("message") || undefined, targetResourceId: str("target") || undefined, expectedStatus: status });
   }
   return out;
 }

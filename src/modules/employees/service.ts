@@ -232,6 +232,7 @@ export async function updateEmployee(db: Db, actor: Actor, employeeId: string, p
       });
     }
     await tx.update(employee).set(set).where(eq(employee.id, employeeId));
+    // Troca de gestor zera a autorização do Meu time pelo trigger employee_manager_changed (DEC-37, migração 0015).
     await recordAudit(tx, {
       actorUserId: actor.userId,
       actorEmployeeId: actor.employeeId,
@@ -297,6 +298,9 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
   if (!ISO_DATE.test(exitDate)) throw new ValidationError("Data de saída inválida.");
   await assertMayChangeStatusOf(db, actor, employeeId);
   const userId = await withOfficeTx(db, async (tx) => {
+    // Desativações são serializadas entre si antes de qualquer outro lock: cada uma trava a própria pessoa (for update) e
+    // depois as candidatas da fila (for share), e duas pessoas na fila da mesma data formariam ciclo (segunda revisão).
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('employee_deactivation'))`);
     // Ordem do protocolo: dias das reservas envolvidas, depois a pessoa (for update), depois terceiros e recursos.
     const { deactivationOfficePreview, applyDeactivationEffects } = await import("@/modules/exclusivity/service");
     const { lockDaysAndPeople } = await import("@/modules/office/shared");

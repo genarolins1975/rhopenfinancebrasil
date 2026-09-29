@@ -41,6 +41,20 @@ async function revalidate(tx: Tx, employeeId: string, resourceId: string, date: 
   return { availability: explain(person, r, { ...day, personBooking, windowExempt }), code: r.code };
 }
 
+/**
+ * Depois de encerrar a inscrição: uma oferta concorrente pode ter reivindicado a inscrição e retido outra mesa para a
+ * pessoa na data. A releitura (nova instrução, já vê o commit da oferta) troca o erro genérico de unicidade pela razão real.
+ */
+async function assertNoFreshOffer(tx: Tx, employeeId: string, date: string): Promise<void> {
+  const [b] = await tx
+    .select({ status: deskBooking.status, origin: deskBooking.origin })
+    .from(deskBooking)
+    .where(and(eq(deskBooking.employeeId, employeeId), eq(deskBooking.bookingDate, date), or(eq(deskBooking.status, "confirmed"), and(eq(deskBooking.status, "held"), sql`${deskBooking.holdExpiresAt} > now()`))));
+  if (!b) return;
+  if (b.status === "held" && b.origin === "waitlist_offer") throw new ConflictError(`Uma mesa acabou de ser oferecida a você pela fila de espera em ${formatLocalDate(date)}. Veja a oferta em Minhas reservas.`);
+  throw new ConflictError(`Você já tem reserva em ${formatLocalDate(date)}.`);
+}
+
 export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<BookResult> {
   assertUuid(input.employeeId, "Pessoa");
   assertUuid(input.resourceId, "Mesa");
@@ -85,6 +99,7 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
     if (offered) return { offeredToQueue: code };
     // A inscrição da pessoa é encerrada antes da reserva: mesma ordem da oferta (inscrição, depois a reserva), sem deadlock.
     await closeWaitingEntryOf(tx, actor, input.employeeId, input.date, "reserva direta feita");
+    await assertNoFreshOffer(tx, input.employeeId, input.date);
     const [row] = await tx
       .insert(deskBooking)
       .values({
@@ -121,7 +136,8 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
 /** Cancelamento próprio ou administrativo. Cancelar reserva do titular não altera a exclusividade (DIR-006). */
 export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input: { reason?: string; message?: string } = {}): Promise<{ resourceCode: string; date: string }> {
   assertUuid(bookingId, "Reserva");
-  return withOfficeTx(db, async (tx) => {
+  // A expiração da retenção vencida precisa ser gravada mesmo quando o cancelamento é recusado: o erro sai depois do commit.
+  const outcome = await withOfficeTx(db, async (tx): Promise<{ resourceCode: string; date: string } | { expired: true }> => {
     const [b] = await tx
       .select({ id: deskBooking.id, resourceId: deskBooking.resourceId, employeeId: deskBooking.employeeId, date: deskBooking.bookingDate, status: deskBooking.status, code: resource.code })
       .from(deskBooking)
@@ -143,9 +159,11 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
     await lockDaysAndPeople(tx, { dates: [], people: [b.employeeId, actor.employeeId] });
     const candidates = (await lockQueueCandidates(tx, b.date)).filter((c) => c !== b.employeeId);
     await lockResources(tx, [b.resourceId]);
-    // Releitura depois dos locks: cancelamento concorrente ou vencimento entre a leitura e o lock.
+    // Releitura depois dos locks: cancelamento concorrente ou vencimento entre a leitura e o lock. Retenção vencida é
+    // expirada com a cascata da fila (DIR-034) e não é retirada nem cancelada: a inscrição sai como vencida (N4).
+    await expireHolds(tx, { resourceId: b.resourceId, employeeId: b.employeeId, date: b.date });
     const [now] = await tx.select({ status: deskBooking.status }).from(deskBooking).where(eq(deskBooking.id, bookingId));
-    if (!now || (now.status !== "confirmed" && now.status !== "held")) throw new ConflictError("Esta reserva já não está ativa.");
+    if (!now || (now.status !== "confirmed" && now.status !== "held")) return { expired: true as const };
     await tx
       .update(deskBooking)
       .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: input.reason?.trim() || (own ? "cancelada pela própria pessoa" : null) })
@@ -175,6 +193,8 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
     await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidates, requestId: actor.requestId });
     return { resourceCode: b.code, date: b.date };
   });
+  if ("expired" in outcome) throw new ConflictError("Esta reserva já não está ativa (a oferta da fila venceu).");
+  return outcome;
 }
 
 export type WeekDayInput = { date: string; intent: "onsite" | "remote" | "not_informed"; resourceId?: string | null };
@@ -240,6 +260,7 @@ export async function planWeek(db: Db, actor: Actor, input: { idempotencyKey: st
         continue;
       }
       await closeWaitingEntryOf(tx, actor, actor.employeeId, d.date, "reserva feita pelo planejamento da semana");
+      await assertNoFreshOffer(tx, actor.employeeId, d.date);
       const [row] = await tx
         .insert(deskBooking)
         .values({ resourceId: c.resourceId, employeeId: actor.employeeId, bookingDate: d.date, status: "confirmed", origin: "week_plan", actorEmployeeId: actor.employeeId, weekPlanRequestId: req.id })

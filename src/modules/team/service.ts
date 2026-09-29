@@ -3,6 +3,7 @@ import type { Db, DbOrTx } from "@/db/client";
 import { deskBooking, employee, employeePreference, presenceIntent, resource, spaceBooking } from "@/db/schema";
 import { recordAudit } from "@/modules/audit/audit";
 import { localToday } from "@/modules/shared/dates";
+import { ValidationError } from "@/modules/shared/errors";
 import type { Actor } from "@/modules/office/shared";
 import { formatSlot } from "@/modules/spaces/rules";
 
@@ -35,6 +36,7 @@ export async function setShareWithManager(db: Db, actor: Actor, value: boolean):
   await db.transaction(async (tx) => {
     const before = await sharesWithManager(tx, actor.employeeId);
     const [me] = await tx.select({ manager: employee.managerEmployeeId }).from(employee).where(eq(employee.id, actor.employeeId));
+    if (value && !me?.manager) throw new ValidationError("Você não tem gestor direto registrado no cadastro. Peça ao RH para registrar antes de autorizar.");
     const consentedManagerId = value ? (me?.manager ?? null) : null;
     await tx
       .insert(employeePreference)

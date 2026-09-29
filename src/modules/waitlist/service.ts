@@ -49,14 +49,16 @@ async function businessHours(db: DbOrTx, from: Date) {
   return { settings, cfg: { start: settings.businessHoursStart, end: settings.businessHoursEnd, closedDates: new Set(closed.map((c) => c.date)) } };
 }
 
-/** Mesa de uso exclusivo (individual ou de grupo) livre e reservável para a pessoa na data, ou null. Só leitura. */
+/**
+ * Mesa individual da pessoa, sem liberação vigente, livre e reservável para ela na data, ou null. Só essa mesa não pode ser
+ * tomada por mais ninguém; mesa de grupo e mesa liberada ao compartilhado ou a outra pessoa não contam (N1). Só leitura.
+ */
 export async function ownExclusiveFree(db: DbOrTx, employeeId: string, date: string): Promise<string | null> {
   const rows = await db.execute(sql`
     select a.resource_id from exclusive_assignment a
      where a.cancelled_at is null and a.valid_from <= ${date}::date and (a.valid_to is null or a.valid_to >= ${date}::date)
-       and ((a.mode = 'individual' and a.holder_employee_id = ${employeeId}::uuid)
-         or (a.mode = 'group' and exists (select 1 from access_group_member m where m.group_id = a.access_group_id and m.employee_id = ${employeeId}::uuid
-                                             and m.valid_from <= ${date}::date and (m.valid_to is null or m.valid_to >= ${date}::date))))
+       and a.mode = 'individual' and a.holder_employee_id = ${employeeId}::uuid and not a.needs_review
+       and not exists (select 1 from access_exception x where x.assignment_id = a.id and x.revoked_at is null and x.starts_on <= ${date}::date and x.ends_on >= ${date}::date)
      order by a.resource_id`);
   for (const r of rows.rows as Array<{ resource_id: string }>) {
     const { availability } = await explainFor(db, employeeId, r.resource_id, date);
@@ -65,10 +67,10 @@ export async function ownExclusiveFree(db: DbOrTx, employeeId: string, date: str
   return null;
 }
 
-async function closeEntryWithNotice(tx: Tx, entryId: string, employeeId: string, date: string, reason: string, text: string): Promise<void> {
-  const [closed] = await tx.update(waitlistEntry).set({ status: "cancelled", closedAt: new Date(), closeReason: reason }).where(and(eq(waitlistEntry.id, entryId), eq(waitlistEntry.status, "waiting"))).returning({ id: waitlistEntry.id });
+async function closeEntryWithNotice(tx: Tx, entryId: string, employeeId: string, date: string, reason: string, text: string, actor?: Actor): Promise<void> {
+  const [closed] = await tx.update(waitlistEntry).set({ status: "cancelled", closedAt: new Date(), closedBy: actor?.employeeId ?? null, closeReason: reason }).where(and(eq(waitlistEntry.id, entryId), eq(waitlistEntry.status, "waiting"))).returning({ id: waitlistEntry.id });
   if (!closed) return;
-  await recordAudit(tx, { action: "waitlist.left", entityType: "waitlist_entry", entityId: entryId, after: { status: "cancelled", why: reason, date } });
+  await recordAudit(tx, { actorUserId: actor?.userId ?? null, actorEmployeeId: actor?.employeeId ?? null, action: "waitlist.left", entityType: "waitlist_entry", entityId: entryId, after: { status: "cancelled", why: reason, date }, requestId: actor?.requestId });
   const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, employeeId));
   if (emp) await enqueueOutbox(tx, { eventType: "email.waitlist", aggregateType: "waitlist_entry", aggregateId: entryId, payload: { message: bookingChangedEmail(emp.email, emp.name, text) }, idempotencyKey: `waitlist.closed:${entryId}` });
 }
@@ -77,9 +79,8 @@ async function closeEntryWithNotice(tx: Tx, entryId: string, employeeId: string,
 export async function closeQueueForDate(tx: Tx, actor: Actor, date: string, reason: string): Promise<number> {
   const rows = await tx.select({ id: waitlistEntry.id, employeeId: waitlistEntry.employeeId }).from(waitlistEntry).where(and(eq(waitlistEntry.date, date), eq(waitlistEntry.status, "waiting")));
   for (const r of rows) {
-    await closeEntryWithNotice(tx, r.id, r.employeeId, date, `escritório fechado: ${reason}`, `O escritório estará fechado em ${formatLocalDate(date)} (${reason}). Sua inscrição na fila de espera dessa data foi encerrada.`);
+    await closeEntryWithNotice(tx, r.id, r.employeeId, date, `escritório fechado: ${reason}`, `O escritório estará fechado em ${formatLocalDate(date)} (${reason}). Sua inscrição na fila de espera dessa data foi encerrada.`, actor);
   }
-  void actor;
   return rows.length;
 }
 
@@ -118,7 +119,15 @@ export async function offerNext(
   let entries = await tx
     .select({ id: waitlistEntry.id, employeeId: waitlistEntry.employeeId, createdAt: waitlistEntry.createdAt })
     .from(waitlistEntry)
-    .where(and(eq(waitlistEntry.date, input.date), eq(waitlistEntry.status, "waiting"), inArray(waitlistEntry.employeeId, input.candidateIds)))
+    .where(
+      and(
+        eq(waitlistEntry.date, input.date),
+        eq(waitlistEntry.status, "waiting"),
+        inArray(waitlistEntry.employeeId, input.candidateIds),
+        // Oferta desta mesa retirada da pessoa pela administração: a mesa não volta a ela nesta data (N3).
+        sql`not exists (select 1 from waitlist_offer w where w.entry_id = ${waitlistEntry.id} and w.resource_id = ${input.resourceId}::uuid and w.status = 'withdrawn')`,
+      ),
+    )
     .orderBy(asc(waitlistEntry.createdAt), asc(waitlistEntry.id));
   if (input.aheadOfEmployeeId) {
     const [own] = await tx
@@ -351,7 +360,10 @@ export async function offerManually(db: Db, actor: Actor, input: { entryId: stri
     const made = await offerNext(tx, { resourceId: input.resourceId, date: entry.date, candidateIds: [entry.employeeId], offeredBy: actor.employeeId, requestId: actor.requestId });
     if (!made) {
       const { availability } = await explainFor(tx, entry.employeeId, input.resourceId, entry.date);
-      throw new ConflictError(`Não foi possível oferecer esta mesa à pessoa: ${availability.canBook ? "sem tempo mínimo de oferta no dia" : availability.reason}.`);
+      if (!availability.canBook) throw new ConflictError(`Não foi possível oferecer esta mesa à pessoa: ${availability.reason}.`);
+      // Mesa compartilhada reservável e ainda assim sem oferta (sem tempo mínimo no dia, ou regra da fila da própria pessoa):
+      // resposta neutra, sem motivo que revele vínculo com mesa exclusiva (DEC-36, segunda revisão).
+      throw new ConflictError("Não foi possível oferecer esta mesa à pessoa agora. A inscrição segue como estava; tente mais tarde ou outra mesa.");
     }
     return made;
   });
@@ -382,10 +394,10 @@ export async function declineOfferOfHold(tx: Tx, actor: Actor, holdBookingId: st
  * titular): a retenção já foi cancelada por quem chama; a oferta vence e a inscrição volta a esperar, sem perder a posição.
  */
 export async function withdrawOfferOfHold(tx: Tx, actor: Actor, holdBookingId: string, reason: string): Promise<void> {
-  const [offer] = await tx.update(waitlistOffer).set({ status: "expired", decidedAt: new Date() }).where(and(eq(waitlistOffer.holdBookingId, holdBookingId), eq(waitlistOffer.status, "open"))).returning({ id: waitlistOffer.id, entryId: waitlistOffer.entryId });
+  const [offer] = await tx.update(waitlistOffer).set({ status: "withdrawn", decidedAt: new Date() }).where(and(eq(waitlistOffer.holdBookingId, holdBookingId), eq(waitlistOffer.status, "open"))).returning({ id: waitlistOffer.id, entryId: waitlistOffer.entryId });
   if (!offer) return;
   await tx.update(waitlistEntry).set({ status: "waiting" }).where(and(eq(waitlistEntry.id, offer.entryId), eq(waitlistEntry.status, "offered")));
-  await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "waitlist.offer_withdrawn", entityType: "waitlist_offer", entityId: offer.id, after: { entryId: offer.entryId, status: "expired", entry: "waiting" }, reason, requestId: actor.requestId });
+  await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "waitlist.offer_withdrawn", entityType: "waitlist_offer", entityId: offer.id, after: { entryId: offer.entryId, status: "withdrawn", entry: "waiting" }, reason, requestId: actor.requestId });
 }
 
 /** Desativação ou suspensão: a pessoa sai da fila e as ofertas abertas são recusadas. Quem chama já travou pessoa e recursos. */
@@ -554,7 +566,12 @@ export async function offerFreeDesks(db: Db, limit = 20): Promise<number> {
   for (const w of waiting) {
     if (made >= limit) break;
     const { items } = await stateForPerson(db, w.employeeId, w.date, { types: ["desk"] });
-    const free = items.filter((i) => i.availability.canBook && !takenThisRound.has(`${i.resource.id}:${w.date}`)).map((i) => ({ id: i.resource.id, code: i.resource.code, own: i.availability.exclusiveMine }));
+    const withdrawn = new Set(
+      (await db.select({ r: waitlistOffer.resourceId }).from(waitlistOffer).where(and(eq(waitlistOffer.entryId, w.id), eq(waitlistOffer.status, "withdrawn")))).map((x) => x.r),
+    );
+    const free = items
+      .filter((i) => i.availability.canBook && !takenThisRound.has(`${i.resource.id}:${w.date}`) && !withdrawn.has(i.resource.id))
+      .map((i) => ({ id: i.resource.id, code: i.resource.code, own: i.availability.exclusiveMine }));
     if (free.length === 0) continue;
     const pref = ((w.preferences ?? {}) as Preferences).zoneCode;
     // A mesa de uso exclusivo da própria pessoa, quando livre para ela, vem antes de qualquer compartilhada.

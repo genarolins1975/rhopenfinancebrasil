@@ -46,13 +46,23 @@ describe("vencimento da oferta limitado ao dia da reserva", () => {
   });
 });
 
-describe("oferta para data que não é dia útil (PAR-43, T-08)", () => {
-  it("sábado: minutos corridos, limitados ao fim do dia", () => {
+describe("oferta para data que não é dia útil (PAR-43, T-08, N2)", () => {
+  it("no próprio sábado: minutos corridos a partir do início do horário comercial ou de agora, limitados ao fim do dia", () => {
     // 10/10/2026 é sábado
-    expect(fmt(offerExpiresAt(local(2026, 10, 10, 8, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 10, 10, 0)));
+    expect(fmt(offerExpiresAt(local(2026, 10, 10, 8, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 10, 11, 0)));
+    expect(fmt(offerExpiresAt(local(2026, 10, 10, 14, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 10, 16, 0)));
     expect(fmt(offerExpiresAt(local(2026, 10, 10, 23, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 11, 0, 0)));
   });
-  it("dia fechado no calendário também conta minutos corridos", () => {
-    expect(fmt(offerExpiresAt(local(2026, 10, 12, 8, 0), "2026-10-12", 120, cfg)!)).toBe(fmt(local(2026, 10, 12, 10, 0)));
+  it("feita na sexta à noite para o sábado: não vence de madrugada; conta a partir do horário comercial do sábado", () => {
+    expect(fmt(offerExpiresAt(local(2026, 10, 9, 17, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 10, 11, 0)));
+    expect(fmt(offerExpiresAt(local(2026, 10, 9, 22, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 10, 11, 0)));
+  });
+  it("feita com folga em dia útil anterior: vale o prazo útil, que termina antes da data", () => {
+    expect(fmt(offerExpiresAt(local(2026, 10, 7, 10, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 7, 12, 0)));
+  });
+  it("dia fechado no calendário segue a mesma regra", () => {
+    expect(fmt(offerExpiresAt(local(2026, 10, 12, 8, 0), "2026-10-12", 120, cfg)!)).toBe(fmt(local(2026, 10, 12, 11, 0)));
+    expect(fmt(offerExpiresAt(local(2026, 10, 9, 16, 0), "2026-10-12", 120, cfg)!)).toBe(fmt(local(2026, 10, 9, 18, 0)));
+    expect(fmt(offerExpiresAt(local(2026, 10, 9, 17, 0), "2026-10-12", 120, cfg)!)).toBe(fmt(local(2026, 10, 12, 11, 0)));
   });
 });

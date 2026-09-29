@@ -25,7 +25,7 @@ pnpm db:generate                # nova migração a partir do esquema Drizzle
 Banco local: cluster PostgreSQL 16 com papéis `rh_owner` (migrações) e `rh_app` (aplicação), bancos `rh_dev` e `rh_test`, ambos com `timezone = America/Sao_Paulo`.
 
 ## Onde as coisas vivem
-`src/modules/<módulo>` tem a regra de negócio (identity, access, employees, audit, notifications, admin, workplace, availability, booking, exclusivity, office, waitlist, checkin, spaces, team). `src/app` só orquestra e renderiza. `src/db/schema` e `src/db/migrations` são a única fonte do esquema; funções, triggers e constraints de exclusão do escritório vivem nas migrações manuais `0004` a `0006` e `0008`. `src/components` não decide autorização. Toda mutação do escritório passa por `withOfficeTx` (locks, revalidação, tradução de erro) e pelo diálogo de conflito de `office/conflicts.ts`.
+`src/modules/<módulo>` tem a regra de negócio (identity, access, employees, audit, notifications, admin, workplace, availability, booking, exclusivity, office, waitlist, checkin, spaces, team). `src/app` só orquestra e renderiza. `src/db/schema` e `src/db/migrations` são a única fonte do esquema; funções, triggers e constraints de exclusão do escritório vivem nas migrações manuais `0004` a `0006`, `0008`, `0009`, `0011`, `0012`, `0014` e `0015`. `src/components` não decide autorização. Toda mutação do escritório passa por `withOfficeTx` (locks, revalidação, tradução de erro) e pelo diálogo de conflito de `office/conflicts.ts`.
 
 ## Invariantes do projeto (não negociáveis)
 1. Toda regra de autorização e disponibilidade vive no servidor. A interface só reflete o que o servidor decidiu.

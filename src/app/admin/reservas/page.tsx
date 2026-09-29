@@ -17,7 +17,7 @@ import { OnBehalfForm } from "./on-behalf-form";
 import { AdminCancelSpaceForm, ManualOfferForm, RemoveFromQueueForm } from "./queue-forms";
 
 const ORIGIN: Record<string, string> = { self: "própria", week_plan: "semana", on_behalf: "em nome", waitlist_offer: "fila", admin_realloc: "realocação" };
-const OFFER: Record<string, string> = { open: "vencida", expired: "vencida ou retirada", declined: "recusada", accepted: "aceita" };
+const OFFER: Record<string, string> = { open: "vencida", expired: "vencida", withdrawn: "retirada pela administração", declined: "recusada", accepted: "aceita" };
 const ENTRY: Record<string, string> = { waiting: "em espera", offered: "com oferta", accepted: "aceitou", expired: "oferta vencida", cancelled: "saiu ou foi retirada" };
 
 export default async function ReservasAdminPage({ searchParams }: { searchParams: Promise<{ data?: string; aba?: string }> }) {
@@ -52,7 +52,7 @@ export default async function ReservasAdminPage({ searchParams }: { searchParams
         </button>
       </form>
       {aba === "mesas" ? await DesksTab({ date, canManage: p.has("booking.admin.manage"), canOnBehalf: p.has("booking.on_behalf.create") }) : null}
-      {aba === "fila" ? await QueueTab({ date, holderView: p.has("exclusive.holder.view") }) : null}
+      {aba === "fila" ? await QueueTab({ date, holderView: p.has("exclusive.holder.view") || p.has("booking.admin.manage") }) : null}
       {aba === "salas" ? await SpacesTab({ date, viewerId: current.employee.id }) : null}
     </>
   );
@@ -150,7 +150,7 @@ async function QueueTab({ date, holderView }: { date: string; holderView: boolea
                     </td>
                     <td className={td}>{q.status === "offered" && !q.offer?.live ? "oferta vencida (expira na próxima escrita)" : (ENTRY[q.status] ?? q.status)}</td>
                     <td className={td}>
-                      {q.offer && q.offer.live ? `${q.offer.exclusive && !holderView ? "mesa elegível para a pessoa" : q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : q.offer ? <span className="text-text-muted">última oferta {OFFER[q.offer.status] ?? q.offer.status}</span> : "—"}
+                      {q.offer && q.offer.live ? `${q.offer.exclusive && !holderView ? "oferta aberta" : q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : q.offer ? <span className="text-text-muted">última oferta {OFFER[q.offer.status] ?? q.offer.status}</span> : "—"}
                     </td>
                     <td className={td}>
                       {isLive ? (

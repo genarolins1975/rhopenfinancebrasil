@@ -429,18 +429,14 @@ describe("revisão independente da Etapa 3: regressão", () => {
     expect((await db.select().from(deskBooking).where(and(eq(deskBooking.resourceId, d3.id), eq(deskBooking.bookingDate, today))))[0].status).toBe("confirmed");
   });
 
-  it("T-05: QR de sala confirma a reserva em andamento ou a próxima, nunca a já encerrada", async () => {
+  it("T-05: QR de sala confirma a reserva em andamento ou a que começa em até 15 minutos, nunca a já encerrada", async () => {
     const a = await seedEmployee();
     const room = await seedDesk("SALA1", "room");
-    const now = new Date();
-    const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(now));
-    if (h < 2 || h > 21) return; // precisa de uma reserva encerrada e de outra futura no mesmo dia local
-    await ownerQuery("insert into space_booking (resource_id, employee_id, actor_employee_id, period, status) values ($1, $2, $2, tstzrange(now() - interval '2 hours', now() - interval '1 hour', '[)'), 'confirmed')", [room.id, a.id]);
-    const start = `${String(h + 1).padStart(2, "0")}:00`;
-    const end = `${String(h + 1).padStart(2, "0")}:30`;
-    const future = await bookSpace(db, actorOf(a), { resourceId: room.id, date: today, start, end, idempotencyKey: randomUUID() });
+    // Períodos relativos ao relógio do banco: independem da hora em que a bateria roda (exceto o último minuto do dia).
+    await ownerQuery("insert into space_booking (resource_id, employee_id, actor_employee_id, period, status) values ($1, $2, $2, tstzrange(now() - interval '2 minutes', now() - interval '1 minute', '[)'), 'confirmed')", [room.id, a.id]);
+    const next = await ownerQuery("insert into space_booking (resource_id, employee_id, actor_employee_id, period, status) values ($1, $2, $2, tstzrange(now() + interval '1 minute', now() + interval '20 minutes', '[)'), 'confirmed') returning id", [room.id, a.id]);
     const r = await confirmUse(db, actorOf(a), { resourceCode: "SALA1", method: "qr" });
-    expect(r.bookingId).toBe(future.bookingId);
+    expect(r.bookingId).toBe(next.rows[0].id);
   });
 
   it("T-06: data inexistente é recusada como validação, nunca como erro de banco", async () => {

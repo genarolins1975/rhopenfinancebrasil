@@ -77,6 +77,8 @@ const DB_RULE_MESSAGES: Record<string, string> = {
   offer_incoherent: "Oferta, retenção e inscrição ficariam incoerentes. Nada foi aplicado.",
   entry_incoherent: "A inscrição ficaria sem a oferta correspondente. Nada foi aplicado.",
   hold_incoherent: "A retenção da fila só vira reserva com a oferta aceita. Nada foi aplicado.",
+  booking_identity_immutable: "Pessoa, mesa, data e origem de uma reserva não mudam. Para trocar de mesa, use a realocação.",
+  booking_already_closed: "Esta reserva já não está ativa.",
 };
 
 /** Converte erro do banco em erro de domínio: regra de trigger, exclusão, unicidade, deadlock ou tempo de lock. */

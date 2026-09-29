@@ -56,14 +56,17 @@ async function resolveOwnBookingToday(db: DbOrTx, employeeId: string, input: Con
       .innerJoin(resource, eq(resource.id, deskBooking.resourceId))
       .where(and(eq(resource.code, code), eq(deskBooking.employeeId, employeeId), eq(deskBooking.status, "confirmed"), eq(deskBooking.bookingDate, today)));
     if (b) return { kind: "desk", id: b.id, code: b.code };
-    // Sala pelo QR: a reserva em andamento ou a próxima do dia, ainda não encerrada; a sem confirmação vem antes (T-05).
+    // Sala pelo QR: só a reserva em andamento ou a que começa em até 15 minutos (T-05, N6); a em andamento vem primeiro,
+    // mesmo já confirmada, para que uma segunda leitura responda "já confirmado" em vez de confirmar a próxima.
     const [s] = await db
       .select({ id: spaceBooking.id, code: resource.code })
       .from(spaceBooking)
       .innerJoin(resource, eq(resource.id, spaceBooking.resourceId))
-      .where(and(eq(resource.code, code), eq(spaceBooking.employeeId, employeeId), eq(spaceBooking.status, "confirmed"), sql`${spaceBooking.period} && local_day_range(local_today())`, sql`upper(${spaceBooking.period}) > now()`))
-      .orderBy(asc(sql`exists (select 1 from checkin c where c.space_booking_id = ${spaceBooking.id})`), asc(sql`lower(${spaceBooking.period})`));
+      .where(and(eq(resource.code, code), eq(spaceBooking.employeeId, employeeId), eq(spaceBooking.status, "confirmed"), sql`upper(${spaceBooking.period}) > now()`, sql`lower(${spaceBooking.period}) <= now() + interval '15 minutes'`))
+      .orderBy(asc(sql`lower(${spaceBooking.period})`));
     if (s) return { kind: "space", id: s.id, code: s.code };
+    const [r] = await db.select({ type: resource.type }).from(resource).where(eq(resource.code, code));
+    if (r && r.type !== "desk") throw new ValidationError(`Você não tem reserva confirmada em ${code} em andamento ou começando nos próximos 15 minutos.`);
     throw new ValidationError(`Você não tem reserva confirmada em ${code} hoje.`);
   }
   throw new ValidationError("Informe a reserva ou o código do recurso.");

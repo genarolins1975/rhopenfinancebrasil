@@ -1,0 +1,1 @@
+ALTER TYPE "public"."waitlist_offer_status" ADD VALUE 'withdrawn';

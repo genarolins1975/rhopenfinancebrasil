@@ -394,7 +394,7 @@ describe("fila de espera", () => {
     const other = await seedDesk("F009");
     await expect(createStatusPeriod(db, fac.actor, { resourceId: desk.id, status: "maintenance", startsOn: d(1), endsOn: d(1), reason: "vazamento" }, [{ bookingId: offer.holdBookingId, action: "realloc", reason: "x", targetResourceId: other.id }])).rejects.toThrow(/não é realocada/);
     await createStatusPeriod(db, fac.actor, { resourceId: desk.id, status: "maintenance", startsOn: d(1), endsOn: d(1), reason: "vazamento" }, [{ bookingId: offer.holdBookingId, action: "cancel", reason: "vazamento" }]);
-    expect((await db.select().from(waitlistOffer).where(eq(waitlistOffer.id, offer.id)))[0].status).toBe("expired");
+    expect((await db.select().from(waitlistOffer).where(eq(waitlistOffer.id, offer.id)))[0].status).toBe("withdrawn");
     expect((await entriesOf(a.id))[0].status).toBe("waiting");
     expect(await db.select().from(outboxEvent).where(eq(outboxEvent.idempotencyKey, `waitlist.withdrawn:${offer.holdBookingId}`))).toHaveLength(1);
     expect(await db.select().from(auditEvent).where(eq(auditEvent.action, "waitlist.offer_withdrawn"))).toHaveLength(1);

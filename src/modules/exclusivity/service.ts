@@ -598,7 +598,10 @@ export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId:
   // Grupos com vigência aberta da pessoa: o encerramento da vigência toma o grupo (trigger), por isso o grupo vem antes dos recursos.
   const groups = await tx.select({ groupId: accessGroupMember.groupId }).from(accessGroupMember).where(and(eq(accessGroupMember.employeeId, employeeId), or(isNull(accessGroupMember.validTo), gte(accessGroupMember.validTo, localToday()))));
   for (const g of [...new Set(groups.map((x) => x.groupId))].sort()) await tx.execute(sql`select 1 from access_group where id = ${g} for update`);
-  await lockResources(tx, [...all.map((b) => b.resourceId), ...preview.assignments.map((a) => a.resourceId)]);
+  // Mesas das ofertas abertas da pessoa, inclusive com retenção vencida ainda não varrida (que a prévia não lista): a
+  // retenção é encerrada e a mesa oferecida adiante nesta transação, então a mesa entra no mesmo passo de recursos.
+  const offerDesks = (await tx.execute(sql`select o.resource_id from waitlist_offer o join waitlist_entry e on e.id = o.entry_id where e.employee_id = ${employeeId}::uuid and o.status = 'open'`)).rows.map((r) => (r as { resource_id: string }).resource_id);
+  await lockResources(tx, [...all.map((b) => b.resourceId), ...preview.assignments.map((a) => a.resourceId), ...offerDesks]);
   // Fila da pessoa primeiro: ofertas abertas recusadas e inscrições encerradas, para que a retenção dela não entre no
   // diálogo de conflito como "oferta retirada, você continua na fila".
   const queue = await closeQueueForPerson(tx, actor, employeeId, `desativação: ${reason}`);

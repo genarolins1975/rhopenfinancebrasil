@@ -330,7 +330,7 @@ export const presenceIntent = pgTable(
  * Triggers, grants e parâmetros iniciais na migração manual 0008.
  */
 export const waitlistEntryStatus = pgEnum("waitlist_entry_status", ["waiting", "offered", "accepted", "expired", "cancelled"]);
-export const waitlistOfferStatus = pgEnum("waitlist_offer_status", ["open", "accepted", "expired", "declined"]);
+export const waitlistOfferStatus = pgEnum("waitlist_offer_status", ["open", "accepted", "expired", "declined", "withdrawn"]);
 export const checkinMethod = pgEnum("checkin_method", ["portal", "qr"]);
 
 export const waitlistEntry = pgTable(

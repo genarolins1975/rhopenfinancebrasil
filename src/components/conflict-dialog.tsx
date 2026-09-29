@@ -42,7 +42,7 @@ export function ConflictTable({ conflicts, allowRealloc = true }: { conflicts: C
               <td className={td}>{c.why}</td>
               <td className={td}>
                 <div className="flex min-w-[220px] flex-col gap-1">
-                  {c.kind !== "space" ? <input type="hidden" name={`status:${c.bookingId}`} value={c.status} /> : null}
+                  <input type="hidden" name={`status:${c.bookingId}`} value={c.status} />
                   <label className="text-xs font-medium" htmlFor={`decision-${c.bookingId}`}>
                     Ação
                   </label>

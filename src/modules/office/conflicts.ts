@@ -147,12 +147,13 @@ export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: In
       const { withdrawOfferOfHold } = await import("@/modules/waitlist/service");
       await withdrawOfferOfHold(tx, actor, c.bookingId, d.reason.trim());
       await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "booking.cancelled_by_conflict", entityType: "desk_booking", entityId: c.bookingId, before: { resourceId: c.resourceId, date: c.date, employeeId: c.employeeId, status: "held" }, after: { status: "cancelled", why: c.why }, reason: d.reason, requestId: actor.requestId });
-      if (emp) {
+      // No fechamento de dia, o aviso único sai no encerramento da fila da data (closeQueueForDate).
+      if (emp && !opts.closingDay) {
         await enqueueOutbox(tx, {
           eventType: "email.waitlist",
           aggregateType: "desk_booking",
           aggregateId: c.bookingId,
-          payload: { message: bookingChangedEmail(emp.email, emp.name, `A mesa ${c.resourceCode} oferecida a você para ${formatLocalDate(c.date)} deixou de estar disponível. ${opts.notice} ${opts.closingDay ? "Sua inscrição na fila dessa data foi encerrada." : "Você continua na fila de espera dessa data."} ${d.message?.trim() ?? ""}`.trim()) },
+          payload: { message: bookingChangedEmail(emp.email, emp.name, `A mesa ${c.resourceCode} oferecida a você para ${formatLocalDate(c.date)} deixou de estar disponível. ${opts.notice} Você continua na fila de espera dessa data. ${d.message?.trim() ?? ""}`.trim()) },
           idempotencyKey: `waitlist.withdrawn:${c.bookingId}`,
         });
       }
