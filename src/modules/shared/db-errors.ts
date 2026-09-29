@@ -56,8 +56,28 @@ export function safeErrorInfo(e: unknown): Record<string, unknown> {
 export function safeErrorText(e: unknown): string {
   const info = safeErrorInfo(e);
   if (info.kind === "pg") return `erro de banco ${String(info.code)}${info.constraint ? ` (restrição ${String(info.constraint)})` : ""}${info.table ? ` na tabela ${String(info.table)}` : ""}`;
-  if (typeof info.message === "string") return info.message;
+  if (typeof info.message === "string") {
+    const cause = info.message === "[consulta redigida]" ? causeText(e) : "";
+    return cause ? `${info.message}; causa: ${cause}` : info.message;
+  }
   return String(info.kind);
+}
+
+/**
+ * Causa de uma consulta que falhou sem código do banco (conexão recusada, endereço inexistente, TLS, autenticação do
+ * cliente): código do sistema e mensagem da causa, sem a consulta, sem parâmetros e sem credencial de URL.
+ */
+function causeText(e: unknown): string {
+  let cur: unknown = (e as { cause?: unknown } | null)?.cause;
+  for (let i = 0; i < 5 && cur && typeof cur === "object"; i++) {
+    const c = cur as { code?: unknown; message?: unknown; cause?: unknown };
+    if (typeof c.message === "string" && !c.message.startsWith("Failed query")) {
+      const msg = String(scrub(c.message)).replace(/\/\/[^\s/@]*@/g, "//[credencial]@").slice(0, 200);
+      return typeof c.code === "string" && !msg.includes(c.code) ? `${c.code} ${msg}` : msg;
+    }
+    cur = c.cause;
+  }
+  return "";
 }
 
 /** Executa uma operação de banco convertendo erros do driver em erros de domínio. */
