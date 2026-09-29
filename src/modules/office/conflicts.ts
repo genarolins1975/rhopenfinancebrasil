@@ -30,7 +30,15 @@ export type IncompatibleBooking = {
   why: string;
 };
 
-export type ConflictDecision = { bookingId: string; action: "cancel" | "realloc"; reason: string; message?: string; targetResourceId?: string };
+export type ConflictDecision = {
+  bookingId: string;
+  action: "cancel" | "realloc";
+  reason: string;
+  message?: string;
+  targetResourceId?: string;
+  /** Situação da reserva quando a decisão foi tomada na prévia; mudança exige nova prévia (oferta aceita ou retirada). */
+  expectedStatus?: "held" | "confirmed";
+};
 
 /** Reservas ativas num conjunto de recursos e intervalo de datas (ou em todos os recursos, quando não filtrado). */
 export async function listActiveBookings(db: DbOrTx, filter: { resourceIds?: string[]; employeeIds?: string[]; from: string; to: string | null }): Promise<Omit<IncompatibleBooking, "why">[]> {
@@ -92,7 +100,7 @@ export async function listActiveBookingsAll(db: DbOrTx, filter: { resourceIds?: 
  * Toda reserva incompatível precisa de decisão; decisão sobre reserva que não é mais incompatível é ignorada.
  * Realocação valida a mesa de destino para a pessoa na data com o mesmo serviço de disponibilidade.
  */
-export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: IncompatibleBooking[], decisions: ConflictDecision[], opts: { excludeResourceIds: string[]; notice: string }): Promise<void> {
+export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: IncompatibleBooking[], decisions: ConflictDecision[], opts: { excludeResourceIds: string[]; notice: string; closingDay?: boolean }): Promise<void> {
   const byId = new Map(decisions.map((d) => [d.bookingId, d]));
   const missing = conflicts.filter((c) => !byId.has(c.bookingId));
   if (missing.length) {
@@ -101,6 +109,17 @@ export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: In
   for (const c of conflicts) {
     const d = byId.get(c.bookingId)!;
     if (!d.reason?.trim()) throw new ValidationError(`Informe o motivo para a reserva de ${formatLocalDate(c.date)} em ${c.resourceCode}.`);
+    // Releitura sob lock da linha: a lista pode ter sido lida antes dos locks de pessoa e recurso (suspensão, aceite,
+    // cancelamento concorrentes). Reserva que deixou de estar ativa não recebe decisão, email nem auditoria.
+    const current = c.kind === "space"
+      ? ((await tx.execute(sql`select status from space_booking where id = ${c.bookingId} for update`)).rows[0] as { status?: string } | undefined)
+      : ((await tx.execute(sql`select status, hold_expires_at > now() as live from desk_booking where id = ${c.bookingId} for update`)).rows[0] as { status?: string; live?: boolean } | undefined);
+    const active = current?.status === "confirmed" || (current?.status === "held" && (current as { live?: boolean }).live);
+    if (!active) continue;
+    if (d.expectedStatus && current?.status !== d.expectedStatus) {
+      throw new ConflictError(`A reserva de ${formatLocalDate(c.date)} em ${c.resourceCode} mudou desde a prévia (${d.expectedStatus === "held" ? "a oferta da fila foi aceita" : "a situação mudou"}). A prévia foi refeita; decida de novo.`);
+    }
+    c.status = current?.status as "held" | "confirmed";
     const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, c.employeeId));
     if (c.kind === "space") {
       if (d.action !== "cancel") throw new ValidationError("Reserva de sala ou cabine não é realocada: só cancelamento com comunicação.");
@@ -133,7 +152,7 @@ export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: In
           eventType: "email.waitlist",
           aggregateType: "desk_booking",
           aggregateId: c.bookingId,
-          payload: { message: bookingChangedEmail(emp.email, emp.name, `A mesa ${c.resourceCode} oferecida a você para ${formatLocalDate(c.date)} deixou de estar disponível. ${opts.notice} Você continua na fila de espera dessa data. ${d.message?.trim() ?? ""}`.trim()) },
+          payload: { message: bookingChangedEmail(emp.email, emp.name, `A mesa ${c.resourceCode} oferecida a você para ${formatLocalDate(c.date)} deixou de estar disponível. ${opts.notice} ${opts.closingDay ? "Sua inscrição na fila dessa data foi encerrada." : "Você continua na fila de espera dessa data."} ${d.message?.trim() ?? ""}`.trim()) },
           idempotencyKey: `waitlist.withdrawn:${c.bookingId}`,
         });
       }

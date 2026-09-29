@@ -38,10 +38,11 @@ export function ConflictTable({ conflicts, allowRealloc = true }: { conflicts: C
                 {c.kind === "space" ? <span className="block text-xs text-text-muted">sala ou cabine</span> : null}
               </td>
               <td className={td}>{c.employeeName}</td>
-              <td className={td}>{c.origin}</td>
+              <td className={td}>{c.status === "held" ? "oferta da fila (retida)" : c.origin}</td>
               <td className={td}>{c.why}</td>
               <td className={td}>
                 <div className="flex min-w-[220px] flex-col gap-1">
+                  {c.kind !== "space" ? <input type="hidden" name={`status:${c.bookingId}`} value={c.status} /> : null}
                   <label className="text-xs font-medium" htmlFor={`decision-${c.bookingId}`}>
                     Ação
                   </label>

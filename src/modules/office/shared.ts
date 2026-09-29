@@ -145,6 +145,14 @@ export async function advisoryShareDay(tx: Tx, date: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtext(${"office_day:" + date}))`);
 }
 
+/**
+ * Serializa as operações de uma pessoa numa data (inscrição na fila, reserva, semana, aceite), que só tomam `for share`
+ * na pessoa. Tomado logo depois das pessoas e antes das pessoas em espera e dos recursos.
+ */
+export async function advisoryPersonDay(tx: Tx, employeeId: string, date: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`person_day:${employeeId}:${date}`}))`);
+}
+
 export async function advisoryExclusiveDay(tx: Tx, date: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"office_day:" + date}))`);
 }

@@ -76,7 +76,7 @@ export async function updateResourceAttributes(db: Db, actor: Actor, resourceId:
       set.attributesVerifiedBy = actor.employeeId;
     }
     await tx.update(resource).set(set).where(eq(resource.id, resourceId));
-    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "resource.updated", entityType: "resource", entityId: resourceId, before: { attributes: current.attributes }, after: { attributes: input.attributes, verified: input.verified }, requestId: actor.requestId });
+    await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "resource.updated", entityType: "resource", entityId: resourceId, before: { attributes: current.attributes, capacity: current.capacity, zoneId: current.zoneId }, after: { attributes: input.attributes, verified: input.verified, capacity: "capacity" in set ? set.capacity : current.capacity, zoneId: "zoneId" in set ? set.zoneId : current.zoneId }, requestId: actor.requestId });
   });
 }
 
@@ -205,7 +205,9 @@ export async function closeDay(db: Db, actor: Actor, input: { date: string; reas
     const conflicts = await listActiveBookings(tx, { from: input.date, to: input.date });
     await lockDaysAndPeople(tx, { dates: [], people: [actor.employeeId, ...conflicts.map((c) => c.employeeId)] });
     await lockResources(tx, conflicts.map((c) => c.resourceId));
-    await applyConflictDecisions(tx, actor, conflicts.map((c) => ({ ...c, why: "escritório fechado" })), decisions, { excludeResourceIds: [], notice: `O escritório estará fechado em ${formatLocalDate(input.date)}.` });
+    await applyConflictDecisions(tx, actor, conflicts.map((c) => ({ ...c, why: "escritório fechado" })), decisions, { excludeResourceIds: [], notice: `O escritório estará fechado em ${formatLocalDate(input.date)}.`, closingDay: true });
+    const { closeQueueForDate } = await import("@/modules/waitlist/service");
+    await closeQueueForDate(tx, actor, input.date, input.reason.trim());
     await tx
       .insert(officeCalendar)
       .values({ date: input.date, isOpen: false, reason: input.reason.trim(), updatedBy: actor.employeeId })

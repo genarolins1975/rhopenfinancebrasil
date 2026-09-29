@@ -312,6 +312,8 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
     const office = await applyDeactivationEffects(tx, actor, employeeId, input.reason, exitDate);
     await revokeActiveInvitations(tx, employeeId);
     await revokeAllGrants(tx, employeeId, actor.employeeId);
+    const { resetShareWithManager } = await import("@/modules/team/service");
+    await resetShareWithManager(tx, employeeId);
     await tx
       .update(employmentPeriod)
       .set({ exitDate, reason: input.reason })
@@ -375,6 +377,8 @@ export async function readmitEmployee(db: Db, actor: Actor, employeeId: string, 
       createdBy: actor.employeeId,
       reason: "readmissão",
     });
+    const { resetShareWithManager } = await import("@/modules/team/service");
+    await resetShareWithManager(tx, employeeId);
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "employee.readmitted", entityType: "employee", entityId: employeeId, after: { hireDate: input.hireDate }, reason: input.reason, requestId: actor.requestId });
     await createInvitation(tx, actor, employeeId);
   });

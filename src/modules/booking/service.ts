@@ -9,8 +9,8 @@ import { enqueueOutbox } from "@/modules/notifications/outbox";
 import { bookingChangedEmail, bookingOnBehalfEmail } from "@/modules/notifications/templates";
 import { formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
-import { type Actor, advisoryShareDay, assertIsoDate, assertUuid, expireHolds, lockDaysAndPeople, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
-import { closeWaitingEntryOf, declineOfferOfHold, lockQueueCandidates, offerNext } from "@/modules/waitlist/service";
+import { type Actor, advisoryPersonDay, advisoryShareDay, assertIsoDate, assertUuid, expireHolds, lockDaysAndPeople, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
+import { closeWaitingEntryOf, declineOfferOfHold, lockQueueCandidates, offerNext, withdrawOfferOfHold } from "@/modules/waitlist/service";
 
 /*
  * Reservas de mesa por dia (PAR-02). Toda escrita segue o protocolo de docs/dados/modelo-de-dados.md:
@@ -64,15 +64,27 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
     if (onBehalf) await shareLockEmployee(tx, actor.employeeId < input.employeeId ? actor.employeeId : input.employeeId);
     const beneficiary = await shareLockEmployee(tx, input.employeeId);
     if (onBehalf && actor.employeeId > input.employeeId) await shareLockEmployee(tx, actor.employeeId);
-    // PAR-37: a fila vem antes de quem clicou. As candidatas são travadas antes do recurso; a mesa livre é oferecida
-    // à primeira elegível e a reserva direta recebe conflito explícito.
+    // Inscrição e reserva da mesma pessoa na data são serializadas (PAR-30).
+    await advisoryPersonDay(tx, input.employeeId, input.date);
+    // PAR-37: a fila vem antes de quem clicou. As candidatas são travadas antes do recurso.
     const candidates = (await lockQueueCandidates(tx, input.date)).filter((c) => c !== input.employeeId);
     await lockResources(tx, [input.resourceId]);
+    // Repetição simultânea da mesma chave: a primeira confirmou enquanto esta esperava o lock; devolve o resultado original.
+    const [again] = await tx.select({ id: deskBooking.id, resourceId: deskBooking.resourceId }).from(deskBooking).where(and(eq(deskBooking.actorEmployeeId, actor.employeeId), eq(deskBooking.idempotencyKey, input.idempotencyKey)));
+    if (again) {
+      const [r] = await tx.select({ code: resource.code }).from(resource).where(eq(resource.id, again.resourceId));
+      return { bookingId: again.id, created: false, resourceCode: r?.code ?? "" };
+    }
     await expireHolds(tx, { resourceId: input.resourceId, employeeId: input.employeeId, date: input.date });
-    const offered = await offerNext(tx, { resourceId: input.resourceId, date: input.date, candidateIds: candidates, requestId: actor.requestId });
+    // Primeiro a elegibilidade de quem reserva: sem ela, a recusa é a razão dela, e a fila não é acionada por quem não
+    // poderia reservar (nem revela que há alguém esperando).
     const { availability, code } = await revalidate(tx, input.employeeId, input.resourceId, input.date);
-    if (offered) return { offeredToQueue: code };
     if (!availability.canBook) throw new ConflictError(`Não foi possível reservar a mesa ${code} em ${formatLocalDate(input.date)}: ${availability.reason}.`);
+    // Mesa livre para quem reserva: oferecida antes a quem entrou na fila antes dele (a fila inteira, se ele não está nela).
+    const offered = await offerNext(tx, { resourceId: input.resourceId, date: input.date, candidateIds: candidates, aheadOfEmployeeId: input.employeeId, requestId: actor.requestId });
+    if (offered) return { offeredToQueue: code };
+    // A inscrição da pessoa é encerrada antes da reserva: mesma ordem da oferta (inscrição, depois a reserva), sem deadlock.
+    await closeWaitingEntryOf(tx, actor, input.employeeId, input.date, "reserva direta feita");
     const [row] = await tx
       .insert(deskBooking)
       .values({
@@ -86,7 +98,6 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
         accessExceptionId: input.accessExceptionId ?? null,
       })
       .returning({ id: deskBooking.id });
-    await closeWaitingEntryOf(tx, actor, input.employeeId, input.date, "reserva direta feita");
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: onBehalf ? "booking.created_on_behalf" : "booking.created", entityType: "desk_booking", entityId: row.id, after: { resourceId: input.resourceId, employeeId: input.employeeId, date: input.date }, requestId: actor.requestId });
     if (onBehalf) {
       const [target] = await tx.select({ email: employee.corporateEmail }).from(employee).where(eq(employee.id, input.employeeId));
@@ -139,17 +150,22 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
       .update(deskBooking)
       .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: input.reason?.trim() || (own ? "cancelada pela própria pessoa" : null) })
       .where(eq(deskBooking.id, bookingId));
-    // Retenção da fila cancelada por aqui: a oferta e a inscrição acompanham.
-    if (b.status === "held") await declineOfferOfHold(tx, actor, bookingId, input.reason?.trim() || "retenção cancelada");
+    // Retenção da fila cancelada por aqui. Pela própria pessoa, é recusa (sai da fila). Pela administração, é retirada da
+    // oferta: a pessoa continua na fila na mesma posição e é avisada; a mesa segue à próxima pessoa (a própria, excluída).
+    if (b.status === "held" && own) await declineOfferOfHold(tx, actor, bookingId, input.reason?.trim() || "retenção cancelada");
+    if (b.status === "held" && !own) await withdrawOfferOfHold(tx, actor, bookingId, input.reason?.trim() ?? "");
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: own ? "booking.cancelled" : "booking.cancelled_by_admin", entityType: "desk_booking", entityId: bookingId, before: { status: b.status, resourceId: b.resourceId, date: b.date, employeeId: b.employeeId }, after: { status: "cancelled" }, reason: input.reason, requestId: actor.requestId });
     if (!own) {
       const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, b.employeeId));
       if (emp) {
+        const text = b.status === "held"
+          ? `A oferta da mesa ${b.code} para ${formatLocalDate(b.date)} foi retirada pela administração. Você continua na fila de espera dessa data, na mesma posição. ${input.message?.trim() ?? ""}`
+          : `Sua reserva de ${formatLocalDate(b.date)} na mesa ${b.code} foi cancelada pela administração. ${input.message?.trim() ?? ""}`;
         await enqueueOutbox(tx, {
-          eventType: "email.booking_changed",
+          eventType: b.status === "held" ? "email.waitlist" : "email.booking_changed",
           aggregateType: "desk_booking",
           aggregateId: bookingId,
-          payload: { message: bookingChangedEmail(emp.email, emp.name, `Sua reserva de ${formatLocalDate(b.date)} na mesa ${b.code} foi cancelada pela administração. ${input.message?.trim() ?? ""}`.trim()) },
+          payload: { message: bookingChangedEmail(emp.email, emp.name, text.trim()) },
           idempotencyKey: `booking.cancelled:${bookingId}`,
         });
       }
@@ -186,6 +202,7 @@ export async function planWeek(db: Db, actor: Actor, input: { idempotencyKey: st
     const withDesk = input.days.filter((d) => d.resourceId);
     for (const d of input.days) await advisoryShareDay(tx, d.date);
     await shareLockEmployee(tx, actor.employeeId);
+    for (const d of [...input.days].sort((a, b) => a.date.localeCompare(b.date))) await advisoryPersonDay(tx, actor.employeeId, d.date);
     const candidatesByDate = new Map<string, string[]>();
     for (const d of withDesk) candidatesByDate.set(d.date, (await lockQueueCandidates(tx, d.date)).filter((c) => c !== actor.employeeId));
     await lockResources(tx, withDesk.map((d) => d.resourceId!));
@@ -193,15 +210,15 @@ export async function planWeek(db: Db, actor: Actor, input: { idempotencyKey: st
     const conflicts: WeekPlanResult["conflicts"] = [];
     const checks: Array<{ date: string; resourceId: string; code: string }> = [];
     for (const d of withDesk) {
-      // PAR-37: mesa livre com fila em espera vai para a fila; o dia volta como conflito explícito.
-      const offered = await offerNext(tx, { resourceId: d.resourceId!, date: d.date, candidateIds: candidatesByDate.get(d.date) ?? [], requestId: actor.requestId });
       const { availability, code } = await revalidate(tx, actor.employeeId, d.resourceId!, d.date);
-      if (offered) {
-        conflicts.push({ date: d.date, resourceCode: code, reason: "mesa oferecida à próxima pessoa da fila de espera (a fila tem prioridade)" });
+      if (availability.code === "mine") continue; // já reservada nesta mesa: idempotente por dia
+      if (!availability.canBook) {
+        conflicts.push({ date: d.date, resourceCode: code, reason: availability.reason });
         continue;
       }
-      if (availability.code === "mine") continue; // já reservada nesta mesa: idempotente por dia
-      if (!availability.canBook) conflicts.push({ date: d.date, resourceCode: code, reason: availability.reason });
+      // PAR-37: mesa livre com fila em espera vai para quem entrou antes; o dia volta como conflito explícito.
+      const offered = await offerNext(tx, { resourceId: d.resourceId!, date: d.date, candidateIds: candidatesByDate.get(d.date) ?? [], aheadOfEmployeeId: actor.employeeId, requestId: actor.requestId });
+      if (offered) conflicts.push({ date: d.date, resourceCode: code, reason: "mesa oferecida à próxima pessoa da fila de espera (a fila tem prioridade)" });
       else checks.push({ date: d.date, resourceId: d.resourceId!, code });
     }
     if (conflicts.length) {
@@ -222,12 +239,12 @@ export async function planWeek(db: Db, actor: Actor, input: { idempotencyKey: st
         applied.push({ date: d.date, resourceCode: null, bookingId: null });
         continue;
       }
+      await closeWaitingEntryOf(tx, actor, actor.employeeId, d.date, "reserva feita pelo planejamento da semana");
       const [row] = await tx
         .insert(deskBooking)
         .values({ resourceId: c.resourceId, employeeId: actor.employeeId, bookingDate: d.date, status: "confirmed", origin: "week_plan", actorEmployeeId: actor.employeeId, weekPlanRequestId: req.id })
         .returning({ id: deskBooking.id });
       applied.push({ date: d.date, resourceCode: c.code, bookingId: row.id });
-      await closeWaitingEntryOf(tx, actor, actor.employeeId, d.date, "reserva feita pelo planejamento da semana");
     }
     const result: WeekPlanResult = { ok: true, applied, conflicts: [] };
     await tx.update(weekPlanRequest).set({ result }).where(eq(weekPlanRequest.id, req.id));

@@ -278,7 +278,8 @@ describe("fila de espera", () => {
     expect((await availableDesksFor(db, common.id, d(1))).map((x) => x.code)).toEqual([]);
     const fac = await privilegedActor({ roles: ["facilities"] });
     const [entry] = await entriesOf(common.id);
-    await expect(offerManually(db, fac.actor, { entryId: entry.id, resourceId: ex.id })).rejects.toThrow(/uso exclusivo/);
+    // Oferta manual de mesa exclusiva: resposta única, que não revela vínculo (achado AUT-04 da revisão).
+    await expect(offerManually(db, fac.actor, { entryId: entry.id, resourceId: ex.id })).rejects.toThrow(/Só mesa do conjunto compartilhado/);
     // a compartilhada liberada vai para a fila
     const [fb] = await db.select().from(deskBooking).where(and(eq(deskBooking.employeeId, filler.id), eq(deskBooking.status, "confirmed")));
     await cancelDesk(db, actorOf(filler), fb.id);

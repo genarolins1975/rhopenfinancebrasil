@@ -10,8 +10,8 @@ import { requireAnyPermission } from "@/modules/identity/session";
 import { ISO_DATE } from "@/modules/office/shared";
 import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { listSpaceBookingsAdmin } from "@/modules/spaces/service";
-import { listQueue, unmetDemand } from "@/modules/waitlist/service";
-import { availableDesksFor, listResources } from "@/modules/workplace/service";
+import { listQueue, manualOfferOptions, unmetDemand } from "@/modules/waitlist/service";
+import { listResources } from "@/modules/workplace/service";
 import { CancelForm } from "@/app/(portal)/escritorio/book-form";
 import { OnBehalfForm } from "./on-behalf-form";
 import { AdminCancelSpaceForm, ManualOfferForm, RemoveFromQueueForm } from "./queue-forms";
@@ -51,7 +51,7 @@ export default async function ReservasAdminPage({ searchParams }: { searchParams
         </button>
       </form>
       {aba === "mesas" ? await DesksTab({ date, canManage: p.has("booking.admin.manage"), canOnBehalf: p.has("booking.on_behalf.create") }) : null}
-      {aba === "fila" ? await QueueTab({ date }) : null}
+      {aba === "fila" ? await QueueTab({ date, holderView: p.has("exclusive.holder.view") }) : null}
       {aba === "salas" ? await SpacesTab({ date, viewerId: current.employee.id }) : null}
     </>
   );
@@ -90,7 +90,7 @@ async function DesksTab({ date, canManage, canOnBehalf }: { date: string; canMan
                   </td>
                   {canManage ? (
                     <td className={td}>
-                      <CancelForm bookingId={b.id} admin label="Cancelar com motivo" />
+                      <CancelForm bookingId={b.id} admin label={b.status === "held" ? "Retirar oferta (a pessoa continua na fila)" : "Cancelar com motivo"} />
                     </td>
                   ) : null}
                 </tr>
@@ -111,12 +111,12 @@ async function DesksTab({ date, canManage, canOnBehalf }: { date: string; canMan
   );
 }
 
-async function QueueTab({ date }: { date: string }) {
+async function QueueTab({ date, holderView }: { date: string; holderView: boolean }) {
   const queue = await listQueue(db, { date });
   const demand = await unmetDemand(db);
   const live = queue.filter((q) => q.status === "waiting" || (q.status === "offered" && q.offer?.live));
   const options = new Map<string, Array<{ id: string; code: string }>>();
-  for (const q of live.filter((x) => x.status === "waiting")) options.set(q.entryId, await availableDesksFor(db, q.employeeId, date));
+  for (const q of live.filter((x) => x.status === "waiting")) options.set(q.entryId, await manualOfferOptions(db, q.employeeId, date));
   const liveOf = (q: (typeof queue)[number]) => q.status === "waiting" || (q.status === "offered" && !!q.offer?.live);
   const positions = new Map(queue.filter(liveOf).map((q, i) => [q.entryId, i + 1]));
   return (
@@ -147,7 +147,7 @@ async function QueueTab({ date }: { date: string }) {
                       {q.preferences.zoneCode ? <span className="block text-xs text-text-muted">prefere zona {q.preferences.zoneCode}</span> : null}
                     </td>
                     <td className={td}>{q.status === "offered" && !q.offer?.live ? "oferta vencida (expira na próxima escrita)" : (ENTRY[q.status] ?? q.status)}</td>
-                    <td className={td}>{q.offer ? `${q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : "—"}</td>
+                    <td className={td}>{q.offer ? `${q.offer.exclusive && !holderView ? "mesa elegível para a pessoa" : q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : "—"}</td>
                     <td className={td}>
                       {isLive ? (
                         <div className="flex min-w-[200px] flex-col gap-3">

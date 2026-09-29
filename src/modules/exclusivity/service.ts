@@ -594,7 +594,7 @@ export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId:
   await lockDaysAndPeople(tx, { dates: [], people: [actor.employeeId, ...preview.thirdPartyBookings.map((b) => b.employeeId)] });
   // Fila: mesas compartilhadas liberadas pelas reservas da pessoa vão à próxima pessoa elegível (PAR-37); candidatas antes dos recursos.
   const candidatesByDate = new Map<string, string[]>();
-  for (const date of [...new Set(preview.ownBookings.map((b) => b.date))].sort()) candidatesByDate.set(date, (await lockQueueCandidates(tx, date)).filter((c) => c !== employeeId));
+  for (const date of [...new Set([...preview.ownBookings.map((b) => b.date), ...preview.queueDates])].sort()) candidatesByDate.set(date, (await lockQueueCandidates(tx, date)).filter((c) => c !== employeeId));
   // Grupos com vigência aberta da pessoa: o encerramento da vigência toma o grupo (trigger), por isso o grupo vem antes dos recursos.
   const groups = await tx.select({ groupId: accessGroupMember.groupId }).from(accessGroupMember).where(and(eq(accessGroupMember.employeeId, employeeId), or(isNull(accessGroupMember.validTo), gte(accessGroupMember.validTo, localToday()))));
   for (const g of [...new Set(groups.map((x) => x.groupId))].sort()) await tx.execute(sql`select 1 from access_group where id = ${g} for update`);
@@ -607,11 +607,7 @@ export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId:
   const decide = (b: IncompatibleBooking) => ({ bookingId: b.bookingId, action: "cancel" as const, reason: b.employeeId === employeeId ? `desativação: ${reason}` : `desativação do titular da mesa: ${reason}` });
   await applyConflictDecisions(tx, actor, again.ownBookings, again.ownBookings.map(decide), { excludeResourceIds: [], notice: "Cancelada em razão da desativação do cadastro." });
   await applyConflictDecisions(tx, actor, again.thirdPartyBookings, again.thirdPartyBookings.map(decide), { excludeResourceIds: [], notice: "A mesa passou a vínculo em revisão pelo RH." });
-  // Mesas liberadas (reservas canceladas e retenções da própria pessoa) vão à próxima pessoa elegível da fila.
-  const released = [...again.ownBookings.filter((b) => b.kind !== "space").map((b) => ({ resourceId: b.resourceId, date: b.date })), ...queue.releasedDesks];
-  for (const b of released) {
-    await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidatesByDate.get(b.date) ?? (await lockQueueCandidates(tx, b.date)).filter((c) => c !== employeeId), requestId: actor.requestId });
-  }
+
   // Integrante de grupo desativado deixa de ser vigente no grupo (DIR-032): vigência encerrada na data de saída.
   const endOn = localToday();
   const memberships = await tx
@@ -626,6 +622,12 @@ export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId:
   const flagged = again.assignments.length ? await tx.update(exclusiveAssignment).set({ needsReview: true }).where(inArray(exclusiveAssignment.id, again.assignments.map((a) => a.id))).returning({ id: exclusiveAssignment.id }) : [];
   for (const f of flagged) {
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "exclusivity.review_marked", entityType: "exclusive_assignment", entityId: f.id, after: { needsReview: true, why: "titular desativado" }, reason, requestId: actor.requestId });
+  }
+  // Mesas liberadas (reservas canceladas e retenções da própria pessoa) vão à próxima pessoa elegível da fila, depois de
+  // marcar a revisão: mesa do titular desativado deixa de ser elegível e não pode ser oferecida (DIR-018, DIR-025).
+  const released = [...again.ownBookings.filter((b) => b.kind !== "space").map((b) => ({ resourceId: b.resourceId, date: b.date })), ...queue.releasedDesks];
+  for (const b of released) {
+    await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidatesByDate.get(b.date) ?? [], requestId: actor.requestId });
   }
   // PAR-25: gestor direto comunicado do tratamento das reservas.
   const [person] = await tx.select({ name: employee.fullName, managerEmployeeId: employee.managerEmployeeId }).from(employee).where(eq(employee.id, employeeId));

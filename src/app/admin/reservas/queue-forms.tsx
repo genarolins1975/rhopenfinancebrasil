@@ -6,11 +6,11 @@ import { cancelSpaceAction } from "@/modules/spaces/actions";
 import { leaveWaitlistAction, offerManuallyAction } from "@/modules/waitlist/actions";
 
 export function ManualOfferForm({ entryId, desks }: { entryId: string; desks: Array<{ id: string; code: string }> }) {
-  if (desks.length === 0) return <p className="text-xs text-text-muted">Nenhuma mesa disponível para a pessoa nesta data.</p>;
+  if (desks.length === 0) return <p className="text-xs text-text-muted">Nenhuma mesa compartilhada disponível para a pessoa nesta data.</p>;
   return (
     <SimpleForm action={offerManuallyAction} submitLabel="Oferecer" variant="secondary" pendingText="Oferecendo…">
       <input type="hidden" name="entryId" value={entryId} />
-      <Field id={`offer-${entryId}`} label="Mesa disponível para a pessoa">
+      <Field id={`offer-${entryId}`} label="Mesa compartilhada disponível para a pessoa">
         <Select id={`offer-${entryId}`} name="resourceId" defaultValue={desks[0].id}>
           {desks.map((d) => (
             <option key={d.id} value={d.id}>

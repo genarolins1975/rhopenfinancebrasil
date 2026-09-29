@@ -71,7 +71,8 @@ async function agendaOn(db: DbOrTx, resourceIds: string[], date: string, viewer:
     const end = new Date(r.upper);
     const mine = r.employeeId === viewer.id;
     const visible = canSeeTitle({ employeeId: r.employeeId, titleVisibility: r.titleVisibility as TitleVisibility }, viewer);
-    const item: AgendaItem = { id: r.id, start, end, slot: formatSlot({ start, end }), mine, title: visible ? r.title : null, employeeName: mine || viewer.namesVisible || visible ? r.employeeName : null };
+    // O nome de quem reservou é dado da pessoa, não do título: só a própria pessoa e a administração o veem.
+    const item: AgendaItem = { id: r.id, start, end, slot: formatSlot({ start, end }), mine, title: visible ? r.title : null, employeeName: mine || viewer.namesVisible ? r.employeeName : null };
     if (!out.has(r.resourceId)) out.set(r.resourceId, []);
     out.get(r.resourceId)!.push(item);
   }
@@ -131,7 +132,10 @@ export async function bookSpace(db: Db, actor: Actor, input: BookSpaceInput): Pr
     const person = await shareLockEmployee(tx, actor.employeeId);
     if (person.status !== "active") throw new ForbiddenError("Só pessoa ativa reserva.");
     await lockResources(tx, [input.resourceId]);
+    // Repetição simultânea da mesma chave: a primeira confirmou enquanto esta esperava o lock; devolve o resultado original.
+    const [again] = await tx.select({ id: spaceBooking.id }).from(spaceBooking).where(and(eq(spaceBooking.actorEmployeeId, actor.employeeId), eq(spaceBooking.idempotencyKey, input.idempotencyKey)));
     const [r] = await loadResourcesOnDate(tx, date, { ids: [input.resourceId] });
+    if (again) return { bookingId: again.id, created: false, resourceCode: r?.code ?? "", slot: formatSlot(interval) };
     if (!r || (r.type !== "room" && r.type !== "booth")) throw new ValidationError("Sala ou cabine não encontrada.");
     if (r.retired) throw new ConflictError("Recurso desativado.");
     const day = await loadDayContext(tx, date, now);

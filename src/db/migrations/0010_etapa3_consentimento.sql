@@ -1,0 +1,2 @@
+ALTER TABLE "employee_preference" ADD COLUMN "consented_manager_id" uuid;--> statement-breakpoint
+ALTER TABLE "employee_preference" ADD CONSTRAINT "employee_preference_consented_manager_id_employee_id_fk" FOREIGN KEY ("consented_manager_id") REFERENCES "public"."employee"("id") ON DELETE no action ON UPDATE no action;

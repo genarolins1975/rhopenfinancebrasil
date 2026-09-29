@@ -17,7 +17,8 @@ export function parseDecisions(fd: FormData): ConflictDecision[] {
       const x = fd.get(`${key}:${bookingId}`);
       return typeof x === "string" ? x.trim() : "";
     };
-    out.push({ bookingId, action: v === "realloc" ? "realloc" : "cancel", reason: str("reason"), message: str("message") || undefined, targetResourceId: str("target") || undefined });
+    const status = str("status");
+    out.push({ bookingId, action: v === "realloc" ? "realloc" : "cancel", reason: str("reason"), message: str("message") || undefined, targetResourceId: str("target") || undefined, expectedStatus: status === "held" || status === "confirmed" ? status : undefined });
   }
   return out;
 }

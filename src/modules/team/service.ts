@@ -15,21 +15,34 @@ import { formatSlot } from "@/modules/spaces/rules";
 export type TeamDay = { date: string; intent: "onsite" | "remote" | "not_informed"; deskCode: string | null; spaces: Array<{ code: string; slot: string; title: string | null }> };
 export type TeamMember = { id: string; name: string; jobTitle: string | null; shared: boolean; days: TeamDay[] };
 
+/** Compartilhamento vigente: autorizado e dado ao gestor direto atual (não passa a um novo gestor). */
 export async function sharesWithManager(db: DbOrTx, employeeId: string): Promise<boolean> {
-  const [p] = await db.select({ v: employeePreference.shareWithManager }).from(employeePreference).where(eq(employeePreference.employeeId, employeeId));
-  return p?.v ?? false;
+  const [p] = await db
+    .select({ v: employeePreference.shareWithManager, consented: employeePreference.consentedManagerId, manager: employee.managerEmployeeId })
+    .from(employeePreference)
+    .innerJoin(employee, eq(employee.id, employeePreference.employeeId))
+    .where(eq(employeePreference.employeeId, employeeId));
+  return !!p?.v && !!p.consented && p.consented === p.manager;
+}
+
+/** Desativação e readmissão zeram o compartilhamento (a pessoa decide de novo). Quem chama registra a auditoria do evento. */
+export async function resetShareWithManager(tx: DbOrTx, employeeId: string): Promise<void> {
+  await tx.update(employeePreference).set({ shareWithManager: false, consentedManagerId: null, updatedAt: new Date() }).where(eq(employeePreference.employeeId, employeeId));
 }
 
 /** Preferência da própria pessoa (opt-in). Auditada porque muda quem vê o quê. */
 export async function setShareWithManager(db: Db, actor: Actor, value: boolean): Promise<void> {
   await db.transaction(async (tx) => {
     const before = await sharesWithManager(tx, actor.employeeId);
+    const [me] = await tx.select({ manager: employee.managerEmployeeId }).from(employee).where(eq(employee.id, actor.employeeId));
+    const consentedManagerId = value ? (me?.manager ?? null) : null;
     await tx
       .insert(employeePreference)
-      .values({ employeeId: actor.employeeId, shareWithManager: value })
-      .onConflictDoUpdate({ target: employeePreference.employeeId, set: { shareWithManager: value, updatedAt: new Date() } });
-    if (before !== value) {
-      await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "preference.share_with_manager", entityType: "employee", entityId: actor.employeeId, before: { shareWithManager: before }, after: { shareWithManager: value }, requestId: actor.requestId });
+      .values({ employeeId: actor.employeeId, shareWithManager: value, consentedManagerId })
+      .onConflictDoUpdate({ target: employeePreference.employeeId, set: { shareWithManager: value, consentedManagerId, updatedAt: new Date() } });
+    const after = await sharesWithManager(tx, actor.employeeId);
+    if (before !== after) {
+      await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "preference.share_with_manager", entityType: "employee", entityId: actor.employeeId, before: { shareWithManager: before }, after: { shareWithManager: after, consentedManagerId }, requestId: actor.requestId });
     }
   });
 }
@@ -37,7 +50,7 @@ export async function setShareWithManager(db: Db, actor: Actor, value: boolean):
 /** Subordinados diretos ativos com o que autorizaram compartilhar, nas datas pedidas. */
 export async function teamWeek(db: DbOrTx, managerId: string, dates: string[]): Promise<TeamMember[]> {
   const reports = await db
-    .select({ id: employee.id, name: employee.fullName, jobTitle: employee.jobTitle, shared: employeePreference.shareWithManager })
+    .select({ id: employee.id, name: employee.fullName, jobTitle: employee.jobTitle, shared: sql<boolean>`coalesce(${employeePreference.shareWithManager} and ${employeePreference.consentedManagerId} = ${managerId}::uuid, false)` })
     .from(employee)
     .leftJoin(employeePreference, eq(employeePreference.employeeId, employee.id))
     .where(and(eq(employee.managerEmployeeId, managerId), eq(employee.status, "active")))

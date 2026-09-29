@@ -76,6 +76,11 @@ export async function confirmUse(db: Db, actor: Actor, input: ConfirmUseInput): 
   return withOfficeTx(db, async (tx) => {
     await shareLockEmployee(tx, actor.employeeId);
     const target = await resolveOwnBookingToday(tx, actor.employeeId, input);
+    // A linha da reserva serializa a confirmação contra a liberação por falta de confirmação (PAR-06) e o cancelamento.
+    const locked = target.kind === "desk"
+      ? await tx.execute(sql`select status from desk_booking where id = ${target.id} for update`)
+      : await tx.execute(sql`select status from space_booking where id = ${target.id} for update`);
+    if ((locked.rows[0] as { status?: string } | undefined)?.status !== "confirmed") throw new ValidationError("Reserva não encontrada para você hoje.");
     const values = target.kind === "desk" ? { deskBookingId: target.id } : { spaceBookingId: target.id };
     const [row] = await tx
       .insert(checkin)
@@ -144,7 +149,7 @@ export async function releaseUnconfirmed(db: Db, now = new Date()): Promise<numb
         await shareLockEmployee(tx, b.employeeId);
         const candidates = (await lockQueueCandidates(tx, today)).filter((c) => c !== b.employeeId);
         await lockResources(tx, [b.resourceId]);
-        const [again] = await tx.select({ status: deskBooking.status }).from(deskBooking).where(eq(deskBooking.id, b.id));
+        const [again] = await tx.select({ status: deskBooking.status }).from(deskBooking).where(eq(deskBooking.id, b.id)).for("update");
         const [confirmed] = await tx.select({ id: checkin.id }).from(checkin).where(eq(checkin.deskBookingId, b.id));
         const cls = await tx.execute(sql`select desk_class(${b.resourceId}::uuid, ${today}::date) as c`);
         if (again?.status !== "confirmed" || confirmed || (cls.rows[0] as { c: string }).c !== "shared") return;

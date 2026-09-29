@@ -402,5 +402,7 @@ export const employeePreference = pgTable("employee_preference", {
     .primaryKey()
     .references(() => employee.id),
   shareWithManager: boolean().notNull().default(false),
+  /** Gestor direto vigente no momento da autorização: troca de gestor exige nova autorização (DEC-28). */
+  consentedManagerId: uuid().references(() => employee.id),
   updatedAt: ts().notNull().defaultNow(),
 });

@@ -41,7 +41,7 @@ export default async function PerfilPage({ searchParams }: { searchParams: Promi
       </Card>
       <div className="mt-6">
         <Card title="Compartilhar planos com meu gestor">
-          <p className="mb-3 text-sm text-text-muted">Desativado por padrão. Vale só para o gestor direto registrado pelo RH e pode ser desfeito a qualquer momento. Títulos de reuniões privadas continuam ocultos.</p>
+          <p className="mb-3 text-sm text-text-muted">Desativado por padrão. Vale só para o gestor direto registrado pelo RH no momento em que você autoriza: se o gestor mudar, autorize de novo. Pode ser desfeito a qualquer momento. Títulos de reuniões privadas continuam ocultos.</p>
           <ShareWithManagerForm current={share} />
         </Card>
       </div>

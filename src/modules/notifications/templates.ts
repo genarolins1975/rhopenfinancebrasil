@@ -114,3 +114,12 @@ export function spaceBookingChangedEmail(to: string, name: string, text: string)
     text: [`Olá, ${name}.`, "", text, "", "Veja suas reservas no Portal do Colaborador."].join("\n"),
   };
 }
+
+/** Retirada da fila pela administração, com o motivo registrado. */
+export function waitlistRemovedEmail(to: string, name: string, dateLocal: string, reason: string): EmailMessage {
+  return {
+    to,
+    subject: "Você saiu da fila de espera",
+    text: [`Olá, ${name}.`, "", `A administração retirou sua inscrição na fila de espera de ${dateLocal}.${reason ? ` Motivo: ${reason}.` : ""}`, "Se ainda precisar de mesa nessa data, entre na fila de novo pelo Portal do Colaborador ou fale com o RH."].join("\n"),
+  };
+}
