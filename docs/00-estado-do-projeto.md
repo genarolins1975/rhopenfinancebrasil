@@ -90,7 +90,18 @@ Fora da Etapa 2, por desenho ou pendência: fila de espera e ofertas (`DIR-025-T
 
 ## Etapa 3 (operação)
 
-Status: iniciada pelo Executor em 29/09/2026. Escopo e aceite em `operacao/plano-de-entregas.md`.
+Status: implementada pelo Executor em 29/09/2026; revisão independente em seis lentes com verificação adversarial por achado (registro em `testes/aceite.md`); correções aplicadas e testadas na mesma data. Aguarda validação do responsável.
+
+Entregue em código:
+
+* Banco: migrações `0007` (gerada: inscrição e oferta da fila, confirmação de uso, preferência de compartilhamento), `0008` (manual: lock, consistência e identidade da oferta e da inscrição, confirmação de uso só da própria reserva do dia e imutável, `DELETE` revogado, parâmetros novos), `0009` (lock da oferta só na inserção), `0010` (gerada: gestor do consentimento), `0011` (fechar o dia ignora sala encerrada) e `0012` (rede da fila: ordem de entrada congelada, coerência entre oferta, retenção e inscrição no commit, retenção só vira reserva com oferta aceita, confirmação datada pelo banco).
+* Fila de espera: inscrição só sem mesa disponível e sem reserva na data (`PAR-30`, `DEC-25`); oferta transacional na liberação da mesa, com retenção e prazo de 120 minutos úteis limitado ao dia (`PAR-05`, `PAR-43`), aceite, recusa, saída, oferta manual só de mesa compartilhada, retirada administrativa com aviso, varredura do worker (ofertas vencidas, mesas livres, inscrições de datas passadas); prioridade da fila sobre a reserva direta respeitando a ordem de entrada (`PAR-37`, `DEC-31`); mesa exclusiva nunca oferecida a inelegível (`DIR-025`, `DIR-007`); lock `person_day` e ordem de locks documentada (`DEC-30`, `DEC-32`, `DEC-33`).
+* Confirmação de uso pelo portal e pelo QR do recurso (a reserva é resolvida pela sessão; login com retorno à rota do QR por lista fechada); liberação por falta de confirmação desativada, e, quando ativada, só de mesa compartilhada confirmada antes do limite e de quem não declarou uso no dia (`PAR-06`, `PAR-44`).
+* Salas e cabines por intervalo de 15 minutos até 24:00, no horizonte das mesas, com limite por recurso, título privado por padrão, nome de quem reservou só para a própria pessoa e a administração, conflitos de manutenção, bloqueio, desativação e fechamento de dia no diálogo (só cancelamento).
+* Meu time com consentimento da própria pessoa, preso ao gestor da época (`DEC-28`, `DEC-37`).
+* Telas: fila no mapa, ofertas e confirmação em Minhas reservas, oferta pendente no Início, QR, salas, Meu time, preferência no perfil; administrativas: abas Mesas, Fila (posição, oferta manual, retirada, demanda não atendida) e Salas em Reservas e fila, indicadores de fila na visão geral, parâmetros novos, QR e atributos de sala no painel do recurso.
+
+Fora da Etapa 3, por desenho ou pendência: integração de calendário corporativo (fonte oficial não confirmada, `RSK-31`); validação do expediente e do prazo da oferta (`PAR-43`, `RSK-29`); ofertas imediatas nas mudanças de política de exclusividade, cobertas pela varredura (`DEC-39`); leitor de tela manual.
 
 ## Próximo passo
 
