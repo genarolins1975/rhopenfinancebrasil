@@ -44,6 +44,22 @@ describe("alvo com concessão privilegiada", () => {
     expect(after).toEqual({ email: "endereco-novo@teste.invalid", name: "Nome Corrigido Pelo RH" });
   });
 
+  it("concessão privilegiada com início futuro protege a convidada do mesmo jeito e aparece na página", async () => {
+    const adm = await withMfa({ roles: ["hr", "admin"], permissions: ["role.assign.privileged"] });
+    const rh = await withMfa({ roles: ["hr"] });
+    const convidada = await seedEmployee({ status: "invited", email: "futura-adm@teste.invalid" });
+    const amanha = new Date(Date.now() + 36 * 3600 * 1000).toISOString().slice(0, 10);
+    await grantRole(db, adm.actor, { targetEmployeeId: convidada.id, role: "admin", validFrom: amanha, reason: "início agendado" });
+    await grantPermission(db, adm.actor, { targetEmployeeId: convidada.id, permission: "role.assign.privileged", validFrom: amanha, reason: "início agendado" });
+    expect((await loadAccess(db, convidada.id)).hasPrivilegedGrant).toBe(false);
+    await expect(updateEmployee(db, rh.actor, convidada.id, { corporateEmail: "rh-controla-futura@teste.invalid" })).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(resendInvitation(db, rh.actor, convidada.id)).rejects.toBeInstanceOf(ForbiddenError);
+    const { listGrants } = await import("@/modules/access/query");
+    const grants = await listGrants(db, convidada.id);
+    expect(grants.roles.map((r) => [r.roleCode, r.future])).toEqual([["admin", true]]);
+    expect(grants.permissions.map((p) => [p.permissionCode, p.future])).toEqual([["role.assign.privileged", true]]);
+  });
+
   it("RH sem role.assign.privileged não reativa administrador suspenso", async () => {
     const adm = await withMfa({ roles: ["hr", "admin"], permissions: ["role.assign.privileged"] });
     const outroAdm = await withMfa({ roles: ["admin"], permissions: ["role.assign.privileged"] });

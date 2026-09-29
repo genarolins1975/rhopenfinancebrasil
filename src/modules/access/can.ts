@@ -90,6 +90,18 @@ export async function loadAccess(db: DbOrTx, employeeId: string, today = localTo
   };
 }
 
+/**
+ * Pessoa tem concessão privilegiada não revogada e não expirada, inclusive com início futuro.
+ * Serve às proteções de alvo (quem pode tocar a pessoa), não à autorização (o que a pessoa pode fazer hoje).
+ */
+export async function hasPrivilegedGrantAnyTime(db: DbOrTx, employeeId: string, today = localToday()): Promise<boolean> {
+  const alive = <T extends { validTo: unknown; revokedAt: unknown }>(t: T) => and(isNull(t.revokedAt as never), or(isNull(t.validTo as never), gte(t.validTo as never, today)));
+  const roles = await db.select({ code: employeeRole.roleCode }).from(employeeRole).where(and(eq(employeeRole.employeeId, employeeId), alive(employeeRole)));
+  if (roles.some((r) => PRIVILEGED_ROLES.includes(r.code as Role))) return true;
+  const perms = await db.select({ code: employeePermission.permissionCode }).from(employeePermission).where(and(eq(employeePermission.employeeId, employeeId), alive(employeePermission)));
+  return perms.some((p) => isSensitivePermission(p.code as Permission));
+}
+
 export async function can(db: DbOrTx, employeeId: string, permission: Permission): Promise<boolean> {
   const access = await loadAccess(db, employeeId);
   return access.permissions.has(permission);

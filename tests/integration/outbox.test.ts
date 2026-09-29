@@ -40,6 +40,25 @@ describe("outbox de notificações", () => {
     expect(failed.lastError).toMatch(/sem handler/);
   });
 
+  it("entrega esgotada marca o convite como falho, visível para quem gere o cadastro", async () => {
+    const { seedEmployee } = await import("./helpers");
+    const { createInvitation } = await import("@/modules/identity/invitations");
+    const { outboxExhaustedHandlers } = await import("@/modules/notifications/handlers");
+    const pessoa = await seedEmployee({ status: "invited", email: "entrega-falha@teste.invalid" });
+    await createInvitation(db, { employeeId: pessoa.id, userId: null }, pessoa.id);
+    const quebrado = { "email.invitation": async () => { throw new Error("smtp fora"); } };
+    for (let i = 0; i < 10; i++) {
+      await db.update(outboxEvent).set({ nextAttemptAt: new Date(Date.now() - 1000) });
+      await processOutboxBatch(db, quebrado, 20, outboxExhaustedHandlers());
+    }
+    const [row] = await db.select({ deliveryStatus: invitation.deliveryStatus, sentAt: invitation.sentAt }).from(invitation).where(eq(invitation.employeeId, pessoa.id));
+    expect(row).toEqual({ deliveryStatus: "failed", sentAt: null });
+    const [ev] = await db.select().from(outboxEvent);
+    expect(ev.status).toBe("failed");
+    expect(ev.attempts).toBe(10);
+    expect(ev.payload).toEqual({ redacted: true });
+  });
+
   it("lista de destinatários permitidos bloqueia envios fora dela", async () => {
     process.env.EMAIL_ALLOWLIST = "permitido@teste.invalid";
     const { env } = await import("@/modules/shared/env");

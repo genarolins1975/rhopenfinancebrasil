@@ -3,18 +3,18 @@ import type { DbOrTx } from "@/db/client";
 import { employee, employeePermission, employeeRole } from "@/db/schema";
 import { localToday } from "@/modules/shared/dates";
 
-/** Concessões vigentes de uma pessoa, para exibição e revogação. */
+/** Concessões vigentes ou com início futuro de uma pessoa, para exibição e revogação. Nada agendado fica invisível. */
 export async function listGrants(db: DbOrTx, employeeId: string) {
   const today = localToday();
   const roles = await db
     .select()
     .from(employeeRole)
-    .where(and(eq(employeeRole.employeeId, employeeId), isNull(employeeRole.revokedAt), lte(employeeRole.validFrom, today), or(isNull(employeeRole.validTo), gte(employeeRole.validTo, today))));
+    .where(and(eq(employeeRole.employeeId, employeeId), isNull(employeeRole.revokedAt), or(isNull(employeeRole.validTo), gte(employeeRole.validTo, today))));
   const permissions = await db
     .select()
     .from(employeePermission)
-    .where(and(eq(employeePermission.employeeId, employeeId), isNull(employeePermission.revokedAt), lte(employeePermission.validFrom, today), or(isNull(employeePermission.validTo), gte(employeePermission.validTo, today))));
-  return { roles, permissions };
+    .where(and(eq(employeePermission.employeeId, employeeId), isNull(employeePermission.revokedAt), or(isNull(employeePermission.validTo), gte(employeePermission.validTo, today))));
+  return { roles: roles.map((r) => ({ ...r, future: r.validFrom > today })), permissions: permissions.map((p) => ({ ...p, future: p.validFrom > today })), today };
 }
 
 /** Pessoas com qualquer concessão vigente, para a tela de acessos. */

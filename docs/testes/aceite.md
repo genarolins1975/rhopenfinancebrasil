@@ -107,7 +107,7 @@ Segundo Revisor independente, contexto limpo, com execução própria: baterias 
 
 | Nº | Severidade | Achado | Tratamento na mesma data |
 |---|---|---|---|
-| 1 | ALTA | RH com `employee.manage` trocava o email de convidada já privilegiada, reenviava o convite para endereço próprio e tomava a conta; reativava administrador suspenso | Corrigido: alvo com concessão privilegiada exige `role.assign.privileged` também para trocar email de convidada, reenviar e revogar convite, reativar e readmitir; teste `privileged-target.test.ts` reproduz a tomada e a reativação |
+| 1 | ALTA | RH com `employee.manage` trocava o email de convidada já privilegiada, reenviava o convite para endereço próprio e tomava a conta; reativava administrador suspenso | Corrigido: alvo com concessão privilegiada exige `role.assign.privileged` também para trocar email de convidada, reenviar e revogar convite e reativar; teste `privileged-target.test.ts` reproduz a tomada e a reativação |
 | 2 | MÉDIA | Endereço cadastrado para outra pessoa entre os dois links deixava identidade e cadastro divergentes, com erro 500 | Corrigido: hook recusa antes de tocar a identidade e redireciona com aviso; se o cadastro recusar, a identidade volta ao email anterior; teste com conflito entre os links e log verificado |
 | 3 | MÉDIA | Consulta e parâmetros chegavam ao log pelo logger do Better Auth e por id fora do formato UUID nas páginas | Corrigido: logger do Better Auth redirecionado ao pino com redação; `getEmployee` devolve nulo para id inválido; teste ponta a ponta com id inválido |
 | 4 | MÉDIA | Status de entrega do convite invisível na tela; painel ignorava `blocked`; guia afirmava o contrário | Corrigido: cartão de convites mostra enfileirado, enviado ou bloqueado; painel conta bloqueadas; teste de convite bloqueado na outbox e em `invitation` |
@@ -119,8 +119,27 @@ Segundo Revisor independente, contexto limpo, com execução própria: baterias 
 | 10 | BAIXA | Rolagem horizontal no desktop com prévia da importação | Corrigido: `min-w-0` no conteúdo principal; teste com prévia gerada nos dois projetos |
 | 11 | BAIXA | Matriz de testes acima do que existia | Corrigido: textos ajustados e testes completados (convite bloqueado, edição e prévia sem rolagem, título do limite de prévias) |
 
-Testes executados após estas correções: 17 de unidade, 50 de integração, 30 de ponta a ponta (15 por projeto), todos aprovados; tipos, lint e build sem erros; `.log-test.ndjson` sem "Failed query" nem "params".
+Testes executados após estas correções: 17 de unidade, 51 de integração, 30 de ponta a ponta (15 por projeto), todos aprovados; tipos, lint e build sem erros; `.log-test.ndjson` sem "Failed query" nem "params".
 
-### Terceira verificação
+### Terceira verificação (29/09/2026)
 
-Em execução em 29/09/2026.
+Terceiro Revisor independente, contexto limpo, com execução própria: baterias oficiais (17, 51 e 30 aprovados), 7 testes de integração e 5 de ponta a ponta adversos temporários, bootstrap 3 vezes, consultas SQL diretas, medição de tempo do login. Os 11 achados da reapresentação foram confirmados corrigidos, com 8 achados residuais. Veredito: ACEITO COM CORREÇÕES, obrigatórias 1, 6 e 7; recomendadas 2, 3, 4, 5 e 8.
+
+| Nº | Severidade | Achado | Tratamento na mesma data |
+|---|---|---|---|
+| 1 | MÉDIA | Concessão privilegiada com início futuro deixava a convidada "não privilegiada" hoje e contornava a proteção; a concessão futura nem aparecia na página | Corrigido: a proteção considera toda concessão não revogada e não expirada, inclusive futura (`hasPrivilegedGrantAnyTime`); a página lista concessões agendadas com "a partir de"; teste reproduz o contorno |
+| 2 | MÉDIA | Entrega esgotada deixava o convite como "enfileirado" para sempre | Corrigido: ao esgotar as tentativas o convite fica `failed` e a tela pede reenvio; teste com 10 falhas |
+| 3 | BAIXA | Guarda de readmissão nunca disparava, e a documentação afirmava proteção inexistente | Corrigido: guarda removida e documentação diz que a readmissão devolve a pessoa sem perfis |
+| 4 | BAIXA | Reversão na corrida real respondia 409 em JSON | Corrigido: redireciona para o perfil com aviso |
+| 5 | BAIXA | Aceite do convite sem identificador de requisição | Corrigido |
+| 6 | BAIXA | Matriz de permissões e guia contradiziam a regra implementada | Corrigido nas duas frases |
+| 7 | BAIXA | Registro com 50 testes de integração em vez de 51 | Corrigido; contagem final abaixo |
+| 8 | BAIXA | Página não encontrada na área autenticada responde HTTP 200 por causa do streaming | Registrado como `DEC-18`: aceitável na área autenticada; monitoramento usa auditoria e logs, não códigos HTTP |
+
+Medição do Revisor (medianas de 8 tentativas de `signInEmail`): pessoa suspensa 26,9 ms, desativada 27,3 ms, email desconhecido 29,6 ms, senha errada 31,2 ms, login correto 34,8 ms. O oráculo de 2 ms desapareceu.
+
+Observação do Revisor sem número: o servidor de produção registra "The destination stream closed early" quando o navegador aborta uma resposta durante redirecionamento na bateria ponta a ponta; ruído de log, sem defeito reproduzível.
+
+### Situação do aceite da Etapa 1
+
+Executor: entregue com as correções das três rodadas aplicadas e testadas (contagem final: 17 de unidade, 53 de integração, 30 de ponta a ponta; tipos, lint e build sem erros). Revisores: rejeitada na primeira revisão, aceita com correções na reapresentação e na terceira verificação; todas as correções aplicadas; as da terceira rodada foram verificadas pelos testes do Executor, sem quarta rodada independente. Responsável pelo produto: pendente de validação.

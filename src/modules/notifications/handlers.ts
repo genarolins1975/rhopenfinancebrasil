@@ -1,13 +1,22 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { invitation } from "@/db/schema";
-import type { OutboxHandler } from "./outbox";
+import type { OutboxExhaustedHandler, OutboxHandler } from "./outbox";
 import { getEmailSender, type EmailMessage } from "./email";
 
 async function sendEmailFromPayload(payload: unknown) {
   const message = (payload as { message?: EmailMessage }).message;
   if (!message?.to || !message.subject || !message.text) throw new Error("payload de email incompleto");
   return getEmailSender().send(message);
+}
+
+/** Ao esgotar as tentativas, o convite deixa de parecer "enfileirado". */
+export function outboxExhaustedHandlers(): Record<string, OutboxExhaustedHandler> {
+  return {
+    "email.invitation": async (e) => {
+      await db.update(invitation).set({ deliveryStatus: "failed" }).where(eq(invitation.id, e.aggregateId));
+    },
+  };
 }
 
 /** Um handler por tipo de evento. Idempotência vem da chave do evento; reenvio só ocorre em falha. */

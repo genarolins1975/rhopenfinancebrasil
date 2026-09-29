@@ -48,20 +48,20 @@ export default async function ColaboradorPage({ params, searchParams }: { params
               ]}
             />
           </Card>
-          <Card title="Perfis e permissões vigentes">
+          <Card title="Perfis e permissões vigentes ou agendados">
             {grants.roles.length === 0 && grants.permissions.length === 0 ? (
               <p className="text-sm text-text-muted">Nenhuma concessão além do perfil básico de colaborador.</p>
             ) : (
               <ul className="space-y-1 text-sm">
                 {grants.roles.map((r) => (
                   <li key={r.id}>
-                    Perfil <strong>{r.roleCode}</strong> desde {formatLocalDate(r.validFrom)}
+                    Perfil <strong>{r.roleCode}</strong> {r.future ? "a partir de" : "desde"} {formatLocalDate(r.validFrom)}
                     {r.validTo ? ` até ${formatLocalDate(r.validTo)}` : ""} · {r.reason}
                   </li>
                 ))}
                 {grants.permissions.map((g) => (
                   <li key={g.id}>
-                    Permissão <strong>{g.permissionCode}</strong> desde {formatLocalDate(g.validFrom)}
+                    Permissão <strong>{g.permissionCode}</strong> {g.future ? "a partir de" : "desde"} {formatLocalDate(g.validFrom)}
                     {g.validTo ? ` até ${formatLocalDate(g.validTo)}` : ""} · {g.reason}
                   </li>
                 ))}
@@ -105,7 +105,7 @@ export default async function ColaboradorPage({ params, searchParams }: { params
               <ul className="space-y-1 text-sm">
                 {emp.invitations.map((i) => (
                   <li key={i.id}>
-                    {i.deliveryStatus === "sent" && i.sentAt ? `Enviado em ${formatLocal(i.sentAt)}` : i.deliveryStatus === "blocked" ? "Bloqueado: destinatário fora da lista permitida deste ambiente" : "Enfileirado, aguardando envio"}
+                    {i.deliveryStatus === "sent" && i.sentAt ? `Enviado em ${formatLocal(i.sentAt)}` : i.deliveryStatus === "blocked" ? "Bloqueado: destinatário fora da lista permitida deste ambiente" : i.deliveryStatus === "failed" ? "Falha na entrega: tentativas esgotadas, reenvie o convite" : "Enfileirado, aguardando envio"}
                     , válido até {formatLocal(i.expiresAt)}: {i.usedAt ? "usado" : i.revokedAt ? "revogado" : i.expired ? "expirado" : "válido"}
                   </li>
                 ))}

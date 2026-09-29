@@ -47,7 +47,7 @@ Na página da pessoa, seção Perfis e permissões, ou pela lista em Acessos.
 
 * Perfis: Colaborador (implícito para toda pessoa ativa), Gestor, RH, Facilities, Administrador, Administrador técnico.
 * Conceder Gestor exige `role.assign.standard`. Conceder RH, Facilities, Administrador, Administrador técnico ou qualquer permissão direta exige `role.assign.privileged`.
-* Suspender ou desativar alguém com perfil privilegiado exige `role.assign.privileged`. Ninguém altera a própria área, gestor ou condição organizacional.
+* Alterar alguém com perfil privilegiado, mesmo agendado para começar depois, exige `role.assign.privileged`: suspender, desativar, reativar, trocar o email de convidada, reenviar e revogar convite. Readmitir não exige: a pessoa volta sem perfis. Ninguém altera a própria área, gestor ou condição organizacional.
 * Toda concessão tem motivo, data de início e término opcional. Tudo vai para a auditoria.
 * Perfis privilegiados só produzem efeito quando a pessoa está ativa e com segundo fator.
 
@@ -71,4 +71,4 @@ Procedimento de linha de comando no servidor, executado pelo administrador técn
 
 Na página da pessoa, cada convite mostra enfileirado, enviado em data e hora, ou bloqueado (destinatário fora da lista permitida do ambiente), além de válido, usado, revogado ou expirado. "Enviado" só aparece depois que o worker entregou de fato. A visão geral conta as notificações bloqueadas. Revogar um convite exige motivo, que fica na auditoria.
 
-Pessoa com perfil privilegiado (RH, Facilities, Administrador, Administrador técnico ou permissão sensível) só é alterada por quem tem `role.assign.privileged`: isso vale para suspender, desativar, reativar, readmitir, trocar o email de convidada, reenviar e revogar convite. Nome e cargo continuam editáveis pelo RH.
+Pessoa com perfil privilegiado (RH, Facilities, Administrador, Administrador técnico ou permissão sensível), vigente ou agendado, só é alterada por quem tem `role.assign.privileged`: isso vale para suspender, desativar, reativar, trocar o email de convidada, reenviar e revogar convite. Nome e cargo continuam editáveis pelo RH. Convite cuja entrega esgotou as tentativas aparece como "Falha na entrega" e pede reenvio.

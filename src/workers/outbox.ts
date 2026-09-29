@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { db } from "@/db/client";
-import { outboxHandlers } from "@/modules/notifications/handlers";
+import { outboxExhaustedHandlers, outboxHandlers } from "@/modules/notifications/handlers";
 import { processOutboxBatch } from "@/modules/notifications/outbox";
 import { logger } from "@/modules/shared/logger";
 
@@ -10,10 +10,11 @@ let running = true;
 
 async function loop() {
   const handlers = outboxHandlers();
+  const exhausted = outboxExhaustedHandlers();
   logger.info("worker da outbox iniciado");
   while (running) {
     try {
-      const n = await processOutboxBatch(db, handlers);
+      const n = await processOutboxBatch(db, handlers, 20, exhausted);
       if (n === 0) await new Promise((r) => setTimeout(r, INTERVAL_MS));
     } catch (e) {
       logger.error({ err: e instanceof Error ? e.message : String(e) }, "erro no ciclo da outbox");

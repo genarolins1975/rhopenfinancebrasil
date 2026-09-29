@@ -205,7 +205,7 @@ export const auth = betterAuth({
     user: {
       update: {
         // Email de autenticação e email do cadastro andam juntos; a troca só chega aqui após confirmação nos dois endereços.
-        after: async (user) => {
+        after: async (user, ctx) => {
           const [emp] = await db.select({ id: employee.id, email: employee.corporateEmail }).from(employee).where(eq(employee.userId, user.id));
           if (!emp || emp.email.toLowerCase() === user.email.toLowerCase()) return;
           const next = user.email.toLowerCase();
@@ -218,6 +218,7 @@ export const auth = betterAuth({
             // Cadastro e identidade nunca divergem: se o cadastro não aceita o email novo, a identidade volta ao anterior.
             await db.update(authUser).set({ email: emp.email }).where(eq(authUser.id, user.id));
             logger.warn({ userId: user.id, err: safeErrorInfo(e) }, "troca de email desfeita: cadastro recusou o novo endereço");
+            if (ctx) throw ctx.redirect(`${env().APP_BASE_URL}/perfil?aviso=email-indisponivel`);
             throw new APIError("CONFLICT", { message: "Este email não está mais disponível. Peça a troca de novo com outro endereço." });
           }
         },

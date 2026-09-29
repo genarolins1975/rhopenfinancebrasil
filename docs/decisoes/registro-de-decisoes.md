@@ -103,6 +103,7 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-15` | Prévia da importação CSV persistida cifrada (AES GCM, chave própria, AAD = id do lote) por 30 minutos, só com as linhas válidas; arquivo original nunca gravado | Reenvio do arquivo na confirmação; memória do processo | Adotada na Etapa 1 |
 | `DEC-16` | Outbox consumida por worker próprio com `for update skip locked` na Etapa 1; `pg-boss` entra na Etapa 3, quando houver agendamentos | Adotar `pg-boss` já | Adotada na Etapa 1 |
 | `DEC-17` | Identidade criada pelo adaptador interno do Better Auth com `method: "invitation"`; ids gerados pelo Better Auth; tabelas com prefixo `auth_` | Plugin admin; ids pelo banco | Adotada na Etapa 1 |
+| `DEC-18` | Página não encontrada na área autenticada responde HTTP 200 com a tela "Página não encontrada", porque o streaming com estado de carregamento já iniciou a resposta; monitoramento de acesso usa auditoria e logs de aplicação, não códigos HTTP | Validar o id antes do streaming e remover o estado de carregamento do segmento | Adotada na Etapa 1 (terceira verificação, achado 8) |
 
 ## D. Perguntas bloqueantes
 
@@ -131,4 +132,5 @@ A Etapa 0 e a stack foram validadas pelo responsável em 28/09/2026 ("Pode segui
 | 29/09/2026 | Etapa 1: fundação implementada (projeto, banco, autenticação, acesso, colaboradores, CPF, auditoria, outbox, telas) com testes de unidade, integração e ponta a ponta; decisões `DEC-15` a `DEC-17`, parâmetros `PAR-38` e `PAR-39` | Executor |
 | 29/09/2026 | Revisão independente da Etapa 1: rejeitada com 26 achados; 20 corrigidos na mesma data (autorização de página, troca de email, tokens em claro na outbox, limite anti oráculo, erros de banco, sessão de 12 horas, estados de tela, celular, acessibilidade, testes, documentação); pendências registradas em `RSK-23` a `RSK-25` e `PAR-40` a `PAR-42` | Executor |
 | 29/09/2026 | Reapresentação da Etapa 1: aceita com correções pelo segundo Revisor (11 achados); todos corrigidos, entre eles a proteção de alvo privilegiado em toda operação de cadastro e convite, a recusa de endereço tomado entre os dois links da troca de email e o logger do Better Auth redirigido com redação | Executor |
+| 29/09/2026 | Terceira verificação da Etapa 1: aceita com correções (8 residuais); proteção de alvo privilegiado passa a considerar concessão com início futuro, entrega esgotada marca o convite como falho, `DEC-18` registrada | Executor |
 | 28/09/2026 | Planta recebida e extraída; inventário preliminar de 84 mesas, 3 salas, 2 booths, 4 cabines, 1 mesa aberta, marcado como não validado; PDF mantido fora do repositório | Executor |

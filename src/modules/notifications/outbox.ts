@@ -42,7 +42,9 @@ function backoffSeconds(attempt: number): number {
  * Processa um lote de eventos pendentes com `for update skip locked`, o que permite
  * vários workers sem entrega duplicada. Falha registra erro e reagenda; após o limite, marca failed.
  */
-export async function processOutboxBatch(db: Db, handlers: Record<string, OutboxHandler>, limit = 20): Promise<number> {
+export type OutboxExhaustedHandler = (event: OutboxEvent) => Promise<void>;
+
+export async function processOutboxBatch(db: Db, handlers: Record<string, OutboxHandler>, limit = 20, exhausted: Record<string, OutboxExhaustedHandler> = {}): Promise<number> {
   return db.transaction(async (tx) => {
     const rows = await tx
       .select()
@@ -65,6 +67,14 @@ export async function processOutboxBatch(db: Db, handlers: Record<string, Outbox
         const message = scrub(e instanceof Error ? e.message : String(e)) as string;
         logger.warn({ eventId: row.id, eventType: row.eventType, attempts, err: message }, "falha na entrega da outbox");
         const failed = attempts >= MAX_ATTEMPTS;
+        if (failed) {
+          // Quem depende da entrega fica sabendo que ela não vai acontecer (convite: falha visível na tela da pessoa).
+          try {
+            await exhausted[row.eventType]?.(row);
+          } catch (inner) {
+            logger.error({ eventId: row.id, eventType: row.eventType, err: scrub(inner instanceof Error ? inner.message : String(inner)) }, "falha ao registrar entrega esgotada");
+          }
+        }
         await tx
           .update(outboxEvent)
           .set({

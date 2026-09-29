@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/db/client";
 import { area, authTwoFactor, authUser, employee, employeeOrgAssignment, employeeSensitive, employmentPeriod, invitation } from "@/db/schema";
-import { loadAccess } from "@/modules/access/can";
+import { hasPrivilegedGrantAnyTime, loadAccess } from "@/modules/access/can";
 import type { Permission } from "@/modules/access/permissions";
 import { revokeAllGrants } from "@/modules/access/grants";
 import { recordAudit } from "@/modules/audit/audit";
@@ -53,8 +53,8 @@ async function assertReferences(db: DbOrTx, refs: { areaId?: string | null; mana
  * por troca de email de convidada privilegiada e a reativação de administrador suspenso por RH comum.
  */
 async function assertMayChangeStatusOf(db: DbOrTx, actor: Actor, targetEmployeeId: string) {
-  const target = await loadAccess(db, targetEmployeeId);
-  if (!target.hasPrivilegedGrant) return;
+  // Inclui concessão com início futuro: ela não vale hoje, mas define quem a pessoa será ao aceitar o convite.
+  if (!(await hasPrivilegedGrantAnyTime(db, targetEmployeeId))) return;
   const mine = await loadAccess(db, actor.employeeId);
   if (!mine.permissions.has("role.assign.privileged")) {
     throw new ForbiddenError("Alterar pessoa com perfil privilegiado exige permissão para gerir perfis privilegiados.");
@@ -338,7 +338,7 @@ export async function readmitEmployee(db: Db, actor: Actor, employeeId: string, 
   await assertPermission(db, actor, "employee.manage");
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo.");
   if (!ISO_DATE.test(input.hireDate)) throw new ValidationError("Informe a data de admissão.");
-  await assertMayChangeStatusOf(db, actor, employeeId);
+  // Pessoa desativada não tem concessão vigente (a desativação revogou todas): a readmissão devolve a pessoa sem perfis.
   const ctx = await authContext();
   await db.transaction(async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");

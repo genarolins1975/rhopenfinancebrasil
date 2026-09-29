@@ -40,7 +40,7 @@ Registro completo em `decisoes/registro-de-decisoes.md`.
 
 ## Etapa 1 (fundação)
 
-Status: implementada pelo Executor entre 28/09/2026 e 29/09/2026; rejeitada pelo primeiro Revisor com 26 achados; reapresentada e aceita com correções pelo segundo Revisor (11 achados, 5 obrigatórios), todos corrigidos na mesma data; terceira verificação em andamento. Registro completo em `testes/aceite.md`. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
+Status: implementada pelo Executor entre 28/09/2026 e 29/09/2026; rejeitada pelo primeiro Revisor com 26 achados; reapresentada e aceita com correções pelo segundo Revisor (11 achados) e pelo terceiro (8 achados residuais); todas as correções aplicadas e testadas em 29/09/2026, as da última rodada sem nova rodada independente. Aguarda validação do responsável. Registro completo em `testes/aceite.md`. Escopo e aceite em `operacao/plano-de-entregas.md`; registro em `testes/aceite.md`.
 
 Entregue em código:
 
@@ -52,12 +52,12 @@ Entregue em código:
 * Auditoria somente de inserção; outbox com worker `skip locked`, carga apagada após a entrega e status `blocked` por lista de destinatários; convite marcado como enviado só após envio real; bootstrap do primeiro administrador por linha de comando com lock transacional e `--force` recusado fora de desenvolvimento e teste.
 * Telas: entrada, login, segundo fator, convite, recuperação, redefinição, privacidade, início, perfil, segurança, visão geral administrativa, colaboradores (lista, cadastro, detalhe com diálogos de confirmação, edição, importação), acessos e auditoria; páginas de erro, não encontrado, carregamento e aviso de conexão perdida; cabeçalhos de segurança básicos.
 
-Testes executados em 29/09/2026 após as correções das duas revisões no ambiente desta sessão (PostgreSQL 16 local, Chromium pré-instalado):
+Testes executados em 29/09/2026 após as correções das três rodadas de revisão no ambiente desta sessão (PostgreSQL 16 local, Chromium pré-instalado):
 
 | Bateria | Comando | Resultado |
 |---|---|---|
 | Unidade | `pnpm test:unit` | 17 testes, 17 aprovados |
-| Integração com banco | `pnpm test:integration` | 50 testes, 50 aprovados |
+| Integração com banco | `pnpm test:integration` | 53 testes, 53 aprovados |
 | Ponta a ponta com axe (desktop e celular) | `pnpm build && pnpm test:e2e` | 30 testes, 30 aprovados |
 | Tipos, lint e build | `pnpm typecheck && pnpm lint && pnpm build` | sem erros |
 
@@ -65,4 +65,4 @@ Fora da Etapa 1, por desenho ou pendência: verificação manual com leitor de t
 
 ## Próximo passo
 
-Resultado da terceira verificação, aceite do responsável; depois Etapa 2 (núcleo do escritório).
+Validação da Etapa 1 pelo responsável; depois Etapa 2 (núcleo do escritório).

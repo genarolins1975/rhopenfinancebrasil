@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -74,10 +75,11 @@ export async function acceptInvitationAction(_prev: ActionState, formData: FormD
   const password = str(formData, "password");
   const confirm = str(formData, "confirm");
   if (password !== confirm) return { error: "As senhas não coincidem." };
+  const requestId = randomUUID();
   try {
     await acceptInvitation(db, token, password);
   } catch (e) {
-    return unexpected(e, "aceitar convite");
+    return unexpected(e, "aceitar convite", requestId);
   }
   redirect("/entrar?aviso=senha-definida");
 }
