@@ -29,7 +29,7 @@ export async function adminOverview(db: DbOrTx) {
     employees: { invited: statusMap.invited ?? 0, active: statusMap.active ?? 0, suspended: statusMap.suspended ?? 0, deactivated: statusMap.deactivated ?? 0 },
     invitedWithoutActiveInvitation: invitedWithoutActive.n,
     expiredInvitations: expiredInvitations.n,
-    outbox: { pending: outboxMap.pending ?? 0, failed: outboxMap.failed ?? 0, delivered: outboxMap.delivered ?? 0 },
+    outbox: { pending: outboxMap.pending ?? 0, failed: outboxMap.failed ?? 0, blocked: outboxMap.blocked ?? 0, delivered: outboxMap.delivered ?? 0 },
     auditLast24h: auditLast24h.n,
   };
 }

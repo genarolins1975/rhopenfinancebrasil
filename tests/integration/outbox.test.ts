@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db/client";
-import { outboxEvent } from "@/db/schema";
+import { invitation, outboxEvent } from "@/db/schema";
 import { getEmailSender, memoryMailbox, resetEmailSenderForTests } from "@/modules/notifications/email";
 import { outboxHandlers } from "@/modules/notifications/handlers";
 import { enqueueOutbox, processOutboxBatch } from "@/modules/notifications/outbox";
@@ -52,6 +52,18 @@ describe("outbox de notificações", () => {
       expect(blocked.id).toBe("blocked-by-allowlist");
       const ok = await sender.send({ to: "permitido@teste.invalid", subject: "x", text: "y" });
       expect(ok.id).not.toBe("blocked-by-allowlist");
+      // convite para destinatário fora da lista: outbox e convite ficam como bloqueados, carga apagada, sem "enviado"
+      const { seedEmployee } = await import("./helpers");
+      const { createInvitation } = await import("@/modules/identity/invitations");
+      const fora = await seedEmployee({ status: "invited", email: "fora-da-lista@teste.invalid" });
+      await createInvitation(db, { employeeId: fora.id, userId: null }, fora.id);
+      await processOutboxBatch(db, outboxHandlers());
+      const [row] = await db.select({ id: invitation.id, deliveryStatus: invitation.deliveryStatus, sentAt: invitation.sentAt }).from(invitation).where(eq(invitation.employeeId, fora.id));
+      expect(row.deliveryStatus).toBe("blocked");
+      expect(row.sentAt).toBeNull();
+      const [ev] = await db.select().from(outboxEvent).where(eq(outboxEvent.aggregateId, row.id));
+      expect(ev.status).toBe("blocked");
+      expect(ev.payload).toEqual({ redacted: true });
     } finally {
       cached.EMAIL_ALLOWLIST = original;
       delete process.env.EMAIL_ALLOWLIST;

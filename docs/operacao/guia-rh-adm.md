@@ -69,4 +69,6 @@ Procedimento de linha de comando no servidor, executado pelo administrador técn
 
 ## Convites e envio real
 
-Na página da pessoa, cada convite mostra enfileirado, enviado, bloqueado (destinatário fora da lista permitida de homologação) ou expirado. "Enviado" só aparece depois que o worker entregou de fato. Revogar um convite exige motivo, que fica na auditoria.
+Na página da pessoa, cada convite mostra enfileirado, enviado em data e hora, ou bloqueado (destinatário fora da lista permitida do ambiente), além de válido, usado, revogado ou expirado. "Enviado" só aparece depois que o worker entregou de fato. A visão geral conta as notificações bloqueadas. Revogar um convite exige motivo, que fica na auditoria.
+
+Pessoa com perfil privilegiado (RH, Facilities, Administrador, Administrador técnico ou permissão sensível) só é alterada por quem tem `role.assign.privileged`: isso vale para suspender, desativar, reativar, readmitir, trocar o email de convidada, reenviar e revogar convite. Nome e cargo continuam editáveis pelo RH.

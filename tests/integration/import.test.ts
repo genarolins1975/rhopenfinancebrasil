@@ -66,7 +66,7 @@ describe("importação CSV", () => {
     await expect(applyImport(db, actor, p2.batchId)).rejects.toThrow(/mudanças no cadastro/);
   });
 
-  it("limite anti oráculo: quinta prévia na hora é recusada; descarte só pelo dono e só de prévia", async () => {
+  it("limite anti oráculo: sexta prévia na hora é recusada; descarte só pelo dono e só de prévia", async () => {
     const actor = await rhActor();
     const outroRh = await rhActor();
     const csv = (n: number) => `nome;email;cpf;area;cargo;gestor_email;condicao;data_admissao\nPessoa ${n};p${n}@teste.invalid;${syntheticCpf(4000 + n)};;;;;01/10/2026`;

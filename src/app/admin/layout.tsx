@@ -35,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </form>
         </div>
       </aside>
-      <main id="conteudo" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+      <main id="conteudo" className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6">
         {children}
       </main>
     </div>

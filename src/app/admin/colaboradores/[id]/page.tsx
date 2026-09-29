@@ -105,8 +105,8 @@ export default async function ColaboradorPage({ params, searchParams }: { params
               <ul className="space-y-1 text-sm">
                 {emp.invitations.map((i) => (
                   <li key={i.id}>
-                    Enviado em {i.sentAt ? formatLocal(i.sentAt) : "—"}, válido até {formatLocal(i.expiresAt)}:{" "}
-                    {i.usedAt ? "usado" : i.revokedAt ? "revogado" : i.expired ? "expirado" : "válido"}
+                    {i.deliveryStatus === "sent" && i.sentAt ? `Enviado em ${formatLocal(i.sentAt)}` : i.deliveryStatus === "blocked" ? "Bloqueado: destinatário fora da lista permitida deste ambiente" : "Enfileirado, aguardando envio"}
+                    , válido até {formatLocal(i.expiresAt)}: {i.usedAt ? "usado" : i.revokedAt ? "revogado" : i.expired ? "expirado" : "válido"}
                   </li>
                 ))}
               </ul>

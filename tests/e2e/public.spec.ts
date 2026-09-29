@@ -5,6 +5,12 @@ import { expectNoA11yViolations } from "./a11y";
 const state = () => JSON.parse(readFileSync(".e2e-state.json", "utf8")) as { password: string; comum: { email: string }; inviteToken: string };
 
 test.describe("páginas públicas", () => {
+  test("aviso para concluir a troca de email pede login e explica o próximo passo", async ({ page }) => {
+    await page.goto("/entrar?aviso=confirmar-email");
+    await expect(page.getByText("reabra o link recebido no novo endereço")).toBeVisible();
+    await expectNoA11yViolations(page);
+  });
+
   for (const path of ["/", "/entrar", "/recuperar-senha", "/privacidade", "/convite/token-invalido-de-tamanho-suficiente"]) {
     test(`A11Y-01 ${path}`, async ({ page }) => {
       await page.goto(path);

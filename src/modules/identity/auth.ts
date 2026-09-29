@@ -6,13 +6,14 @@ import { haveIBeenPwned } from "better-auth/plugins/haveibeenpwned";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { authSchema, authVerification, employee } from "@/db/schema";
+import { authSchema, authVerification, authUser, employee } from "@/db/schema";
 import { recordAudit } from "@/modules/audit/audit";
 import { loadAccess } from "@/modules/access/can";
 import { enqueueOutbox } from "@/modules/notifications/outbox";
 import { emailChangeConfirmation, emailVerification, maskEmail, passwordResetEmail } from "@/modules/notifications/templates";
 import { env } from "@/modules/shared/env";
-import { logger } from "@/modules/shared/logger";
+import { logger, scrub } from "@/modules/shared/logger";
+import { safeErrorInfo } from "@/modules/shared/db-errors";
 import { hashPassword, PASSWORD_MAX, PASSWORD_MIN, verifyPassword } from "./password";
 
 /** Caminhos que não têm sessão para conferir ou que autenticam por token próprio. */
@@ -66,14 +67,14 @@ async function userIdForResetToken(token: string): Promise<string | null> {
 }
 
 /** Tipo de pedido embutido no token de verificação de email, sem confiar nele para nada além de rotear. */
-function verificationRequestType(token: string | undefined): string | null {
-  if (!token) return null;
+/** Carga do token de verificação de email (JWT do Better Auth), lida sem validar: a validação é do próprio handler. */
+function verificationPayload(token: string | undefined): { requestType?: string; updateTo?: string; email?: string } {
+  if (!token) return {};
   try {
     const payload = token.split(".")[1];
-    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { requestType?: string };
-    return parsed.requestType ?? null;
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { requestType?: string; updateTo?: string; email?: string };
   } catch {
-    return null;
+    return {};
   }
 }
 
@@ -85,6 +86,14 @@ const trustedIpHeaders: string[] = trustedIpHeader ? [trustedIpHeader] : [];
 
 export const auth = betterAuth({
   appName: authIssuer,
+  // O logger do Better Auth imprimiria erros de driver com a consulta e os parâmetros; tudo passa pelo pino com redação.
+  logger: {
+    level: "warn",
+    log: (level, message, ...args) => {
+      const fn = level === "error" ? logger.error : level === "warn" ? logger.warn : level === "debug" ? logger.debug : logger.info;
+      fn.call(logger, { origin: "better-auth", args: scrub(args.map((a) => (a instanceof Error ? safeErrorInfo(a) : a))) }, scrub(message) as string);
+    },
+  },
   baseURL: env().APP_BASE_URL,
   secret: env().BETTER_AUTH_SECRET,
   trustedOrigins: [env().APP_BASE_URL],
@@ -199,10 +208,18 @@ export const auth = betterAuth({
         after: async (user) => {
           const [emp] = await db.select({ id: employee.id, email: employee.corporateEmail }).from(employee).where(eq(employee.userId, user.id));
           if (!emp || emp.email.toLowerCase() === user.email.toLowerCase()) return;
-          await db.transaction(async (tx) => {
-            await tx.update(employee).set({ corporateEmail: user.email.toLowerCase(), updatedAt: new Date() }).where(eq(employee.id, emp.id));
-            await recordAudit(tx, { actorUserId: user.id, actorEmployeeId: emp.id, action: "employee.email_changed", entityType: "employee", entityId: emp.id, before: { corporateEmail: emp.email }, after: { corporateEmail: user.email.toLowerCase() }, reason: "troca confirmada pela própria pessoa" });
-          });
+          const next = user.email.toLowerCase();
+          try {
+            await db.transaction(async (tx) => {
+              await tx.update(employee).set({ corporateEmail: next, updatedAt: new Date() }).where(eq(employee.id, emp.id));
+              await recordAudit(tx, { actorUserId: user.id, actorEmployeeId: emp.id, action: "employee.email_changed", entityType: "employee", entityId: emp.id, before: { corporateEmail: emp.email }, after: { corporateEmail: next }, reason: "troca confirmada pela própria pessoa" });
+            });
+          } catch (e) {
+            // Cadastro e identidade nunca divergem: se o cadastro não aceita o email novo, a identidade volta ao anterior.
+            await db.update(authUser).set({ email: emp.email }).where(eq(authUser.id, user.id));
+            logger.warn({ userId: user.id, err: safeErrorInfo(e) }, "troca de email desfeita: cadastro recusou o novo endereço");
+            throw new APIError("CONFLICT", { message: "Este email não está mais disponível. Peça a troca de novo com outro endereço." });
+          }
         },
       },
     },
@@ -215,10 +232,14 @@ export const auth = betterAuth({
       }
       // Login e redefinição de senha de pessoa inativa falham antes de qualquer verificação de segredo.
       if (ctx.path === "/sign-in/email") {
-        const email = (ctx.body as { email?: string } | undefined)?.email;
-        if (email) {
-          const emp = await employeeStatusForEmail(email);
-          if (emp && emp.status !== "active") throw UNAUTHORIZED();
+        const body = ctx.body as { email?: string; password?: string } | undefined;
+        if (body?.email) {
+          const emp = await employeeStatusForEmail(body.email);
+          if (emp && emp.status !== "active") {
+            // Mesmo custo de tempo do caminho de senha errada, para não revelar a situação da conta.
+            await ctx.context.password.hash(body.password ?? "");
+            throw UNAUTHORIZED();
+          }
         }
         return;
       }
@@ -233,12 +254,15 @@ export const auth = betterAuth({
       }
       if (ctx.path === "/verify-email") {
         // Confirmar a troca de email exige sessão ativa; sem ela, a pessoa entra primeiro e reabre o link.
-        const type = verificationRequestType((ctx.query as { token?: string } | undefined)?.token);
-        if (type === "change-email-verification") {
+        const payload = verificationPayload((ctx.query as { token?: string } | undefined)?.token);
+        if (payload.requestType === "change-email-verification") {
           const session = await getSessionFromCtx(ctx, { disableCookieCache: true });
           if (!session) throw ctx.redirect(`${env().APP_BASE_URL}/entrar?aviso=confirmar-email`);
           const emp = await employeeStatusForUser(session.user.id);
           if (!emp || emp.status !== "active") throw UNAUTHORIZED();
+          // O endereço pode ter sido cadastrado para outra pessoa entre os dois links: recusa antes de tocar a identidade.
+          const taken = payload.updateTo ? await employeeStatusForEmail(payload.updateTo) : null;
+          if (taken && taken.id !== emp.id) throw ctx.redirect(`${env().APP_BASE_URL}/perfil?aviso=email-indisponivel`);
         }
         return;
       }

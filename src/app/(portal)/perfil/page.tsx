@@ -18,6 +18,11 @@ export default async function PerfilPage({ searchParams }: { searchParams: Promi
           <Alert kind="success">Email confirmado.</Alert>
         </div>
       ) : null}
+      {sp.aviso === "email-indisponivel" ? (
+        <div className="mb-4">
+          <Alert kind="warning">O novo email não está mais disponível. Seu email atual foi mantido. Peça a troca de novo com outro endereço.</Alert>
+        </div>
+      ) : null}
       <Card title="Cadastro">
         <DefinitionList
           items={[

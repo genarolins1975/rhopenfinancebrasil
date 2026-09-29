@@ -7,6 +7,7 @@ const AVISOS: Record<string, { kind: "success" | "info" | "warning"; text: strin
   "senha-redefinida": { kind: "success", text: "Senha redefinida. Entre com a nova senha." },
   sessao: { kind: "info", text: "Sua sessão administrativa expirou. Entre de novo." },
   saida: { kind: "info", text: "Você saiu do portal." },
+  "confirmar-email": { kind: "info", text: "Para concluir a troca de email, entre com sua senha atual e reabra o link recebido no novo endereço." },
 };
 
 export default async function EntrarPage({ searchParams }: { searchParams: Promise<{ aviso?: string; motivo?: string }> }) {

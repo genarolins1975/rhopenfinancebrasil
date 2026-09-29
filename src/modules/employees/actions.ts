@@ -33,9 +33,10 @@ function keepValues(fd: FormData) {
 
 export async function createEmployeeAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const current = await requirePermission("employee.manage");
+  const actor = actorOf(current);
   let id: string;
   try {
-    const r = await createEmployee(db, actorOf(current), {
+    const r = await createEmployee(db, actor, {
       fullName: str(fd, "fullName"),
       corporateEmail: str(fd, "corporateEmail"),
       cpf: str(fd, "cpf"),
@@ -48,16 +49,17 @@ export async function createEmployeeAction(_prev: ActionState, fd: FormData): Pr
     });
     id = r.employeeId;
   } catch (e) {
-    return { ...fail(e, "erro ao criar colaborador"), ...keepValues(fd) };
+    return { ...fail(e, "erro ao criar colaborador", actor.requestId), ...keepValues(fd) };
   }
   redirect(`/admin/colaboradores/${id}?aviso=criado`);
 }
 
 export async function updateEmployeeAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const current = await requirePermission("employee.manage");
+  const actor = actorOf(current);
   const id = str(fd, "id");
   try {
-    await updateEmployee(db, actorOf(current), id, {
+    await updateEmployee(db, actor, id, {
       fullName: str(fd, "fullName"),
       corporateEmail: str(fd, "corporateEmail"),
       areaId: str(fd, "areaId") || null,
@@ -67,18 +69,19 @@ export async function updateEmployeeAction(_prev: ActionState, fd: FormData): Pr
       reason: str(fd, "reason") || undefined,
     });
   } catch (e) {
-    return { ...fail(e, "erro ao editar colaborador"), ...keepValues(fd) };
+    return { ...fail(e, "erro ao editar colaborador", actor.requestId), ...keepValues(fd) };
   }
   redirect(`/admin/colaboradores/${id}?aviso=editado`);
 }
 
 async function simple(fd: FormData, run: (actor: ReturnType<typeof actorOf>, id: string) => Promise<void>, fallback: string, message: string): Promise<ActionState> {
   const current = await requirePermission("employee.manage");
+  const actor = actorOf(current);
   const id = str(fd, "id");
   try {
-    await run(actorOf(current), id);
+    await run(actor, id);
   } catch (e) {
-    return fail(e, fallback);
+    return fail(e, fallback, actor.requestId);
   }
   revalidatePath(`/admin/colaboradores/${id}`);
   revalidatePath("/admin/colaboradores");
@@ -106,45 +109,49 @@ export async function readmitEmployeeAction(_prev: ActionState, fd: FormData) {
 
 export async function revealCpfAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const current = await requirePermission("cpf.reveal");
+  const actor = actorOf(current);
   try {
-    const cpf = await revealCpf(db, actorOf(current), str(fd, "id"), str(fd, "reason"));
+    const cpf = await revealCpf(db, actor, str(fd, "id"), str(fd, "reason"));
     return { ok: true, data: { cpf } };
   } catch (e) {
-    return fail(e, "erro ao revelar CPF");
+    return fail(e, "erro ao revelar CPF", actor.requestId);
   }
 }
 
 export async function previewImportAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const current = await requirePermission("employee.import");
+  const actor = actorOf(current);
   const file = fd.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Selecione um arquivo CSV." };
   if (file.size > 2 * 1024 * 1024) return { error: "Arquivo acima de 2 MB." };
   try {
     const text = await file.text();
-    const preview = await previewImport(db, actorOf(current), text);
+    const preview = await previewImport(db, actor, text);
     return { ok: true, data: { ...preview, expiresAt: preview.expiresAt.toISOString() } };
   } catch (e) {
-    return fail(e, "erro na prévia da importação");
+    return fail(e, "erro na prévia da importação", actor.requestId);
   }
 }
 
 export async function applyImportAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const current = await requirePermission("employee.import");
+  const actor = actorOf(current);
   try {
-    const r = await applyImport(db, actorOf(current), str(fd, "batchId"));
+    const r = await applyImport(db, actor, str(fd, "batchId"));
     revalidatePath("/admin/colaboradores");
     return { ok: true, message: `${r.created} pessoa(s) cadastrada(s) e convidada(s).` };
   } catch (e) {
-    return fail(e, "erro ao aplicar importação");
+    return fail(e, "erro ao aplicar importação", actor.requestId);
   }
 }
 
 export async function discardImportAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const current = await requirePermission("employee.import");
+  const actor = actorOf(current);
   try {
-    await discardImport(db, actorOf(current), str(fd, "batchId"));
+    await discardImport(db, actor, str(fd, "batchId"));
     return { ok: true, message: "Prévia descartada." };
   } catch (e) {
-    return fail(e, "erro ao descartar importação");
+    return fail(e, "erro ao descartar importação", actor.requestId);
   }
 }

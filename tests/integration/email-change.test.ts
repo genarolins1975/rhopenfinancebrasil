@@ -17,6 +17,37 @@ function linkFrom(eventType: string) {
 describe("troca de email", () => {
   beforeEach(resetDb);
 
+  it("endereço cadastrado para outra pessoa entre os dois links: troca recusada, identidade e cadastro intactos, nada de consulta no log", async () => {
+    const { readFileSync } = await import("node:fs");
+    const readLog = () => {
+      try {
+        return readFileSync(process.env.LOG_CAPTURE_FILE!, "utf8");
+      } catch {
+        return "";
+      }
+    };
+    const u = await activeUserWithPassword();
+    const { headers } = await u.signIn();
+    await auth.api.changeEmail({ body: { newEmail: "disputado@teste.invalid", callbackURL: "/perfil" }, headers });
+    const link1 = await linkFrom("email.change_confirmation")();
+    await auth.handler(new Request(link1.url, { method: "GET" }));
+    const link2 = await linkFrom("email.verification")();
+    const { seedEmployee } = await import("./helpers");
+    await seedEmployee({ status: "invited", email: "disputado@teste.invalid" });
+    const mark = readLog().length;
+    const r = await auth.handler(new Request(link2.url, { method: "GET", headers: { cookie: headers.get("cookie")! } }));
+    expect(r.status).toBeGreaterThanOrEqual(300);
+    expect(r.headers.get("location")).toContain("/perfil?aviso=email-indisponivel");
+    const [user] = await db.select({ email: authUser.email }).from(authUser).where(eq(authUser.id, u.userId));
+    const [emp] = await db.select({ email: employee.corporateEmail }).from(employee).where(eq(employee.id, u.id));
+    expect(user.email).toBe(u.email);
+    expect(emp.email).toBe(u.email);
+    const tail = readLog().slice(mark);
+    expect(tail).not.toContain("Failed query");
+    expect(tail).not.toContain("params:");
+    expect(await auth.api.getSession({ headers })).toBeTruthy();
+  });
+
   it("fluxo completo", async () => {
     const u = await activeUserWithPassword();
     const { headers } = await u.signIn();

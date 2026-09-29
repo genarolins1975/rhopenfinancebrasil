@@ -47,7 +47,7 @@ export default async function PortalLayout({ children }: { children: React.React
             </button>
           </form>
         </header>
-        <main id="conteudo" className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 pb-24 md:pb-6">
+        <main id="conteudo" className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-6 pb-24 md:pb-6">
           {children}
         </main>
         <nav aria-label="Navegação principal" className="fixed inset-x-0 bottom-0 border-t border-border bg-surface md:hidden">

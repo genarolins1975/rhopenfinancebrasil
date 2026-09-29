@@ -47,12 +47,17 @@ async function assertReferences(db: DbOrTx, refs: { areaId?: string | null; mana
 }
 
 /** Suspender ou desativar quem tem concessão privilegiada vigente exige `role.assign.privileged`. */
+/**
+ * Pessoa com concessão privilegiada vigente só é tocada por quem pode gerir privilégios: situação,
+ * email de convidada, convites (reenvio e revogação), reativação e readmissão. Fecha a tomada de conta
+ * por troca de email de convidada privilegiada e a reativação de administrador suspenso por RH comum.
+ */
 async function assertMayChangeStatusOf(db: DbOrTx, actor: Actor, targetEmployeeId: string) {
   const target = await loadAccess(db, targetEmployeeId);
   if (!target.hasPrivilegedGrant) return;
   const mine = await loadAccess(db, actor.employeeId);
   if (!mine.permissions.has("role.assign.privileged")) {
-    throw new ForbiddenError("Alterar a situação de pessoa com perfil privilegiado exige permissão para gerir perfis privilegiados.");
+    throw new ForbiddenError("Alterar pessoa com perfil privilegiado exige permissão para gerir perfis privilegiados.");
   }
 }
 
@@ -130,6 +135,7 @@ export async function createEmployee(db: Db, actor: Actor, input: NewEmployeeInp
 
 export async function resendInvitation(db: Db, actor: Actor, employeeId: string): Promise<void> {
   await assertPermission(db, actor, "employee.manage");
+  await assertMayChangeStatusOf(db, actor, employeeId);
   await db.transaction(async (tx) => {
     await createInvitation(tx, actor, employeeId);
   });
@@ -138,6 +144,7 @@ export async function resendInvitation(db: Db, actor: Actor, employeeId: string)
 export async function revokeInvitation(db: Db, actor: Actor, employeeId: string, reason: string): Promise<void> {
   await assertPermission(db, actor, "employee.manage");
   if (!reason?.trim()) throw new ValidationError("Informe o motivo.");
+  await assertMayChangeStatusOf(db, actor, employeeId);
   await db.transaction(async (tx) => {
     const n = await revokeActiveInvitations(tx, employeeId);
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "invitation.revoked", entityType: "employee", entityId: employeeId, after: { revoked: n }, reason, requestId: actor.requestId });
@@ -161,8 +168,6 @@ export type UpdateEmployeeInput = {
  */
 export async function updateEmployee(db: Db, actor: Actor, employeeId: string, patch: UpdateEmployeeInput): Promise<void> {
   await assertPermission(db, actor, "employee.manage");
-  const touchesOrg = patch.areaId !== undefined || patch.managerEmployeeId !== undefined || patch.orgCondition !== undefined;
-  if (actor.employeeId === employeeId && touchesOrg) throw new ForbiddenError("Ninguém altera a própria área, gestor ou condição organizacional.");
   await assertReferences(db, patch, employeeId);
   await withDbErrors(() => db.transaction(async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
@@ -181,6 +186,8 @@ export async function updateEmployee(db: Db, actor: Actor, employeeId: string, p
         if (current.status !== "invited" || current.userId) {
           throw new ValidationError("O email de pessoa com acesso definido só muda pelo fluxo de troca com confirmação, feito pela própria pessoa.");
         }
+        // O email de convidada define quem aceita o convite: se ela já tem privilégio, só quem gere privilégios muda.
+        await assertMayChangeStatusOf(tx, actor, employeeId);
         const [dup] = await tx.select({ id: employee.id }).from(employee).where(eq(employee.corporateEmail, email));
         if (dup) throw new ConflictError("Já existe cadastro com estes dados.");
         set.corporateEmail = email;
@@ -193,6 +200,12 @@ export async function updateEmployee(db: Db, actor: Actor, employeeId: string, p
       (patch.managerEmployeeId !== undefined && (patch.managerEmployeeId || null) !== current.managerEmployeeId) ||
       (patch.orgCondition !== undefined && patch.orgCondition !== current.orgCondition);
     if (orgChanged) {
+      const selfOrgChange =
+        actor.employeeId === employeeId &&
+        ((patch.areaId !== undefined && (patch.areaId || null) !== current.areaId) ||
+          (patch.managerEmployeeId !== undefined && (patch.managerEmployeeId || null) !== current.managerEmployeeId) ||
+          (patch.orgCondition !== undefined && patch.orgCondition !== current.orgCondition));
+      if (selfOrgChange) throw new ForbiddenError("Ninguém altera a própria área, gestor ou condição organizacional.");
       if (patch.managerEmployeeId && patch.managerEmployeeId === employeeId) throw new ValidationError("A pessoa não pode ser gestora de si mesma.");
       set.areaId = patch.areaId !== undefined ? patch.areaId || null : current.areaId;
       set.jobTitle = patch.jobTitle !== undefined ? patch.jobTitle?.trim() || null : current.jobTitle;
@@ -258,6 +271,7 @@ export async function suspendEmployee(db: Db, actor: Actor, employeeId: string, 
 export async function reactivateEmployee(db: Db, actor: Actor, employeeId: string, reason: string): Promise<void> {
   await assertPermission(db, actor, "employee.manage");
   if (!reason?.trim()) throw new ValidationError("Informe o motivo.");
+  await assertMayChangeStatusOf(db, actor, employeeId);
   await db.transaction(async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
@@ -324,6 +338,7 @@ export async function readmitEmployee(db: Db, actor: Actor, employeeId: string, 
   await assertPermission(db, actor, "employee.manage");
   if (!input.reason?.trim()) throw new ValidationError("Informe o motivo.");
   if (!ISO_DATE.test(input.hireDate)) throw new ValidationError("Informe a data de admissão.");
+  await assertMayChangeStatusOf(db, actor, employeeId);
   const ctx = await authContext();
   await db.transaction(async (tx) => {
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
@@ -409,6 +424,8 @@ export async function listEmployees(db: DbOrTx, filters: { q?: string; status?: 
 }
 
 export async function getEmployee(db: DbOrTx, employeeId: string) {
+  // Id fora do formato nunca chega ao banco: vira "não encontrado" sem erro de driver no log.
+  if (!UUID_RE.test(employeeId)) return null;
   const [row] = await db
     .select({
       id: employee.id,

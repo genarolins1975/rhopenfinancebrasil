@@ -57,7 +57,26 @@ test.describe("ambiente administrativo", () => {
     }
     await page.goto("/admin/colaboradores?q=Colaborador%20Exemplo");
     await page.getByRole("link", { name: "Colaborador Exemplo" }).click();
+    await expect(page).toHaveURL(/\/admin\/colaboradores\/[0-9a-f-]{36}$/);
     await expectNoHorizontalScroll(page);
+    const detailUrl = page.url();
+    await page.getByRole("link", { name: "Editar cadastro" }).click();
+    await expect(page).toHaveURL(/\/editar$/);
+    await expectNoHorizontalScroll(page);
+    // prévia da importação gerada: a tabela larga não pode alargar a página em nenhum projeto
+    await page.goto("/admin/colaboradores/importar");
+    const csv = `nome;email;cpf;area;cargo;gestor_email;condicao;data_admissao\nPessoa Com Nome Bastante Longo Para Testar Largura;previa-largura-${Date.now()}@teste.invalid;${formatCpf(syntheticCpf(8899))};Tecnologia e Operações;Analista de Sistemas Sênior;;colaborador;01/10/2026\n`;
+    await page.getByLabel(/Arquivo CSV/).setInputFiles({ name: "largura.csv", mimeType: "text/csv", buffer: Buffer.from(csv, "utf8") });
+    await page.getByRole("button", { name: "Gerar prévia" }).click();
+    await expect(page.getByRole("table")).toContainText("Pessoa Com Nome Bastante Longo");
+    await expectNoHorizontalScroll(page);
+    await page.getByRole("button", { name: /Descartar/ }).click();
+    // id fora do formato: não encontrado, não erro genérico
+    await page.goto("/admin/colaboradores/nao-e-uuid");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("não encontrada");
+    await page.goto("/admin/colaboradores/nao-e-uuid/editar");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("não encontrada");
+    await page.goto(detailUrl);
     await page.getByRole("button", { name: "Suspender" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveAccessibleName(/Suspender acesso/);

@@ -27,6 +27,7 @@ export default async function AdminHome() {
         <Stat label="Suspensas" value={o.employees.suspended} help="Login bloqueado, cadastro mantido." />
         <Stat label="Notificações pendentes" value={o.outbox.pending} help="Aguardando o worker de entrega." />
         <Stat label="Notificações com falha" value={o.outbox.failed} help="Esgotaram as tentativas. Exigem ação." />
+        <Stat label="Notificações bloqueadas" value={o.outbox.blocked} help="Destinatário fora da lista permitida deste ambiente." />
         <Stat label="Desativadas" value={o.employees.deactivated} help="Sem acesso; histórico preservado." />
         <Stat label="Eventos de auditoria em 24h" value={o.auditLast24h} help="Alterações administrativas registradas." />
       </div>

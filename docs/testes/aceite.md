@@ -101,6 +101,26 @@ Revisor com contexto limpo, acesso ao código, ao banco de teste e ao código do
 
 Testes executados após as correções, no mesmo ambiente: 17 de unidade, 47 de integração com PostgreSQL real, 28 de ponta a ponta com axe (14 por projeto, desktop e celular), todos aprovados; tipos, lint e build de produção sem erros. Evidências pedidas pelo revisor: teste `CPF-03-T2` com corrida de 23505 e log capturado em arquivo sem consulta, email ou CPF; teste ponta a ponta com gestor redirecionado em cinco rotas administrativas; `AUT-10-T1` completo; consulta direta ao banco de teste mostrando `outbox_event.payload = {"redacted": true}` e `invitation.token_hash` com 64 caracteres após a entrega; `scrollWidth <= clientWidth` em seis páginas administrativas e no detalhe da pessoa no projeto celular.
 
-### Reapresentação
+### Reapresentação (29/09/2026)
+
+Segundo Revisor independente, contexto limpo, com execução própria: baterias oficiais (17, 47 e 28 aprovados, tipos, lint e build sem erros), 8 testes de integração e 6 de ponta a ponta adversos temporários, 5 execuções do bootstrap e consultas SQL diretas. Dos 20 achados verificados, 13 confirmados corrigidos e 7 corrigidos em parte, com 11 achados novos ou remanescentes. Veredito: ACEITO COM CORREÇÕES, obrigatórias 1 a 5, recomendadas 6 a 11.
+
+| Nº | Severidade | Achado | Tratamento na mesma data |
+|---|---|---|---|
+| 1 | ALTA | RH com `employee.manage` trocava o email de convidada já privilegiada, reenviava o convite para endereço próprio e tomava a conta; reativava administrador suspenso | Corrigido: alvo com concessão privilegiada exige `role.assign.privileged` também para trocar email de convidada, reenviar e revogar convite, reativar e readmitir; teste `privileged-target.test.ts` reproduz a tomada e a reativação |
+| 2 | MÉDIA | Endereço cadastrado para outra pessoa entre os dois links deixava identidade e cadastro divergentes, com erro 500 | Corrigido: hook recusa antes de tocar a identidade e redireciona com aviso; se o cadastro recusar, a identidade volta ao email anterior; teste com conflito entre os links e log verificado |
+| 3 | MÉDIA | Consulta e parâmetros chegavam ao log pelo logger do Better Auth e por id fora do formato UUID nas páginas | Corrigido: logger do Better Auth redirecionado ao pino com redação; `getEmployee` devolve nulo para id inválido; teste ponta a ponta com id inválido |
+| 4 | MÉDIA | Status de entrega do convite invisível na tela; painel ignorava `blocked`; guia afirmava o contrário | Corrigido: cartão de convites mostra enfileirado, enviado ou bloqueado; painel conta bloqueadas; teste de convite bloqueado na outbox e em `invitation` |
+| 5 | MÉDIA | Aviso `confirmar-email` sem texto na tela de entrada | Corrigido, com teste ponta a ponta |
+| 6 | BAIXA | Id fora do formato levava a erro genérico em vez de 404 | Corrigido (mesma correção do achado 3) |
+| 7 | BAIXA | Identificador de requisição nunca preenchido nas mensagens | Corrigido: toda action passa `requestId` do ator à mensagem e ao log |
+| 8 | BAIXA | Autoedição do RH falhava mesmo só no nome | Corrigido: bloqueio só quando área, gestor ou condição mudam de fato; teste |
+| 9 | BAIXA | Oráculo de tempo no login de pessoa inativa (2 ms contra 33 ms) | Corrigido: o hook gasta o custo do hash de senha antes de negar |
+| 10 | BAIXA | Rolagem horizontal no desktop com prévia da importação | Corrigido: `min-w-0` no conteúdo principal; teste com prévia gerada nos dois projetos |
+| 11 | BAIXA | Matriz de testes acima do que existia | Corrigido: textos ajustados e testes completados (convite bloqueado, edição e prévia sem rolagem, título do limite de prévias) |
+
+Testes executados após estas correções: 17 de unidade, 50 de integração, 30 de ponta a ponta (15 por projeto), todos aprovados; tipos, lint e build sem erros; `.log-test.ndjson` sem "Failed query" nem "params".
+
+### Terceira verificação
 
 Em execução em 29/09/2026.
