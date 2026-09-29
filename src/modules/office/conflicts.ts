@@ -1,9 +1,9 @@
 import { and, asc, eq, gt, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import type { DbOrTx, Tx } from "@/db/client";
-import { deskBooking, employee, resource } from "@/db/schema";
+import { deskBooking, employee, resource, spaceBooking } from "@/db/schema";
 import { recordAudit } from "@/modules/audit/audit";
 import { enqueueOutbox } from "@/modules/notifications/outbox";
-import { bookingChangedEmail } from "@/modules/notifications/templates";
+import { bookingChangedEmail, spaceBookingChangedEmail } from "@/modules/notifications/templates";
 import { formatLocalDate } from "@/modules/shared/dates";
 import { ConflictError, ValidationError } from "@/modules/shared/errors";
 import { explainFor } from "@/modules/availability/service";
@@ -15,6 +15,10 @@ import { type Actor, expireHolds } from "./shared";
  */
 
 export type IncompatibleBooking = {
+  /** Mesa por dia (padrão) ou sala e cabine por intervalo; sala só admite cancelamento. */
+  kind?: "desk" | "space";
+  /** Horário local do intervalo, só em sala e cabine. */
+  slot?: string;
   bookingId: string;
   resourceId: string;
   resourceCode: string;
@@ -50,6 +54,39 @@ export async function listActiveBookings(db: DbOrTx, filter: { resourceIds?: str
   return rows.map((r) => ({ ...r, status: r.status as "held" | "confirmed" }));
 }
 
+/** Reservas de sala e cabine confirmadas que tocam o intervalo de datas (fim ainda no futuro). Só cancelamento. */
+export async function listActiveSpaceBookings(db: DbOrTx, filter: { resourceIds?: string[]; employeeIds?: string[]; from: string; to: string | null }): Promise<Omit<IncompatibleBooking, "why">[]> {
+  const conds = [eq(spaceBooking.status, "confirmed"), gt(sql`upper(${spaceBooking.period})`, sql`now()`), sql`upper(${spaceBooking.period}) > lower(local_day_range(${filter.from}::date))`];
+  if (filter.to) conds.push(sql`lower(${spaceBooking.period}) < upper(local_day_range(${filter.to}::date))`);
+  if (filter.resourceIds) {
+    if (filter.resourceIds.length === 0) return [];
+    conds.push(inArray(spaceBooking.resourceId, filter.resourceIds));
+  }
+  if (filter.employeeIds) {
+    if (filter.employeeIds.length === 0) return [];
+    conds.push(inArray(spaceBooking.employeeId, filter.employeeIds));
+  }
+  const rows = await db
+    .select({ bookingId: spaceBooking.id, resourceId: spaceBooking.resourceId, resourceCode: resource.code, employeeId: spaceBooking.employeeId, employeeName: employee.fullName, lower: sql<string>`lower(${spaceBooking.period})`, upper: sql<string>`upper(${spaceBooking.period})` })
+    .from(spaceBooking)
+    .innerJoin(resource, eq(resource.id, spaceBooking.resourceId))
+    .innerJoin(employee, eq(employee.id, spaceBooking.employeeId))
+    .where(and(...conds))
+    .orderBy(asc(sql`lower(${spaceBooking.period})`), asc(resource.code));
+  const { formatSlot } = await import("@/modules/spaces/rules");
+  const { localToday } = await import("@/modules/shared/dates");
+  return rows.map((r) => {
+    const start = new Date(r.lower);
+    const end = new Date(r.upper);
+    return { kind: "space" as const, slot: formatSlot({ start, end }), bookingId: r.bookingId, resourceId: r.resourceId, resourceCode: r.resourceCode, employeeId: r.employeeId, employeeName: r.employeeName, date: localToday(start), origin: "sala", status: "confirmed" as const };
+  });
+}
+
+/** Mesas e salas juntas, para operações que atingem qualquer recurso (manutenção, bloqueio, desativação, fechamento). */
+export async function listActiveBookingsAll(db: DbOrTx, filter: { resourceIds?: string[]; employeeIds?: string[]; from: string; to: string | null }): Promise<Omit<IncompatibleBooking, "why">[]> {
+  return [...(await listActiveBookings(db, filter)), ...(await listActiveSpaceBookings(db, filter))];
+}
+
 /**
  * Aplica as decisões sobre as reservas incompatíveis, dentro da transação de quem chamou e depois dos locks.
  * Toda reserva incompatível precisa de decisão; decisão sobre reserva que não é mais incompatível é ignorada.
@@ -65,6 +102,21 @@ export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: In
     const d = byId.get(c.bookingId)!;
     if (!d.reason?.trim()) throw new ValidationError(`Informe o motivo para a reserva de ${formatLocalDate(c.date)} em ${c.resourceCode}.`);
     const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, c.employeeId));
+    if (c.kind === "space") {
+      if (d.action !== "cancel") throw new ValidationError("Reserva de sala ou cabine não é realocada: só cancelamento com comunicação.");
+      await tx.update(spaceBooking).set({ status: "cancelled", cancelledAt: new Date(), cancelReason: d.reason.trim() }).where(and(eq(spaceBooking.id, c.bookingId), eq(spaceBooking.status, "confirmed")));
+      await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "space_booking.cancelled_by_conflict", entityType: "space_booking", entityId: c.bookingId, before: { resourceId: c.resourceId, date: c.date, slot: c.slot, employeeId: c.employeeId }, after: { status: "cancelled", why: c.why }, reason: d.reason, requestId: actor.requestId });
+      if (emp) {
+        await enqueueOutbox(tx, {
+          eventType: "email.space_booking",
+          aggregateType: "space_booking",
+          aggregateId: c.bookingId,
+          payload: { message: spaceBookingChangedEmail(emp.email, emp.name, `Sua reserva de ${c.resourceCode} em ${formatLocalDate(c.date)}, das ${c.slot ?? ""}, foi cancelada. ${opts.notice} ${d.message?.trim() ?? ""}`.trim()) },
+          idempotencyKey: `space_booking.cancelled:${c.bookingId}`,
+        });
+      }
+      continue;
+    }
     if (d.action === "cancel") {
       await tx
         .update(deskBooking)

@@ -10,6 +10,7 @@ import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { applyConflictDecisions, type ConflictDecision, type IncompatibleBooking, listActiveBookings } from "@/modules/office/conflicts";
 import { type Actor, assertIsoDate, assertPermission, assertUuid, lockDaysAndPeople, lockResources, readSettings, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
+import { closeQueueForPerson, lockQueueCandidates, offerNext, queueDatesOf } from "@/modules/waitlist/service";
 
 /*
  * Exclusividade da diretoria (DIR-001 a DIR-036). Toda mutação: locks na ordem documentada, prévia de impacto
@@ -560,12 +561,15 @@ export type DeactivationPreview = {
   assignments: Array<{ id: string; resourceId: string; code: string }>;
   /** Reservas de terceiros nas mesas da pessoa que deixam de valer com a revisão (liberação ao compartilhado ou nominal). */
   thirdPartyBookings: IncompatibleBooking[];
+  /** Datas com inscrição ou oferta aberta na fila (os dias são travados antes da pessoa). */
+  queueDates: string[];
 };
 
 /** Prévia dos efeitos da desativação no escritório, exibida antes da confirmação (DIR-018, PAR-25). */
 export async function deactivationOfficePreview(db: DbOrTx, employeeId: string): Promise<DeactivationPreview> {
   const today = localToday();
-  const ownBookings = (await listActiveBookings(db, { employeeIds: [employeeId], from: today, to: null })).map((b) => ({ ...b, why: "pessoa desativada" }));
+  const { listActiveBookingsAll } = await import("@/modules/office/conflicts");
+  const ownBookings = (await listActiveBookingsAll(db, { employeeIds: [employeeId], from: today, to: null })).map((b) => ({ ...b, why: "pessoa desativada" }));
   const assignments = await db
     .select({ id: exclusiveAssignment.id, resourceId: exclusiveAssignment.resourceId, code: resource.code })
     .from(exclusiveAssignment)
@@ -574,7 +578,8 @@ export async function deactivationOfficePreview(db: DbOrTx, employeeId: string):
   const thirdPartyBookings = assignments.length
     ? (await findIncompatible(db, { resourceIds: assignments.map((a) => a.resourceId), from: today, to: null }, (p) => (p.assignment ? { ...p, assignment: { ...p.assignment, needsReview: true } } : p), "mesa do titular desativado entra em revisão; a liberação deixa de valer")).filter((b) => b.employeeId !== employeeId)
     : [];
-  return { ownBookings, assignments, thirdPartyBookings };
+  const queueDates = await queueDatesOf(db, employeeId);
+  return { ownBookings, assignments, thirdPartyBookings, queueDates };
 }
 
 /**
@@ -587,6 +592,9 @@ export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId:
   const preview = await deactivationOfficePreview(tx, employeeId);
   const all = [...preview.ownBookings, ...preview.thirdPartyBookings];
   await lockDaysAndPeople(tx, { dates: [], people: [actor.employeeId, ...preview.thirdPartyBookings.map((b) => b.employeeId)] });
+  // Fila: mesas compartilhadas liberadas pelas reservas da pessoa vão à próxima pessoa elegível (PAR-37); candidatas antes dos recursos.
+  const candidatesByDate = new Map<string, string[]>();
+  for (const date of [...new Set(preview.ownBookings.map((b) => b.date))].sort()) candidatesByDate.set(date, (await lockQueueCandidates(tx, date)).filter((c) => c !== employeeId));
   // Grupos com vigência aberta da pessoa: o encerramento da vigência toma o grupo (trigger), por isso o grupo vem antes dos recursos.
   const groups = await tx.select({ groupId: accessGroupMember.groupId }).from(accessGroupMember).where(and(eq(accessGroupMember.employeeId, employeeId), or(isNull(accessGroupMember.validTo), gte(accessGroupMember.validTo, localToday()))));
   for (const g of [...new Set(groups.map((x) => x.groupId))].sort()) await tx.execute(sql`select 1 from access_group where id = ${g} for update`);
@@ -596,6 +604,11 @@ export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId:
   const decide = (b: IncompatibleBooking) => ({ bookingId: b.bookingId, action: "cancel" as const, reason: b.employeeId === employeeId ? `desativação: ${reason}` : `desativação do titular da mesa: ${reason}` });
   await applyConflictDecisions(tx, actor, again.ownBookings, again.ownBookings.map(decide), { excludeResourceIds: [], notice: "Cancelada em razão da desativação do cadastro." });
   await applyConflictDecisions(tx, actor, again.thirdPartyBookings, again.thirdPartyBookings.map(decide), { excludeResourceIds: [], notice: "A mesa passou a vínculo em revisão pelo RH." });
+  const queue = await closeQueueForPerson(tx, actor, employeeId, `desativação: ${reason}`);
+  for (const b of again.ownBookings) {
+    await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidatesByDate.get(b.date) ?? [], requestId: actor.requestId });
+  }
+  void queue;
   // Integrante de grupo desativado deixa de ser vigente no grupo (DIR-032): vigência encerrada na data de saída.
   const endOn = localToday();
   const memberships = await tx

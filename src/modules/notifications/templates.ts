@@ -87,3 +87,30 @@ export function exclusivityEmail(to: string, name: string, text: string): EmailM
     text: [`Olá, ${name}.`, "", text, "", "Detalhes no Portal do Colaborador."].join("\n"),
   };
 }
+
+/** Oferta da fila: mesa retida até o prazo; aceitar ou recusar no portal (PAR-05). */
+export function waitlistOfferEmail(to: string, name: string, code: string, dateLocal: string, expiresLocal: string): EmailMessage {
+  return {
+    to,
+    subject: "Mesa disponível para você",
+    text: [`Olá, ${name}.`, "", `A mesa ${code} ficou disponível para ${dateLocal} e está reservada para você até ${expiresLocal}.`, "Aceite ou recuse a oferta em Minhas reservas no Portal do Colaborador. Sem resposta até o prazo, a mesa passa à próxima pessoa da fila."].join("\n"),
+  };
+}
+
+/** Oferta vencida: a pessoa sai da fila e pode se inscrever de novo. */
+export function waitlistExpiredEmail(to: string, name: string, code: string, dateLocal: string): EmailMessage {
+  return {
+    to,
+    subject: "Oferta de mesa vencida",
+    text: [`Olá, ${name}.`, "", `A oferta da mesa ${code} para ${dateLocal} venceu sem resposta e passou à próxima pessoa da fila.`, "Se ainda quiser ir ao escritório nesse dia, entre na fila de novo pelo Portal do Colaborador."].join("\n"),
+  };
+}
+
+/** Reserva de sala ou cabine alterada por decisão administrativa. */
+export function spaceBookingChangedEmail(to: string, name: string, text: string): EmailMessage {
+  return {
+    to,
+    subject: "Sua reserva de sala mudou",
+    text: [`Olá, ${name}.`, "", text, "", "Veja suas reservas no Portal do Colaborador."].join("\n"),
+  };
+}

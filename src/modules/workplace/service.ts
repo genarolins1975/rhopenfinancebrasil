@@ -5,7 +5,7 @@ import { recordAudit } from "@/modules/audit/audit";
 import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ValidationError } from "@/modules/shared/errors";
 import { type Actor, advisoryExclusiveDay, assertIsoDate, assertPermission, assertUuid, lockDaysAndPeople, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
-import { applyConflictDecisions, type ConflictDecision, type IncompatibleBooking, listActiveBookings } from "@/modules/office/conflicts";
+import { applyConflictDecisions, type ConflictDecision, type IncompatibleBooking, listActiveBookingsAll as listActiveBookings } from "@/modules/office/conflicts";
 
 /* Inventário. */
 

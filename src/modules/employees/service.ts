@@ -263,6 +263,9 @@ export async function suspendEmployee(db: Db, actor: Actor, employeeId: string, 
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status !== "active") throw new ValidationError("Só pessoa ativa pode ser suspensa.");
     await tx.update(employee).set({ status: "suspended", updatedAt: new Date() }).where(eq(employee.id, employeeId));
+    // Pessoa suspensa sai da fila; ofertas abertas são recusadas e a mesa volta pela varredura (sem lock de recurso aqui).
+    const { closeQueueForPerson } = await import("@/modules/waitlist/service");
+    await closeQueueForPerson(tx, actor, employeeId, `suspensão: ${reason}`);
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "employee.suspended", entityType: "employee", entityId: employeeId, before: { status: "active" }, after: { status: "suspended" }, reason, requestId: actor.requestId });
     return current.userId;
   });
@@ -298,7 +301,7 @@ export async function deactivateEmployee(db: Db, actor: Actor, employeeId: strin
     const { deactivationOfficePreview, applyDeactivationEffects } = await import("@/modules/exclusivity/service");
     const { lockDaysAndPeople } = await import("@/modules/office/shared");
     const eff = await deactivationOfficePreview(tx, employeeId);
-    await lockDaysAndPeople(tx, { dates: [...eff.ownBookings, ...eff.thirdPartyBookings].map((b) => b.date), people: [] });
+    await lockDaysAndPeople(tx, { dates: [...[...eff.ownBookings, ...eff.thirdPartyBookings].map((b) => b.date), ...eff.queueDates], people: [] });
     const [current] = await tx.select().from(employee).where(eq(employee.id, employeeId)).for("update");
     if (!current) throw new ValidationError("Pessoa não encontrada.");
     if (current.status === "deactivated") throw new ValidationError("Pessoa já desativada.");

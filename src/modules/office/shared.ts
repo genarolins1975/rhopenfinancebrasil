@@ -1,7 +1,11 @@
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import type { Db, DbOrTx, Tx } from "@/db/client";
-import { deskBooking, employee, officeSettings, resource } from "@/db/schema";
+import { deskBooking, employee, officeSettings, resource, waitlistEntry, waitlistOffer } from "@/db/schema";
 import { loadAccess } from "@/modules/access/can";
+import { recordAudit } from "@/modules/audit/audit";
+import { enqueueOutbox } from "@/modules/notifications/outbox";
+import { waitlistExpiredEmail } from "@/modules/notifications/templates";
+import { formatLocalDate } from "@/modules/shared/dates";
 import type { Permission } from "@/modules/access/permissions";
 import { pgErrorOf } from "@/modules/shared/db-errors";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
@@ -52,6 +56,15 @@ const DB_RULE_MESSAGES: Record<string, string> = {
   successor_cancel_needs_decision: "Anular a sucessora de uma transferência exige decisão explícita sobre a mesa.",
   assignment_identity_immutable: "Mesa, modalidade e titular de uma atribuição não mudam. Transfira ou encerre e crie outra.",
   exception_identity_immutable: "Uma liberação não é editada: revogue e crie outra.",
+  offer_inconsistent: "A oferta não corresponde a uma retenção válida da pessoa na mesa e data da inscrição.",
+  offer_entry_not_waiting: "A inscrição já não está em espera.",
+  offer_already_expired: "A oferta nasceria vencida.",
+  offer_identity_immutable: "Inscrição, mesa e retenção de uma oferta não mudam.",
+  offer_already_decided: "Esta oferta já foi decidida.",
+  entry_identity_immutable: "Pessoa e data de uma inscrição não mudam.",
+  entry_already_closed: "Esta inscrição já foi encerrada.",
+  checkin_not_allowed: "A confirmação de uso vale só para a sua reserva confirmada, no dia da reserva.",
+  checkin_immutable: "Uma confirmação de uso não é alterada.",
 };
 
 /** Converte erro do banco em erro de domínio: regra de trigger, exclusão, unicidade, deadlock ou tempo de lock. */
@@ -136,7 +149,12 @@ export async function advisoryExclusiveDay(tx: Tx, date: string): Promise<void> 
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"office_day:" + date}))`);
 }
 
-/** Expiração preguiçosa de retenções vencidas da mesa e da pessoa na data (passo 6). Sem job. */
+/**
+ * Expiração preguiçosa de retenções vencidas da mesa e da pessoa na data (passo 6), sempre com os dois filtros.
+ * Cascata para a oferta e a inscrição da fila (DIR-034): oferta vencida vira `expired`, a inscrição sai da fila e a pessoa
+ * é avisada. Sem job: quem escreve expira antes de gravar. Devolve as mesas liberadas para que o chamador ofereça à
+ * próxima pessoa elegível (PAR-37).
+ */
 export async function expireHolds(tx: DbOrTx, filter: { resourceId?: string; employeeId?: string; date: string }): Promise<number> {
   const conds = [];
   if (filter.resourceId) conds.push(and(eq(deskBooking.resourceId, filter.resourceId), eq(deskBooking.bookingDate, filter.date)));
@@ -146,8 +164,33 @@ export async function expireHolds(tx: DbOrTx, filter: { resourceId?: string; emp
     .update(deskBooking)
     .set({ status: "expired" })
     .where(and(eq(deskBooking.status, "held"), lte(deskBooking.holdExpiresAt, sql`now()`), or(...conds)))
-    .returning({ id: deskBooking.id });
+    .returning({ id: deskBooking.id, resourceId: deskBooking.resourceId, employeeId: deskBooking.employeeId, date: deskBooking.bookingDate });
+  if (rows.length === 0) return 0;
+  await expireOffersOf(tx, rows);
   return rows.length;
+}
+
+/** Cascata da expiração: oferta aberta cuja retenção venceu, inscrição correspondente e aviso à pessoa. */
+export async function expireOffersOf(tx: DbOrTx, holds: Array<{ id: string; resourceId: string; employeeId: string; date: string }>): Promise<void> {
+  const offers = await tx
+    .update(waitlistOffer)
+    .set({ status: "expired", decidedAt: sql`now()` })
+    .where(and(eq(waitlistOffer.status, "open"), inArray(waitlistOffer.holdBookingId, holds.map((h) => h.id))))
+    .returning({ id: waitlistOffer.id, entryId: waitlistOffer.entryId, holdBookingId: waitlistOffer.holdBookingId });
+  if (offers.length === 0) return;
+  await tx
+    .update(waitlistEntry)
+    .set({ status: "expired", closedAt: sql`now()`, closeReason: "oferta vencida" })
+    .where(and(eq(waitlistEntry.status, "offered"), inArray(waitlistEntry.id, offers.map((o) => o.entryId))));
+  for (const o of offers) {
+    const h = holds.find((x) => x.id === o.holdBookingId)!;
+    const [r] = await tx.select({ code: resource.code }).from(resource).where(eq(resource.id, h.resourceId));
+    await recordAudit(tx, { action: "waitlist.offer_expired", entityType: "waitlist_offer", entityId: o.id, before: { status: "open" }, after: { status: "expired", entryId: o.entryId, resourceId: h.resourceId, date: h.date } });
+    const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, h.employeeId));
+    if (emp) {
+      await enqueueOutbox(tx, { eventType: "email.waitlist", aggregateType: "waitlist_offer", aggregateId: o.id, payload: { message: waitlistExpiredEmail(emp.email, emp.name, r?.code ?? "", formatLocalDate(h.date)) }, idempotencyKey: `waitlist.expired:${o.id}` });
+    }
+  }
 }
 
 export async function assertPermission(db: DbOrTx, actor: Actor, permission: Permission): Promise<void> {
@@ -161,7 +204,19 @@ export async function assertAnyPermission(db: DbOrTx, actor: Actor, permissions:
   return access.permissions;
 }
 
-export type OfficeSettings = { bookingOpenWeekday: number; bookingOpenTime: string; bookingHorizonWeeks: number; exceptionMaxDays: number };
+export type OfficeSettings = {
+  bookingOpenWeekday: number;
+  bookingOpenTime: string;
+  bookingHorizonWeeks: number;
+  exceptionMaxDays: number;
+  /** PAR-05: prazo da oferta da fila em minutos úteis. */
+  offerMinutes: number;
+  businessHoursStart: string;
+  businessHoursEnd: string;
+  /** PAR-06: liberação por falta de confirmação de uso, desativada por padrão. */
+  checkinReleaseEnabled: boolean;
+  checkinReleaseTime: string;
+};
 
 export async function readSettings(db: DbOrTx): Promise<OfficeSettings> {
   const rows = await db.select().from(officeSettings);
@@ -171,6 +226,11 @@ export async function readSettings(db: DbOrTx): Promise<OfficeSettings> {
     bookingOpenTime: String(map.booking_open_time ?? "10:00"),
     bookingHorizonWeeks: Number(map.booking_horizon_weeks ?? 4),
     exceptionMaxDays: Number(map.exception_max_days ?? 30),
+    offerMinutes: Number(map.offer_minutes ?? 120),
+    businessHoursStart: String(map.business_hours_start ?? "09:00"),
+    businessHoursEnd: String(map.business_hours_end ?? "18:00"),
+    checkinReleaseEnabled: map.checkin_release_enabled === true,
+    checkinReleaseTime: String(map.checkin_release_time ?? "11:00"),
   };
 }
 

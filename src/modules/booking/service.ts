@@ -10,6 +10,7 @@ import { bookingChangedEmail, bookingOnBehalfEmail } from "@/modules/notificatio
 import { formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { type Actor, advisoryShareDay, assertIsoDate, assertUuid, expireHolds, lockDaysAndPeople, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
+import { closeWaitingEntryOf, declineOfferOfHold, lockQueueCandidates, offerNext } from "@/modules/waitlist/service";
 
 /*
  * Reservas de mesa por dia (PAR-02). Toda escrita segue o protocolo de docs/dados/modelo-de-dados.md:
@@ -52,7 +53,8 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
   } else if (!access.permissions.has("booking.self.manage")) {
     throw new ForbiddenError("Sua conta não pode reservar.");
   }
-  return withOfficeTx(db, async (tx) => {
+  // A oferta à fila (PAR-37) precisa sobreviver à recusa da reserva direta: a transação confirma e o erro sai depois.
+  const outcome = await withOfficeTx(db, async (tx): Promise<BookResult | { offeredToQueue: string }> => {
     const [existing] = await tx.select({ id: deskBooking.id, resourceId: deskBooking.resourceId }).from(deskBooking).where(and(eq(deskBooking.actorEmployeeId, actor.employeeId), eq(deskBooking.idempotencyKey, input.idempotencyKey)));
     if (existing) {
       const [r] = await tx.select({ code: resource.code }).from(resource).where(eq(resource.id, existing.resourceId));
@@ -62,9 +64,14 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
     if (onBehalf) await shareLockEmployee(tx, actor.employeeId < input.employeeId ? actor.employeeId : input.employeeId);
     const beneficiary = await shareLockEmployee(tx, input.employeeId);
     if (onBehalf && actor.employeeId > input.employeeId) await shareLockEmployee(tx, actor.employeeId);
+    // PAR-37: a fila vem antes de quem clicou. As candidatas são travadas antes do recurso; a mesa livre é oferecida
+    // à primeira elegível e a reserva direta recebe conflito explícito.
+    const candidates = (await lockQueueCandidates(tx, input.date)).filter((c) => c !== input.employeeId);
     await lockResources(tx, [input.resourceId]);
     await expireHolds(tx, { resourceId: input.resourceId, employeeId: input.employeeId, date: input.date });
+    const offered = await offerNext(tx, { resourceId: input.resourceId, date: input.date, candidateIds: candidates, requestId: actor.requestId });
     const { availability, code } = await revalidate(tx, input.employeeId, input.resourceId, input.date);
+    if (offered) return { offeredToQueue: code };
     if (!availability.canBook) throw new ConflictError(`Não foi possível reservar a mesa ${code} em ${formatLocalDate(input.date)}: ${availability.reason}.`);
     const [row] = await tx
       .insert(deskBooking)
@@ -79,6 +86,7 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
         accessExceptionId: input.accessExceptionId ?? null,
       })
       .returning({ id: deskBooking.id });
+    await closeWaitingEntryOf(tx, actor, input.employeeId, input.date, "reserva direta feita");
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: onBehalf ? "booking.created_on_behalf" : "booking.created", entityType: "desk_booking", entityId: row.id, after: { resourceId: input.resourceId, employeeId: input.employeeId, date: input.date }, requestId: actor.requestId });
     if (onBehalf) {
       const [target] = await tx.select({ email: employee.corporateEmail }).from(employee).where(eq(employee.id, input.employeeId));
@@ -95,6 +103,8 @@ export async function bookDesk(db: Db, actor: Actor, input: BookInput): Promise<
     }
     return { bookingId: row.id, created: true, resourceCode: code };
   });
+  if ("offeredToQueue" in outcome) throw new ConflictError(`A mesa ${outcome.offeredToQueue} foi oferecida à próxima pessoa da fila de espera em ${formatLocalDate(input.date)} (a fila tem prioridade). Escolha outra mesa.`);
+  return outcome;
 }
 
 /** Cancelamento próprio ou administrativo. Cancelar reserva do titular não altera a exclusividade (DIR-006). */
@@ -120,11 +130,17 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
     await advisoryShareDay(tx, b.date);
     // cancelled_by e a pessoa da reserva tomam chave da pessoa: antes do recurso, para não inverter contra a desativação.
     await lockDaysAndPeople(tx, { dates: [], people: [b.employeeId, actor.employeeId] });
+    const candidates = (await lockQueueCandidates(tx, b.date)).filter((c) => c !== b.employeeId);
     await lockResources(tx, [b.resourceId]);
+    // Releitura depois dos locks: cancelamento concorrente ou vencimento entre a leitura e o lock.
+    const [now] = await tx.select({ status: deskBooking.status }).from(deskBooking).where(eq(deskBooking.id, bookingId));
+    if (!now || (now.status !== "confirmed" && now.status !== "held")) throw new ConflictError("Esta reserva já não está ativa.");
     await tx
       .update(deskBooking)
       .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: input.reason?.trim() || (own ? "cancelada pela própria pessoa" : null) })
       .where(eq(deskBooking.id, bookingId));
+    // Retenção da fila cancelada por aqui: a oferta e a inscrição acompanham.
+    if (b.status === "held") await declineOfferOfHold(tx, actor, bookingId, input.reason?.trim() || "retenção cancelada");
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: own ? "booking.cancelled" : "booking.cancelled_by_admin", entityType: "desk_booking", entityId: bookingId, before: { status: b.status, resourceId: b.resourceId, date: b.date, employeeId: b.employeeId }, after: { status: "cancelled" }, reason: input.reason, requestId: actor.requestId });
     if (!own) {
       const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, b.employeeId));
@@ -138,7 +154,9 @@ export async function cancelDesk(db: Db, actor: Actor, bookingId: string, input:
         });
       }
     }
-    // A oferta à fila de espera nasce aqui na Etapa 3 (DIR-034, PAR-37).
+    // DIR-034 e PAR-37: a mesa liberada é oferecida à próxima pessoa elegível na mesma transação. Mesa exclusiva do
+    // titular não é oferecida a quem não é elegível (DIR-025): a mesma função de disponibilidade decide.
+    await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidates, requestId: actor.requestId });
     return { resourceCode: b.code, date: b.date };
   });
 }
@@ -168,12 +186,20 @@ export async function planWeek(db: Db, actor: Actor, input: { idempotencyKey: st
     const withDesk = input.days.filter((d) => d.resourceId);
     for (const d of input.days) await advisoryShareDay(tx, d.date);
     await shareLockEmployee(tx, actor.employeeId);
+    const candidatesByDate = new Map<string, string[]>();
+    for (const d of withDesk) candidatesByDate.set(d.date, (await lockQueueCandidates(tx, d.date)).filter((c) => c !== actor.employeeId));
     await lockResources(tx, withDesk.map((d) => d.resourceId!));
     for (const d of withDesk) await expireHolds(tx, { resourceId: d.resourceId!, employeeId: actor.employeeId, date: d.date });
     const conflicts: WeekPlanResult["conflicts"] = [];
     const checks: Array<{ date: string; resourceId: string; code: string }> = [];
     for (const d of withDesk) {
+      // PAR-37: mesa livre com fila em espera vai para a fila; o dia volta como conflito explícito.
+      const offered = await offerNext(tx, { resourceId: d.resourceId!, date: d.date, candidateIds: candidatesByDate.get(d.date) ?? [], requestId: actor.requestId });
       const { availability, code } = await revalidate(tx, actor.employeeId, d.resourceId!, d.date);
+      if (offered) {
+        conflicts.push({ date: d.date, resourceCode: code, reason: "mesa oferecida à próxima pessoa da fila de espera (a fila tem prioridade)" });
+        continue;
+      }
       if (availability.code === "mine") continue; // já reservada nesta mesa: idempotente por dia
       if (!availability.canBook) conflicts.push({ date: d.date, resourceCode: code, reason: availability.reason });
       else checks.push({ date: d.date, resourceId: d.resourceId!, code });
@@ -201,6 +227,7 @@ export async function planWeek(db: Db, actor: Actor, input: { idempotencyKey: st
         .values({ resourceId: c.resourceId, employeeId: actor.employeeId, bookingDate: d.date, status: "confirmed", origin: "week_plan", actorEmployeeId: actor.employeeId, weekPlanRequestId: req.id })
         .returning({ id: deskBooking.id });
       applied.push({ date: d.date, resourceCode: c.code, bookingId: row.id });
+      await closeWaitingEntryOf(tx, actor, actor.employeeId, d.date, "reserva feita pelo planejamento da semana");
     }
     const result: WeekPlanResult = { ok: true, applied, conflicts: [] };
     await tx.update(weekPlanRequest).set({ result }).where(eq(weekPlanRequest.id, req.id));

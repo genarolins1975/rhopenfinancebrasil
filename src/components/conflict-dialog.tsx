@@ -19,7 +19,7 @@ export function ConflictTable({ conflicts, allowRealloc = true }: { conflicts: C
         <thead>
           <tr>
             <th className={th}>Data</th>
-            <th className={th}>Mesa</th>
+            <th className={th}>Recurso</th>
             <th className={th}>Pessoa</th>
             <th className={th}>Origem</th>
             <th className={th}>Por quê</th>
@@ -29,8 +29,14 @@ export function ConflictTable({ conflicts, allowRealloc = true }: { conflicts: C
         <tbody>
           {conflicts.map((c) => (
             <tr key={c.bookingId}>
-              <td className={td}>{c.date.split("-").reverse().join("/")}</td>
-              <td className={td}>{c.resourceCode}</td>
+              <td className={td}>
+                {c.date.split("-").reverse().join("/")}
+                {c.slot ? <span className="block text-xs text-text-muted">{c.slot}</span> : null}
+              </td>
+              <td className={td}>
+                {c.resourceCode}
+                {c.kind === "space" ? <span className="block text-xs text-text-muted">sala ou cabine</span> : null}
+              </td>
               <td className={td}>{c.employeeName}</td>
               <td className={td}>{c.origin}</td>
               <td className={td}>{c.why}</td>
@@ -42,9 +48,9 @@ export function ConflictTable({ conflicts, allowRealloc = true }: { conflicts: C
                   <Select id={`decision-${c.bookingId}`} name={`decision:${c.bookingId}`} defaultValue="" required>
                     <option value="">Escolha</option>
                     <option value="cancel">Cancelar com comunicação</option>
-                    {allowRealloc && c.options.length ? <option value="realloc">Realocar</option> : null}
+                    {allowRealloc && c.kind !== "space" && c.options.length ? <option value="realloc">Realocar</option> : null}
                   </Select>
-                  {allowRealloc && c.options.length ? (
+                  {allowRealloc && c.kind !== "space" && c.options.length ? (
                     <>
                       <label className="text-xs font-medium" htmlFor={`target-${c.bookingId}`}>
                         Mesa de destino

@@ -324,3 +324,83 @@ export const presenceIntent = pgTable(
   },
   (t) => [primaryKey({ columns: [t.employeeId, t.date] })],
 );
+
+/*
+ * Etapa 3: fila de espera, oferta com retenção, confirmação de uso e preferência de compartilhamento.
+ * Triggers, grants e parâmetros iniciais na migração manual 0008.
+ */
+export const waitlistEntryStatus = pgEnum("waitlist_entry_status", ["waiting", "offered", "accepted", "expired", "cancelled"]);
+export const waitlistOfferStatus = pgEnum("waitlist_offer_status", ["open", "accepted", "expired", "declined"]);
+export const checkinMethod = pgEnum("checkin_method", ["portal", "qr"]);
+
+export const waitlistEntry = pgTable(
+  "waitlist_entry",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    employeeId: uuid()
+      .notNull()
+      .references(() => employee.id),
+    date: date().notNull(),
+    preferences: jsonb().notNull().default(sql`'{}'::jsonb`),
+    status: waitlistEntryStatus().notNull().default("waiting"),
+    createdAt: ts().notNull().defaultNow(),
+    closedAt: ts(),
+    closedBy: uuid().references(() => employee.id),
+    closeReason: text(),
+  },
+  (t) => [
+    uniqueIndex("waitlist_entry_active").on(t.employeeId, t.date).where(sql`status in ('waiting', 'offered')`),
+    index("waitlist_entry_date_idx").on(t.date, t.status, t.createdAt),
+  ],
+);
+
+export const waitlistOffer = pgTable(
+  "waitlist_offer",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    entryId: uuid()
+      .notNull()
+      .references(() => waitlistEntry.id),
+    resourceId: uuid()
+      .notNull()
+      .references(() => resource.id),
+    holdBookingId: uuid()
+      .notNull()
+      .unique()
+      .references(() => deskBooking.id),
+    offeredBy: uuid().references(() => employee.id),
+    offeredAt: ts().notNull().defaultNow(),
+    expiresAt: ts().notNull(),
+    status: waitlistOfferStatus().notNull().default("open"),
+    decidedAt: ts(),
+  },
+  (t) => [uniqueIndex("waitlist_offer_open").on(t.entryId).where(sql`status = 'open'`), index("waitlist_offer_expiry_idx").on(t.expiresAt).where(sql`status = 'open'`)],
+);
+
+export const checkin = pgTable(
+  "checkin",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    deskBookingId: uuid().references(() => deskBooking.id),
+    spaceBookingId: uuid().references(() => spaceBooking.id),
+    declaredAt: ts().notNull().defaultNow(),
+    method: checkinMethod().notNull(),
+    actorEmployeeId: uuid()
+      .notNull()
+      .references(() => employee.id),
+  },
+  (t) => [
+    check("checkin_one_booking", sql`(${t.deskBookingId} is not null)::int + (${t.spaceBookingId} is not null)::int = 1`),
+    uniqueIndex("checkin_desk_unique").on(t.deskBookingId).where(sql`desk_booking_id is not null`),
+    uniqueIndex("checkin_space_unique").on(t.spaceBookingId).where(sql`space_booking_id is not null`),
+  ],
+);
+
+/** Preferências da própria pessoa. Compartilhar com o gestor é opt-in (matriz de permissões, "Equipe do gestor"). */
+export const employeePreference = pgTable("employee_preference", {
+  employeeId: uuid()
+    .primaryKey()
+    .references(() => employee.id),
+  shareWithManager: boolean().notNull().default(false),
+  updatedAt: ts().notNull().defaultNow(),
+});

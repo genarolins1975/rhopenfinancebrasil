@@ -155,7 +155,10 @@ function daysBetween(a: string, b: string): number {
 }
 
 /** Instante de abertura da semana de uma data (PAR-01): dia e hora configurados da semana anterior, em horário local. */
-export function bookingWindowOpensAt(isoDate: string, s: OfficeSettings): Date {
+/** Só a parte da janela dos parâmetros (PAR-01). */
+export type WindowSettings = Pick<OfficeSettings, "bookingOpenWeekday" | "bookingOpenTime" | "bookingHorizonWeeks">;
+
+export function bookingWindowOpensAt(isoDate: string, s: WindowSettings): Date {
   const [y, m, d] = weekStartOf(isoDate).split("-").map(Number);
   const [hh, mm] = s.bookingOpenTime.split(":").map(Number);
   const monday = new TZDate(y, m - 1, d, TZ);
@@ -163,7 +166,7 @@ export function bookingWindowOpensAt(isoDate: string, s: OfficeSettings): Date {
   return new TZDate(openDay.getFullYear(), openDay.getMonth(), openDay.getDate(), hh, mm, 0, TZ);
 }
 
-export function bookingWindow(isoDate: string, now: Date, s: OfficeSettings): { open: boolean; opensAt: Date | null } {
+export function bookingWindow(isoDate: string, now: Date, s: WindowSettings): { open: boolean; opensAt: Date | null } {
   const today = localToday(now);
   if (isoDate < today) return { open: false, opensAt: null };
   const weeksAhead = Math.floor(daysBetween(weekStartOf(today), weekStartOf(isoDate)) / 7);

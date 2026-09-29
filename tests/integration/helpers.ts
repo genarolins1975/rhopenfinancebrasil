@@ -7,6 +7,10 @@ import type { Permission, Role } from "@/modules/access/permissions";
 import { localToday } from "@/modules/shared/dates";
 
 const TABLES = [
+  "checkin",
+  "waitlist_offer",
+  "waitlist_entry",
+  "employee_preference",
   "desk_booking",
   "space_booking",
   "presence_intent",
@@ -49,7 +53,7 @@ export async function resetDb() {
   // O truncate em cascata de employee apaga office_settings (FK updated_by). No banco de teste a semana seguinte abre na
   // segunda às 00:00 (datas de d+1 a d+13 sempre abertas, independentemente do dia da semana em que a bateria roda);
   // os testes da regra padrão (quinta às 10h) fixam os próprios parâmetros.
-  await ownerPool.query(`insert into office_settings (key, value) values ('booking_open_weekday', '1'), ('booking_open_time', '"00:00"'), ('booking_horizon_weeks', '4'), ('exception_max_days', '30') on conflict (key) do update set value = excluded.value, updated_by = null`);
+  await ownerPool.query(`insert into office_settings (key, value) values ('booking_open_weekday', '1'), ('booking_open_time', '"00:00"'), ('booking_horizon_weeks', '4'), ('exception_max_days', '30'), ('offer_minutes', '120'), ('business_hours_start', '"09:00"'), ('business_hours_end', '"18:00"'), ('checkin_release_enabled', 'false'), ('checkin_release_time', '"11:00"') on conflict (key) do update set value = excluded.value, updated_by = null`);
 }
 
 /** Pessoa com perfil privilegiado efetivo: usuário de autenticação e segundo fator ativo (PAR-33). */
@@ -132,4 +136,10 @@ export async function activeUserWithPassword(opts: { roles?: Role[]; permissions
     return { res, cookies: setCookiesFrom(res), headers: cookieHeader(setCookiesFrom(res)) };
   };
   return { ...person, userId: row.userId!, password, signIn };
+}
+
+/** Consulta com o papel dono, para simular passagem de tempo em testes (nunca usada pela aplicação). */
+export async function ownerQuery(text: string, params: unknown[] = []) {
+  ownerPool ??= new Pool({ connectionString: process.env.DATABASE_OWNER_URL, max: 1 });
+  return ownerPool.query(text, params);
 }
