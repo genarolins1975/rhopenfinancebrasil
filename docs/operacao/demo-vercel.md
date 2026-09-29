@@ -29,10 +29,10 @@ No GitHub, no repositório `genarolins1975/rhopenfinancebrasil`, crie a branch `
 ## 3. Projeto na Vercel
 
 1. **Add New, Project**, importe o repositório. A Vercel detecta Next.js e pnpm; o `vercel.json` do repositório define o build, a região, a tarefa agendada e o bloqueio de deploy das branches de trabalho.
-2. Ainda na tela de importação, abra **Environment Variables** e cadastre as variáveis abaixo. Depois da importação, em **Settings, Environment Variables**, confira que todas estão só em **Production** e marque como **Sensitive** todas as que a tabela indica (valor ilegível depois de salvo).
-3. Conclua a importação. O primeiro deploy pode sair da branch padrão do repositório ou falhar; tanto faz. Em seguida, em **Settings, Environments, Production**, defina a branch de produção como `demo` e, em **Deployments**, crie um deploy de produção a partir da branch `demo` (ou avance a branch `demo` no GitHub).
+2. Na tela de importação, não cadastre variáveis: ali elas valeriam para todos os ambientes. Conclua a importação; o primeiro deploy de um projeto novo é sempre de produção e falha sem variáveis, o que é esperado.
+3. Em **Settings, Environments, Production, Branch Tracking**, defina a branch de produção como `demo`. Em **Settings, Environment Variables**, cadastre as variáveis abaixo só em **Production**: as marcadas na tabela com o tipo **Secret** (valor ilegível depois de salvo; é o antigo Sensitive, trocado pela Vercel em 24/08/2026) e as demais com o tipo **Config**. Depois, em **Deployments**, crie um deploy de produção a partir da branch `demo`.
 
-| Variável | Valor | Sensitive |
+| Variável | Valor | Secret |
 |---|---|---|
 | `APP_ENV` | `demo` | não |
 | `APP_BASE_URL` | `https://rhopenfinancebrasil.com` | não |
