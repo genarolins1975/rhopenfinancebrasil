@@ -56,7 +56,7 @@ export async function teamWeek(db: DbOrTx, managerId: string, dates: string[]): 
         .select({ employeeId: spaceBooking.employeeId, code: resource.code, title: spaceBooking.title, titleVisibility: spaceBooking.titleVisibility, lower: sql<string>`lower(${spaceBooking.period})`, upper: sql<string>`upper(${spaceBooking.period})`, date: sql<string>`(lower(${spaceBooking.period}) at time zone 'America/Sao_Paulo')::date::text` })
         .from(spaceBooking)
         .innerJoin(resource, eq(resource.id, spaceBooking.resourceId))
-        .where(and(inArray(spaceBooking.employeeId, sharing), eq(spaceBooking.status, "confirmed"), sql`(lower(${spaceBooking.period}) at time zone 'America/Sao_Paulo')::date = any(${dates}::date[])`))
+        .where(and(inArray(spaceBooking.employeeId, sharing), eq(spaceBooking.status, "confirmed"), inArray(sql`(lower(${spaceBooking.period}) at time zone 'America/Sao_Paulo')::date::text`, dates)))
         .orderBy(asc(sql`lower(${spaceBooking.period})`))
     : [];
   return reports.map((r) => ({

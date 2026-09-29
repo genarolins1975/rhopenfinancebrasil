@@ -117,6 +117,28 @@ export async function applyConflictDecisions(tx: Tx, actor: Actor, conflicts: In
       }
       continue;
     }
+    if (c.status === "held") {
+      // Retenção da fila (oferta aberta): nunca vira reserva por realocação, porque a pessoa não aceitou. A oferta é
+      // retirada, a inscrição volta a esperar na posição original e a varredura oferece outra mesa.
+      if (d.action !== "cancel") throw new ValidationError(`A oferta da fila de ${formatLocalDate(c.date)} em ${c.resourceCode} não é realocada: só retirada, com a pessoa de volta à fila.`);
+      await tx
+        .update(deskBooking)
+        .set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: d.reason.trim() })
+        .where(and(eq(deskBooking.id, c.bookingId), eq(deskBooking.status, "held")));
+      const { withdrawOfferOfHold } = await import("@/modules/waitlist/service");
+      await withdrawOfferOfHold(tx, actor, c.bookingId, d.reason.trim());
+      await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "booking.cancelled_by_conflict", entityType: "desk_booking", entityId: c.bookingId, before: { resourceId: c.resourceId, date: c.date, employeeId: c.employeeId, status: "held" }, after: { status: "cancelled", why: c.why }, reason: d.reason, requestId: actor.requestId });
+      if (emp) {
+        await enqueueOutbox(tx, {
+          eventType: "email.waitlist",
+          aggregateType: "desk_booking",
+          aggregateId: c.bookingId,
+          payload: { message: bookingChangedEmail(emp.email, emp.name, `A mesa ${c.resourceCode} oferecida a você para ${formatLocalDate(c.date)} deixou de estar disponível. ${opts.notice} Você continua na fila de espera dessa data. ${d.message?.trim() ?? ""}`.trim()) },
+          idempotencyKey: `waitlist.withdrawn:${c.bookingId}`,
+        });
+      }
+      continue;
+    }
     if (d.action === "cancel") {
       await tx
         .update(deskBooking)

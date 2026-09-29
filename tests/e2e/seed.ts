@@ -70,6 +70,8 @@ async function main() {
   await createAssignment(db, admActor, { resourceId: m001.id, mode: "individual", holderEmployeeId: diretora.id, validFrom: localToday(), reason: "seed", responsible: "Diretoria executiva" });
   const [g] = await db.select({ id: accessGroup.id }).from(accessGroup).where(eq(accessGroup.code, "diretoria"));
   await addGroupMember(db, admActor, { groupId: g.id, employeeId: diretor2.id, validFrom: localToday(), reason: "seed" });
+  // Meu time: o colaborador responde diretamente ao gestor (o compartilhamento é opt-in e feito pela tela de perfil).
+  await db.update(employee).set({ managerEmployeeId: gestor.id }).where(eq(employee.id, comum.id));
   writeFileSync(".e2e-state.json", JSON.stringify({ password: PASSWORD, comum, gestor, adm, diretora, diretor2, totpURI: enabled.totpURI, inviteToken: inv.token }));
   console.log("seed do ponta a ponta concluído");
   process.exit(0);

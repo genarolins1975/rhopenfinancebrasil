@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Alert, Card } from "@/components/ui";
+import { safeReturnPath } from "@/modules/identity/return-path";
 import { SignInForm } from "./sign-in-form";
 
 const AVISOS: Record<string, { kind: "success" | "info" | "warning"; text: string }> = {
@@ -10,7 +11,7 @@ const AVISOS: Record<string, { kind: "success" | "info" | "warning"; text: strin
   "confirmar-email": { kind: "info", text: "Para concluir a troca de email, entre com sua senha atual e reabra o link recebido no novo endereço." },
 };
 
-export default async function EntrarPage({ searchParams }: { searchParams: Promise<{ aviso?: string; motivo?: string }> }) {
+export default async function EntrarPage({ searchParams }: { searchParams: Promise<{ aviso?: string; motivo?: string; volta?: string }> }) {
   const sp = await searchParams;
   const aviso = AVISOS[sp.aviso ?? sp.motivo ?? ""];
   return (
@@ -23,7 +24,12 @@ export default async function EntrarPage({ searchParams }: { searchParams: Promi
             <Alert kind={aviso.kind}>{aviso.text}</Alert>
           </div>
         ) : null}
-        <SignInForm />
+        {safeReturnPath(sp.volta) ? (
+          <div className="mb-4">
+            <Alert kind="info">Entre para confirmar o uso da mesa lida pelo QR.</Alert>
+          </div>
+        ) : null}
+        <SignInForm volta={safeReturnPath(sp.volta)} />
         <p className="mt-4 text-sm">
           <Link href="/recuperar-senha" className="underline">
             Esqueci minha senha

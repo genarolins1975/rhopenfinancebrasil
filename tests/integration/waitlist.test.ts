@@ -6,10 +6,10 @@ import { auditEvent, deskBooking, exclusiveAssignment, officeCalendar, outboxEve
 import { stateForPerson } from "@/modules/availability/service";
 import { bookDesk, cancelDesk, planWeek } from "@/modules/booking/service";
 import { deactivateEmployee, suspendEmployee } from "@/modules/employees/service";
-import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
+import { ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { addDays, localToday } from "@/modules/shared/dates";
 import { acceptOffer, declineOffer, expireDueOffers, joinWaitlist, leaveWaitlist, listQueue, myQueue, offerFreeDesks, offerManually, unmetDemand } from "@/modules/waitlist/service";
-import { availableDesksFor } from "@/modules/workplace/service";
+import { availableDesksFor, createStatusPeriod, previewStatusPeriod } from "@/modules/workplace/service";
 import { ownerQuery, privilegedActor, resetDb, seedDesk, seedEmployee } from "./helpers";
 
 /*
@@ -359,5 +359,26 @@ describe("fila de espera", () => {
     const [offB] = await openOffers();
     expect((await entriesOf(b.id))[0].id).toBe(offB.entryId);
     expect(offB.resourceId).toBe(desk.id);
+  });
+
+  it("oferta aberta atingida por manutenção: a prévia lista a retenção, realocar é recusado, cancelar retira a oferta e devolve a pessoa à fila com aviso", async () => {
+    const { taker, desk, booking } = await fullOffice(d(1));
+    const a = await seedEmployee();
+    await joinWaitlist(db, actorOf(a), { date: d(1) });
+    await cancelDesk(db, actorOf(taker), booking.bookingId);
+    const [offer] = await openOffers();
+    const fac = await privilegedActor({ roles: ["facilities"] });
+    const preview = await previewStatusPeriod(db, fac.actor, { resourceId: desk.id, status: "maintenance", startsOn: d(1), endsOn: d(1), reason: "vazamento" });
+    expect(preview.conflicts.map((c) => [c.bookingId, c.status])).toEqual([[offer.holdBookingId, "held"]]);
+    const other = await seedDesk("F009");
+    await expect(createStatusPeriod(db, fac.actor, { resourceId: desk.id, status: "maintenance", startsOn: d(1), endsOn: d(1), reason: "vazamento" }, [{ bookingId: offer.holdBookingId, action: "realloc", reason: "x", targetResourceId: other.id }])).rejects.toThrow(/não é realocada/);
+    await createStatusPeriod(db, fac.actor, { resourceId: desk.id, status: "maintenance", startsOn: d(1), endsOn: d(1), reason: "vazamento" }, [{ bookingId: offer.holdBookingId, action: "cancel", reason: "vazamento" }]);
+    expect((await db.select().from(waitlistOffer).where(eq(waitlistOffer.id, offer.id)))[0].status).toBe("expired");
+    expect((await entriesOf(a.id))[0].status).toBe("waiting");
+    expect(await db.select().from(outboxEvent).where(eq(outboxEvent.idempotencyKey, `waitlist.withdrawn:${offer.holdBookingId}`))).toHaveLength(1);
+    expect(await db.select().from(auditEvent).where(eq(auditEvent.action, "waitlist.offer_withdrawn"))).toHaveLength(1);
+    // a mesa nova (F009) está livre: a varredura oferece a ela, que continua primeira da fila
+    expect(await offerFreeDesks(db)).toBe(1);
+    expect((await openOffers())[0].resourceId).toBe(other.id);
   });
 });

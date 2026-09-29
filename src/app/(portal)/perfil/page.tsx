@@ -3,6 +3,8 @@ import { db } from "@/db/client";
 import { getEmployee } from "@/modules/employees/service";
 import { requireCurrent } from "@/modules/identity/session";
 import { formatLocalDate } from "@/modules/shared/dates";
+import { sharesWithManager } from "@/modules/team/service";
+import { ShareWithManagerForm } from "../escritorio/operation-forms";
 import { EmailChangeForm } from "./email-change-form";
 
 export default async function PerfilPage({ searchParams }: { searchParams: Promise<{ aviso?: string }> }) {
@@ -10,6 +12,7 @@ export default async function PerfilPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const emp = await getEmployee(db, current.employee.id);
   const period = emp?.periods[0];
+  const share = await sharesWithManager(db, current.employee.id);
   return (
     <>
       <PageHeader title="Meu perfil" lead="Dados mantidos pelo RH. Para corrigir algo, abra uma solicitação." />
@@ -36,6 +39,12 @@ export default async function PerfilPage({ searchParams }: { searchParams: Promi
           ]}
         />
       </Card>
+      <div className="mt-6">
+        <Card title="Compartilhar planos com meu gestor">
+          <p className="mb-3 text-sm text-text-muted">Desativado por padrão. Vale só para o gestor direto registrado pelo RH e pode ser desfeito a qualquer momento. Títulos de reuniões privadas continuam ocultos.</p>
+          <ShareWithManagerForm current={share} />
+        </Card>
+      </div>
       <div className="mt-6">
         <Card title="Trocar email de acesso">
           <p className="mb-3 text-sm text-text-muted">A confirmação vai primeiro para o email atual. Só depois o novo endereço recebe a verificação.</p>

@@ -105,6 +105,18 @@ export default async function InicioPage({ searchParams }: { searchParams: Promi
         <Card title="O que você pode fazer agora">
           <ul className="list-disc space-y-1 pl-5 text-sm">
             <li>
+              <Link href="/escritorio/salas" className="underline">
+                Reservar sala ou cabine
+              </Link>
+            </li>
+            {current.access.permissions.has("team.view") ? (
+              <li>
+                <Link href="/escritorio/meu-time" className="underline">
+                  Ver os planos do meu time
+                </Link>
+              </li>
+            ) : null}
+            <li>
               <Link href="/perfil" className="underline">
                 Conferir seus dados de cadastro
               </Link>

@@ -17,7 +17,8 @@ BEGIN
      OR b.employee_id <> e.employee_id OR b.booking_date <> e.date OR b.hold_expires_at <> NEW.expires_at THEN
     RAISE EXCEPTION 'offer_inconsistent' USING ERRCODE = 'P0001';
   END IF;
-  IF e.status <> 'waiting' THEN RAISE EXCEPTION 'offer_entry_not_waiting' USING ERRCODE = 'P0001'; END IF;
+  -- A transação que oferece reivindica a inscrição (waiting para offered) antes de gravar a oferta.
+  IF e.status NOT IN ('waiting', 'offered') THEN RAISE EXCEPTION 'offer_entry_not_waiting' USING ERRCODE = 'P0001'; END IF;
   IF NEW.expires_at <= now() THEN RAISE EXCEPTION 'offer_already_expired' USING ERRCODE = 'P0001'; END IF;
   RETURN NEW;
 END

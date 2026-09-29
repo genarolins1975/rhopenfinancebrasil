@@ -49,4 +49,7 @@ playwright-report/
 !.env.example
 .e2e-state.json
 .e2e-ready
-.log-test.ndjson
+.log-test*.ndjson
+
+# Testes descartáveis da revisão independente
+tests/integration/_review/

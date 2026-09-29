@@ -8,6 +8,7 @@ import { enqueueOutbox } from "@/modules/notifications/outbox";
 import { waitlistOfferEmail } from "@/modules/notifications/templates";
 import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
+import { pgErrorOf } from "@/modules/shared/db-errors";
 import { logger } from "@/modules/shared/logger";
 import { type Actor, advisoryShareDay, assertIsoDate, assertUuid, expireHolds, lockResources, readSettings, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
 import { offerExpiresAt } from "./rules";
@@ -77,21 +78,40 @@ export async function offerNext(tx: Tx, input: { resourceId: string; date: strin
   for (const e of entries) {
     // DIR-025: a mesma função de disponibilidade da reserva direta decide; mesa exclusiva sem exceção nunca é oferecida.
     const { availability } = await explainFor(tx, e.employeeId, input.resourceId, input.date);
+    if (availability.code === "daily_limit" || availability.code === "mine") {
+      // A pessoa conseguiu mesa por outro caminho (reserva simultânea à inscrição): a inscrição deixa de fazer sentido.
+      await tx.update(waitlistEntry).set({ status: "cancelled", closedAt: new Date(), closeReason: "já tem reserva na data" }).where(and(eq(waitlistEntry.id, e.id), eq(waitlistEntry.status, "waiting")));
+      continue;
+    }
     if (!availability.canBook) continue;
     const expiresAt = await offerExpiry(tx, input.date);
     if (!expiresAt) return null;
-    const [hold] = await tx
-      .insert(deskBooking)
-      .values({ resourceId: input.resourceId, employeeId: e.employeeId, bookingDate: input.date, status: "held", origin: "waitlist_offer", actorEmployeeId: input.offeredBy ?? e.employeeId, holdExpiresAt: expiresAt })
-      .returning({ id: deskBooking.id });
-    const [offer] = await tx.insert(waitlistOffer).values({ entryId: e.id, resourceId: input.resourceId, holdBookingId: hold.id, offeredBy: input.offeredBy ?? null, expiresAt }).returning({ id: waitlistOffer.id });
-    await tx.update(waitlistEntry).set({ status: "offered" }).where(eq(waitlistEntry.id, e.id));
-    await recordAudit(tx, { actorEmployeeId: input.offeredBy ?? null, action: input.offeredBy ? "waitlist.offered_manually" : "waitlist.offered", entityType: "waitlist_offer", entityId: offer.id, after: { entryId: e.id, employeeId: e.employeeId, resourceId: input.resourceId, date: input.date, expiresAt }, requestId: input.requestId });
+    // Ponto de salvamento por candidata: a inscrição pode ter sido encerrada ou a pessoa pode ter reservado outra mesa
+    // numa transação concorrente (só `for share` na pessoa). Nesses casos, a candidata é pulada sem derrubar quem liberou a mesa.
+    let made: OfferMade | null = null;
+    try {
+      made = await tx.transaction(async (sp) => {
+        const [claimed] = await sp.update(waitlistEntry).set({ status: "offered" }).where(and(eq(waitlistEntry.id, e.id), eq(waitlistEntry.status, "waiting"))).returning({ id: waitlistEntry.id });
+        if (!claimed) return null;
+        const [hold] = await sp
+          .insert(deskBooking)
+          .values({ resourceId: input.resourceId, employeeId: e.employeeId, bookingDate: input.date, status: "held", origin: "waitlist_offer", actorEmployeeId: input.offeredBy ?? e.employeeId, holdExpiresAt: expiresAt })
+          .returning({ id: deskBooking.id });
+        const [offer] = await sp.insert(waitlistOffer).values({ entryId: e.id, resourceId: input.resourceId, holdBookingId: hold.id, offeredBy: input.offeredBy ?? null, expiresAt }).returning({ id: waitlistOffer.id });
+        return { offerId: offer.id, entryId: e.id, employeeId: e.employeeId, holdBookingId: hold.id, resourceId: input.resourceId, expiresAt };
+      });
+    } catch (err) {
+      const code = pgErrorOf(err)?.code;
+      if (code === "23505") continue;
+      throw err;
+    }
+    if (!made) continue;
+    await recordAudit(tx, { actorEmployeeId: input.offeredBy ?? null, action: input.offeredBy ? "waitlist.offered_manually" : "waitlist.offered", entityType: "waitlist_offer", entityId: made.offerId, after: { entryId: e.id, employeeId: e.employeeId, resourceId: input.resourceId, date: input.date, expiresAt }, requestId: input.requestId });
     const [emp] = await tx.select({ email: employee.corporateEmail, name: employee.fullName }).from(employee).where(eq(employee.id, e.employeeId));
     if (emp) {
-      await enqueueOutbox(tx, { eventType: "email.waitlist", aggregateType: "waitlist_offer", aggregateId: offer.id, payload: { message: waitlistOfferEmail(emp.email, emp.name, r.code, formatLocalDate(input.date), formatLocal(expiresAt)) }, idempotencyKey: `waitlist.offered:${offer.id}` });
+      await enqueueOutbox(tx, { eventType: "email.waitlist", aggregateType: "waitlist_offer", aggregateId: made.offerId, payload: { message: waitlistOfferEmail(emp.email, emp.name, r.code, formatLocalDate(input.date), formatLocal(expiresAt)) }, idempotencyKey: `waitlist.offered:${made.offerId}` });
     }
-    return { offerId: offer.id, entryId: e.id, employeeId: e.employeeId, holdBookingId: hold.id, resourceId: input.resourceId, expiresAt };
+    return made;
   }
   return null;
 }
@@ -171,12 +191,22 @@ export async function leaveWaitlist(db: Db, actor: Actor, entryId: string, input
     const current = await loadEntry(tx, entryId);
     if (current.status !== "waiting" && current.status !== "offered") throw new ConflictError("Esta inscrição já foi encerrada.");
     const offer = await openOfferOf(tx, entryId);
+    if (offer && !before) {
+      // Uma oferta nasceu entre a leitura e os locks: a mesa não está travada por esta transação. A pessoa vê a oferta e decide.
+      throw new ConflictError("Uma mesa acabou de ser oferecida a você nesta data. Veja a oferta em Minhas reservas e aceite ou recuse.");
+    }
     const reason = input.reason?.trim() || (own ? (offer ? "oferta recusada pela própria pessoa" : "saída da fila pela própria pessoa") : null);
     if (offer) {
       await tx.update(deskBooking).set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: reason }).where(and(eq(deskBooking.id, offer.holdBookingId), eq(deskBooking.status, "held")));
-      await tx.update(waitlistOffer).set({ status: "declined", decidedAt: new Date() }).where(eq(waitlistOffer.id, offer.id));
+      await tx.update(waitlistOffer).set({ status: "declined", decidedAt: new Date() }).where(and(eq(waitlistOffer.id, offer.id), eq(waitlistOffer.status, "open")));
     }
-    await tx.update(waitlistEntry).set({ status: "cancelled", closedAt: new Date(), closedBy: actor.employeeId, closeReason: reason }).where(eq(waitlistEntry.id, entryId));
+    // Atualização condicionada ao estado lido: uma oferta concorrente (sem lock de recurso aqui) não é sobrescrita.
+    const [closed] = await tx
+      .update(waitlistEntry)
+      .set({ status: "cancelled", closedAt: new Date(), closedBy: actor.employeeId, closeReason: reason })
+      .where(and(eq(waitlistEntry.id, entryId), eq(waitlistEntry.status, offer ? "offered" : "waiting")))
+      .returning({ id: waitlistEntry.id });
+    if (!closed) throw new ConflictError("A inscrição mudou enquanto você saía (uma mesa pode ter sido oferecida). Veja Minhas reservas e tente de novo.");
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: offer ? "waitlist.offer_declined" : "waitlist.left", entityType: "waitlist_entry", entityId: entryId, before: { status: current.status, employeeId: entry.employeeId, date: entry.date }, after: { status: "cancelled", offerId: offer?.id ?? null }, reason, requestId: actor.requestId });
     if (offer) await offerNext(tx, { resourceId: offer.resourceId, date: entry.date, candidateIds: candidates.filter((c) => c !== entry.employeeId), requestId: actor.requestId });
     return { date: entry.date, declined: !!offer };
@@ -223,7 +253,8 @@ export async function acceptOffer(db: Db, actor: Actor, offerId: string): Promis
     }
     await tx.update(deskBooking).set({ status: "confirmed", holdExpiresAt: null }).where(eq(deskBooking.id, o.holdBookingId));
     await tx.update(waitlistOffer).set({ status: "accepted", decidedAt: new Date() }).where(eq(waitlistOffer.id, offerId));
-    await tx.update(waitlistEntry).set({ status: "accepted", closedAt: new Date(), closedBy: actor.employeeId, closeReason: "oferta aceita" }).where(eq(waitlistEntry.id, o.entryId));
+    const [acc] = await tx.update(waitlistEntry).set({ status: "accepted", closedAt: new Date(), closedBy: actor.employeeId, closeReason: "oferta aceita" }).where(and(eq(waitlistEntry.id, o.entryId), eq(waitlistEntry.status, "offered"))).returning({ id: waitlistEntry.id });
+    if (!acc) throw new ConflictError("A inscrição foi encerrada antes do aceite. Nada foi alterado.");
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "waitlist.offer_accepted", entityType: "desk_booking", entityId: o.holdBookingId, before: { status: "held" }, after: { status: "confirmed", offerId, resourceId: o.resourceId, date: o.date }, requestId: actor.requestId });
     const [r] = await tx.select({ code: resource.code }).from(resource).where(eq(resource.id, o.resourceId));
     return { ok: true as const, bookingId: o.holdBookingId, resourceCode: r?.code ?? "", date: o.date };
@@ -275,6 +306,17 @@ export async function declineOfferOfHold(tx: Tx, actor: Actor, holdBookingId: st
   await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "waitlist.offer_declined", entityType: "waitlist_entry", entityId: offer.entryId, after: { status: "cancelled", offerId: offer.id, why: reason }, reason, requestId: actor.requestId });
 }
 
+/**
+ * Oferta retirada por decisão administrativa (manutenção, bloqueio, fechamento de dia, exclusividade, desativação de
+ * titular): a retenção já foi cancelada por quem chama; a oferta vence e a inscrição volta a esperar, sem perder a posição.
+ */
+export async function withdrawOfferOfHold(tx: Tx, actor: Actor, holdBookingId: string, reason: string): Promise<void> {
+  const [offer] = await tx.update(waitlistOffer).set({ status: "expired", decidedAt: new Date() }).where(and(eq(waitlistOffer.holdBookingId, holdBookingId), eq(waitlistOffer.status, "open"))).returning({ id: waitlistOffer.id, entryId: waitlistOffer.entryId });
+  if (!offer) return;
+  await tx.update(waitlistEntry).set({ status: "waiting" }).where(and(eq(waitlistEntry.id, offer.entryId), eq(waitlistEntry.status, "offered")));
+  await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "waitlist.offer_withdrawn", entityType: "waitlist_offer", entityId: offer.id, after: { entryId: offer.entryId, status: "expired", entry: "waiting" }, reason, requestId: actor.requestId });
+}
+
 /** Desativação ou suspensão: a pessoa sai da fila e as ofertas abertas são recusadas. Quem chama já travou pessoa e recursos. */
 export async function closeQueueForPerson(tx: Tx, actor: Actor, employeeId: string, reason: string): Promise<{ entriesClosed: number; releasedDesks: Array<{ resourceId: string; date: string }> }> {
   const entries = await tx.select({ id: waitlistEntry.id, date: waitlistEntry.date, status: waitlistEntry.status }).from(waitlistEntry).where(and(eq(waitlistEntry.employeeId, employeeId), inArray(waitlistEntry.status, ["waiting", "offered"])));
@@ -283,10 +325,10 @@ export async function closeQueueForPerson(tx: Tx, actor: Actor, employeeId: stri
     const offer = await openOfferOf(tx, e.id);
     if (offer) {
       const [hold] = await tx.update(deskBooking).set({ status: "cancelled", cancelledAt: new Date(), cancelledBy: actor.employeeId, cancelReason: reason }).where(and(eq(deskBooking.id, offer.holdBookingId), eq(deskBooking.status, "held"))).returning({ id: deskBooking.id });
-      await tx.update(waitlistOffer).set({ status: "declined", decidedAt: new Date() }).where(eq(waitlistOffer.id, offer.id));
+      await tx.update(waitlistOffer).set({ status: "declined", decidedAt: new Date() }).where(and(eq(waitlistOffer.id, offer.id), eq(waitlistOffer.status, "open")));
       if (hold) released.push({ resourceId: offer.resourceId, date: e.date });
     }
-    await tx.update(waitlistEntry).set({ status: "cancelled", closedAt: new Date(), closedBy: actor.employeeId, closeReason: reason }).where(eq(waitlistEntry.id, e.id));
+    await tx.update(waitlistEntry).set({ status: "cancelled", closedAt: new Date(), closedBy: actor.employeeId, closeReason: reason }).where(and(eq(waitlistEntry.id, e.id), inArray(waitlistEntry.status, ["waiting", "offered"])));
     await recordAudit(tx, { actorUserId: actor.userId, actorEmployeeId: actor.employeeId, action: "waitlist.left", entityType: "waitlist_entry", entityId: e.id, before: { status: e.status, employeeId, date: e.date }, after: { status: "cancelled", why: "pessoa desativada ou suspensa" }, reason, requestId: actor.requestId });
   }
   return { entriesClosed: entries.length, releasedDesks: released };

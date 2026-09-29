@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { safeReturnPath } from "./return-path";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { authUser, authVerification, employee } from "@/db/schema";
@@ -34,11 +35,12 @@ export async function signInAction(_prev: ActionState, formData: FormData): Prom
     logger.warn({ emailKey: "throttled" }, "tentativas excedidas para uma conta");
     return { error: NEUTRAL_LOGIN, ...keep };
   }
-  let next = "/inicio";
+  const back = safeReturnPath(str(formData, "volta"));
+  let next = back ?? "/inicio";
   try {
     const result = await auth.api.signInEmail({ body: { email, password }, headers: await headers() });
     await registerAttempt(db, email, true);
-    if ((result as { twoFactorRedirect?: boolean }).twoFactorRedirect) next = "/mfa";
+    if ((result as { twoFactorRedirect?: boolean }).twoFactorRedirect) next = back ? `/mfa?volta=${encodeURIComponent(back)}` : "/mfa";
   } catch (e) {
     await registerAttempt(db, email, false);
     if (e instanceof APIError) return { error: NEUTRAL_LOGIN, ...keep };
@@ -58,7 +60,7 @@ export async function verifyTotpAction(_prev: ActionState, formData: FormData): 
     if (e instanceof APIError) return { error: "Código inválido ou expirado. Tente de novo." };
     return { error: "Não foi possível verificar agora." };
   }
-  redirect("/inicio");
+  redirect(safeReturnPath(str(formData, "volta")) ?? "/inicio");
 }
 
 export async function signOutAction(): Promise<void> {

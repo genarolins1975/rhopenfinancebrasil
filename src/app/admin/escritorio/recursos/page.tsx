@@ -8,6 +8,15 @@ import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { getResourceByCode, listCalendar, listResources, listStatusPeriods, listZones } from "@/modules/workplace/service";
 import { AttributesForm, CalendarForm, NewResourceForm, ReleasePeriodForm, RetireForm, SettingsForm, StatusPeriodForm } from "./forms";
 
+async function qrSvg(code: string): Promise<{ svg: string; url: string }> {
+  const { toString } = await import("qrcode");
+  const { env } = await import("@/modules/shared/env");
+  const { qrUrlFor } = await import("@/modules/checkin/service");
+  const url = qrUrlFor(env().APP_BASE_URL, code);
+  const svg = await toString(url, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
+  return { svg, url };
+}
+
 const CLASS_LABEL: Record<string, string> = { shared: "Compartilhada", exclusive: "Exclusiva", maintenance: "Em manutenção", blocked: "Bloqueada", retired: "Desativada" };
 
 export default async function RecursosPage({ searchParams }: { searchParams: Promise<{ data?: string; mesa?: string; aba?: string }> }) {
@@ -26,7 +35,18 @@ export default async function RecursosPage({ searchParams }: { searchParams: Pro
   const periods = selected ? await listStatusPeriods(db, { resourceId: selected.id }) : [];
   const calendar = await listCalendar(db, today, addDays(today, 60));
   const settingsRaw = await readSettings(db);
-  const settings = { booking_open_weekday: String(settingsRaw.bookingOpenWeekday), booking_open_time: settingsRaw.bookingOpenTime, booking_horizon_weeks: String(settingsRaw.bookingHorizonWeeks), exception_max_days: String(settingsRaw.exceptionMaxDays) };
+  const settings = {
+    booking_open_weekday: String(settingsRaw.bookingOpenWeekday),
+    booking_open_time: settingsRaw.bookingOpenTime,
+    booking_horizon_weeks: String(settingsRaw.bookingHorizonWeeks),
+    exception_max_days: String(settingsRaw.exceptionMaxDays),
+    offer_minutes: String(settingsRaw.offerMinutes),
+    business_hours_start: settingsRaw.businessHoursStart,
+    business_hours_end: settingsRaw.businessHoursEnd,
+    checkin_release_enabled: String(settingsRaw.checkinReleaseEnabled),
+    checkin_release_time: settingsRaw.checkinReleaseTime,
+  };
+  const qr = selected ? await qrSvg(selected.code) : null;
   const tab = (key: string, label: string) => (
     <Link href={`?aba=${key}&data=${date}`} aria-current={aba === key ? "page" : undefined} className={`rounded-md px-3 py-1.5 text-sm ${aba === key ? "bg-primary text-white" : "underline"}`}>
       {label}
@@ -162,8 +182,16 @@ export default async function RecursosPage({ searchParams }: { searchParams: Pro
                     <section>
                       <h3 className="font-semibold">Atributos (verificado por, em)</h3>
                       <div className="mt-2">
-                        <AttributesForm resourceId={selected.id} zones={zones} current={selected.attributes as Record<string, unknown>} zoneId={all.find((r) => r.id === selected.id)?.zoneId ?? null} />
+                        <AttributesForm resourceId={selected.id} zones={zones} current={selected.attributes as Record<string, unknown>} zoneId={all.find((r) => r.id === selected.id)?.zoneId ?? null} type={selected.type} capacity={selected.capacity} />
                       </div>
+                    </section>
+                  ) : null}
+                  {qr ? (
+                    <section>
+                      <h3 className="font-semibold">QR de confirmação de uso</h3>
+                      <p className="text-sm text-text-muted">Para imprimir e fixar no recurso. O QR carrega só o endereço com o código; a reserva é resolvida pela sessão de quem lê.</p>
+                      <div className="mt-2 w-40 rounded-md border border-border bg-white p-2" role="img" aria-label={`QR para ${selected.code}: ${qr.url}`} dangerouslySetInnerHTML={{ __html: qr.svg }} />
+                      <p className="mt-1 break-all text-xs">{qr.url}</p>
                     </section>
                   ) : null}
                   {p.has("resource.manage") && !selected.retiredOn ? (

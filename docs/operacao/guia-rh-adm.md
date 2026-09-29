@@ -104,4 +104,22 @@ O nome do titular aparece só para quem tem `exclusive.holder.view`; o colaborad
 
 ## Reservas administrativas
 
-Em Reservas: reservas ativas por data; reservar em nome de alguém exige a permissão própria, confirmação de ciência, registra quem fez e notifica a pessoa; cancelar reserva alheia exige motivo e envia comunicação. Cancelar reserva de titular nunca altera a exclusividade.
+Em Reservas e fila, aba Mesas: reservas ativas por data, com a origem e a confirmação de uso declarada; reservar em nome de alguém exige a permissão própria, confirmação de ciência, registra quem fez e notifica a pessoa; cancelar reserva alheia exige motivo e envia comunicação. Cancelar reserva de titular nunca altera a exclusividade. Cancelar uma reserva com fila em espera gera a oferta à primeira pessoa elegível na mesma hora.
+
+## Fila de espera
+
+A pessoa entra na fila pelo mapa quando não há mesa disponível para ela na data, o dia está aberto e a janela de reservas abriu. Quem já tem reserva na data não entra (`PAR-30`). Quando uma mesa é liberada (cancelamento, liberação por falta de confirmação, retenção vencida, desativação de quem reservou), a primeira pessoa elegível da fila recebe a oferta: a mesa fica retida para ela pelo prazo de `PAR-05` (120 minutos úteis no expediente de `PAR-43`, nunca além do fim do dia da reserva) e ela recebe email. Aceitar confirma a reserva; recusar ou deixar vencer passa a mesa à próxima pessoa. Reserva direta de quem não está na fila nunca passa à frente (`PAR-37`). Mesa de uso exclusivo nunca é oferecida pela fila.
+
+Aba Fila de espera (permissão `waitlist.admin`): inscrições da data por ordem de entrada, com posição, situação, oferta e prazo; oferta manual escolhendo uma mesa disponível para a pessoa (mesma regra, ator registrado); retirada da fila com motivo auditado. O quadro de demanda não atendida mostra inscrições vivas nos próximos 14 dias. O worker da outbox roda a varredura a cada minuto; a correção não depende dele.
+
+## Confirmação de uso e QR
+
+A pessoa confirma o uso da própria reserva de hoje em Minhas reservas ou lendo o QR do recurso. O QR de cada recurso está no painel do recurso (Recursos, selecionar o código) e carrega só o endereço com o código; a reserva é resolvida pela sessão de quem lê. Confirmação é declaração da pessoa, nunca presença, ponto ou produtividade. A liberação de mesa sem confirmação (`PAR-06`) está desativada; quando ativada em Configurações, depois do horário de `PAR-44`, libera só mesas compartilhadas sem confirmação, avisa a pessoa e oferece a mesa à fila. Mesa exclusiva nunca é liberada.
+
+## Salas e cabines
+
+A pessoa busca por data, horário, capacidade e recursos verificados em Salas e cabines e reserva por intervalo (múltiplos de 15 minutos, `PAR-45`). Reservas adjacentes convivem; sobreposição é recusada com o horário ocupado. O título é privado por padrão: terceiros e a administração veem "Reservada". No painel do recurso, Facilities registra capacidade, duração máxima por reserva (`PAR-18`) e recursos verificados. Manutenção, bloqueio, desativação e fechamento de dia listam as reservas de sala no diálogo de conflito, só com cancelamento. Aba Salas e cabines em Reservas e fila: reservas da data e cancelamento com motivo.
+
+## Meu time
+
+O gestor (permissão `team.view`) vê a intenção de presença e as reservas das pessoas que respondem diretamente a ele no cadastro e que ativaram o compartilhamento no próprio perfil. O compartilhamento vem desativado e cada pessoa decide. O vínculo de gestão é mantido pelo RH no cadastro.

@@ -5,13 +5,14 @@ import { ActionForm, SubmitButton } from "@/components/forms";
 import { Button, Field, Input } from "@/components/ui";
 import { verifyTotpAction } from "@/modules/identity/actions";
 
-export function TotpForm() {
+export function TotpForm({ volta }: { volta?: string | null }) {
   const [kind, setKind] = useState<"totp" | "backup">("totp");
   return (
     <ActionForm action={verifyTotpAction}>
       {(state) => (
         <>
           <input type="hidden" name="kind" value={kind} />
+          {volta ? <input type="hidden" name="volta" value={volta} /> : null}
           <Field id="code" label={kind === "totp" ? "Código de 6 dígitos" : "Código de recuperação"}>
             <Input id="code" name="code" inputMode={kind === "totp" ? "numeric" : "text"} autoComplete="one-time-code" required aria-invalid={!!state.error} />
           </Field>

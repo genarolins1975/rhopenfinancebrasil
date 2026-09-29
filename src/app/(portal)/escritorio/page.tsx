@@ -8,7 +8,9 @@ import { requireCurrent } from "@/modules/identity/session";
 import { ISO_DATE } from "@/modules/office/shared";
 import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { publishedMap } from "@/modules/workplace/service";
+import { myQueue, zoneOptions } from "@/modules/waitlist/service";
 import { BookForm } from "./book-form";
+import { JoinQueueForm, LeaveQueueForm } from "./operation-forms";
 
 export default async function EscritorioPage({ searchParams }: { searchParams: Promise<{ data?: string; zona?: string; estado?: string; aviso?: string }> }) {
   const current = await requireCurrent();
@@ -29,9 +31,13 @@ export default async function EscritorioPage({ searchParams }: { searchParams: P
   const states = new Map(items.map((i) => [i.resource.id, i]));
   const key = randomUUID();
   const ctx = loaded?.ctx;
+  // Fila (PAR-30, DEC-25): só quando o dia está aberto, a janela abriu, não há mesa disponível e a pessoa não tem reserva.
+  const queueEntry = (await myQueue(db, current.employee.id, date)).find((q) => q.date === date) ?? null;
+  const canQueue = !!ctx && !failed && date >= localToday() && ctx.officeOpen && ctx.window.open && !ctx.personBooking && items.length > 0 && !items.some((i) => i.availability.canBook) && !queueEntry;
+  const queueZones = canQueue ? await zoneOptions(db) : [];
   return (
     <>
-      <PageHeader title="Escritório" lead="Mapa e lista com o estado de cada mesa para você na data escolhida. Tudo é calculado no servidor." />
+      <PageHeader title="Escritório" lead="Mapa e lista com o estado de cada mesa para você na data escolhida. Tudo é calculado no servidor." actions={<Link href="/escritorio/salas" className="underline">Salas e cabines</Link>} />
       {sp.aviso === "reservado" ? (
         <div className="mb-4">
           <Alert kind="success">Reserva confirmada.</Alert>
@@ -85,6 +91,36 @@ export default async function EscritorioPage({ searchParams }: { searchParams: P
       {ctx && ctx.officeOpen && !ctx.window.open ? (
         <div className="mb-4">
           <Alert kind="info">Reservas para {formatLocalDate(date)} {ctx.window.opensAt ? `abrem em ${formatLocal(ctx.window.opensAt)}` : "ainda não estão abertas"}.</Alert>
+        </div>
+      ) : null}
+      {queueEntry ? (
+        <div className="mb-4">
+          <Alert kind="info" title={queueEntry.offer ? `Mesa ${queueEntry.offer.resourceCode} oferecida a você` : `Você está na fila de espera de ${formatLocalDate(date)}`}>
+            {queueEntry.offer ? (
+              <>
+                Aceite ou recuse até {formatLocal(queueEntry.offer.expiresAt)} em{" "}
+                <Link href="/escritorio/minhas-reservas" className="underline">
+                  Minhas reservas
+                </Link>
+                .
+              </>
+            ) : (
+              <>
+                <span>Quando uma mesa for liberada, você recebe a oferta por email e em Minhas reservas.</span>
+                <span className="mt-2 block">
+                  <LeaveQueueForm entryId={queueEntry.entryId} />
+                </span>
+              </>
+            )}
+          </Alert>
+        </div>
+      ) : null}
+      {canQueue ? (
+        <div className="mb-4">
+          <Card title="Nenhuma mesa disponível para você nesta data">
+            <p className="mb-3 text-sm">Entre na fila de espera. Quando uma mesa for liberada, a primeira pessoa elegível da fila recebe a oferta com prazo para aceitar. Mesas de uso exclusivo nunca são oferecidas pela fila.</p>
+            <JoinQueueForm date={date} zones={queueZones} />
+          </Card>
         </div>
       ) : null}
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">

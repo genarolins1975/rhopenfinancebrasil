@@ -131,7 +131,16 @@ const badgeStyles: Record<string, string> = {
   deactivated: "bg-surface-muted text-text-muted",
   neutral: "bg-surface-muted text-text",
 };
-const statusLabel: Record<string, string> = { invited: "Convidado", active: "Ativo", suspended: "Suspenso", deactivated: "Desativado" };
+const statusLabel: Record<string, string> = {
+  invited: "Convidado",
+  active: "Ativo",
+  suspended: "Suspenso",
+  deactivated: "Desativado",
+  confirmed: "Confirmada",
+  cancelled: "Cancelada",
+  expired: "Vencida",
+  held: "Retida",
+};
 
 export function StatusBadge({ status }: { status: string }) {
   return (

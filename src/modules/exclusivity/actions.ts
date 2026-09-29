@@ -231,9 +231,26 @@ export async function updateResourceAction(_prev: ActionState, fd: FormData): Pr
   const actor = actorOf(current);
   try {
     const attributes: Record<string, unknown> = {};
-    for (const k of ["monitor", "docking", "altura_regulavel", "acessivel"]) attributes[k] = str(fd, k) === "on";
+    const space = str(fd, "resourceType") === "room" || str(fd, "resourceType") === "booth";
+    const keys = space ? ["videoconferencia", "tela", "quadro", "acessivel"] : ["monitor", "docking", "altura_regulavel", "acessivel"];
+    for (const k of keys) attributes[k] = str(fd, k) === "on";
     if (str(fd, "observacao")) attributes.observacao = str(fd, "observacao");
-    await updateResourceAttributes(db, actor, str(fd, "resourceId"), { attributes, zoneId: str(fd, "zoneId") || null, verified: str(fd, "verified") === "on" });
+    let capacity: number | null | undefined;
+    if (space) {
+      const max = str(fd, "max_duration_minutes");
+      if (max) {
+        const n = Number(max);
+        if (!Number.isInteger(n) || n < 15 || n > 1440 || n % 15 !== 0) return { error: "Duração máxima: múltiplo de 15 entre 15 e 1440 minutos." };
+        attributes.max_duration_minutes = n;
+      }
+      const cap = str(fd, "capacity");
+      if (cap) {
+        const n = Number(cap);
+        if (!Number.isInteger(n) || n < 1 || n > 200) return { error: "Capacidade: inteiro entre 1 e 200." };
+        capacity = n;
+      } else capacity = null;
+    }
+    await updateResourceAttributes(db, actor, str(fd, "resourceId"), { attributes, zoneId: str(fd, "zoneId") || null, verified: str(fd, "verified") === "on", capacity });
     revalidatePath(RES);
     return { ok: true, message: "Atributos gravados." };
   } catch (e) {

@@ -20,4 +20,4 @@
 | `operacao/privacidade-e-protecao-de-dados.md` | Finalidade, acesso, retenção e decisões pendentes de base legal |
 | `design/tokens.md` | Tokens de cor, tipografia, espaçamento, bordas, estados e foco |
 | `operacao/implantacao.md` (planejado para a Etapa 5) | Ambientes, domínio, publicação autorizada, impacto e plano de retorno |
-| `operacao/guia-rh-adm.md` | Guia do RH e ADM (Etapa 1: cadastro, importação, primeiro acesso, suspensão, desativação, readmissão, acessos, auditoria) |
+| `operacao/guia-rh-adm.md` | Guia do RH e ADM: cadastro, importação, acessos, auditoria (Etapa 1); planta, recursos, calendário, exclusividade, reservas (Etapa 2); fila, confirmação de uso e QR, salas e cabines, Meu time (Etapa 3) |

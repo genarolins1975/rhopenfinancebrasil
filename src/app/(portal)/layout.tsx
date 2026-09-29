@@ -11,7 +11,17 @@ export default async function PortalLayout({ children }: { children: React.React
     { href: "/inicio", label: "Início" },
     { href: "/semana", label: "Minha semana" },
     { href: "/escritorio", label: "Escritório" },
+    { href: "/escritorio/salas", label: "Salas e cabines" },
     { href: "/escritorio/minhas-reservas", label: "Minhas reservas" },
+  ];
+  if (current.access.permissions.has("team.view")) items.push({ href: "/escritorio/meu-time", label: "Meu time" });
+  items.push({ href: "/perfil", label: "Perfil" });
+  // No celular, a barra inferior mantém cinco destinos; salas e Meu time ficam acessíveis pelas telas de Escritório e Início.
+  const mobileItems = [
+    { href: "/inicio", label: "Início" },
+    { href: "/semana", label: "Semana" },
+    { href: "/escritorio", label: "Escritório" },
+    { href: "/escritorio/minhas-reservas", label: "Reservas" },
     { href: "/perfil", label: "Perfil" },
   ];
   return (
@@ -54,7 +64,7 @@ export default async function PortalLayout({ children }: { children: React.React
           {children}
         </main>
         <nav aria-label="Navegação principal" className="fixed inset-x-0 bottom-0 border-t border-border bg-surface md:hidden">
-          <NavLinks items={items} horizontal />
+          <NavLinks items={mobileItems} horizontal />
         </nav>
       </div>
     </div>

@@ -1,28 +1,47 @@
 import { randomUUID } from "node:crypto";
+import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 import { Card, EmptyState, Input, PageHeader, Table, td, th } from "@/components/ui";
 import { db } from "@/db/client";
 import { employee } from "@/db/schema";
 import { listBookingsAdmin } from "@/modules/booking/service";
+import { usageOfDeskBookings } from "@/modules/checkin/service";
 import { requireAnyPermission } from "@/modules/identity/session";
 import { ISO_DATE } from "@/modules/office/shared";
-import { formatLocalDate, localToday } from "@/modules/shared/dates";
-import { listResources } from "@/modules/workplace/service";
+import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
+import { listSpaceBookingsAdmin } from "@/modules/spaces/service";
+import { listQueue, unmetDemand } from "@/modules/waitlist/service";
+import { availableDesksFor, listResources } from "@/modules/workplace/service";
 import { CancelForm } from "@/app/(portal)/escritorio/book-form";
 import { OnBehalfForm } from "./on-behalf-form";
+import { AdminCancelSpaceForm, ManualOfferForm, RemoveFromQueueForm } from "./queue-forms";
 
-export default async function ReservasAdminPage({ searchParams }: { searchParams: Promise<{ data?: string }> }) {
-  const current = await requireAnyPermission(["booking.admin.manage", "booking.on_behalf.create"]);
+const ORIGIN: Record<string, string> = { self: "própria", week_plan: "semana", on_behalf: "em nome", waitlist_offer: "fila", admin_realloc: "realocação" };
+const ENTRY: Record<string, string> = { waiting: "em espera", offered: "com oferta", accepted: "aceitou", expired: "oferta vencida", cancelled: "saiu ou foi retirada" };
+
+export default async function ReservasAdminPage({ searchParams }: { searchParams: Promise<{ data?: string; aba?: string }> }) {
+  const current = await requireAnyPermission(["booking.admin.manage", "booking.on_behalf.create", "waitlist.admin"]);
   const p = current.access.permissions;
   const sp = await searchParams;
   const date = sp.data && ISO_DATE.test(sp.data) ? sp.data : localToday();
-  const bookings = await listBookingsAdmin(db, { date });
-  const people = p.has("booking.on_behalf.create") ? await db.select({ id: employee.id, name: employee.fullName }).from(employee).where(eq(employee.status, "active")).orderBy(asc(employee.fullName)) : [];
-  const desks = p.has("booking.on_behalf.create") ? await listResources(db, { type: "desk" }) : [];
+  const tabs: Array<[string, string]> = [];
+  if (p.has("booking.admin.manage") || p.has("booking.on_behalf.create")) tabs.push(["mesas", "Mesas"]);
+  if (p.has("waitlist.admin")) tabs.push(["fila", "Fila de espera"]);
+  if (p.has("booking.admin.manage")) tabs.push(["salas", "Salas e cabines"]);
+  const aba = tabs.some(([k]) => k === sp.aba) ? sp.aba! : tabs[0][0];
+  const tab = (key: string, label: string) => (
+    <Link key={key} href={`?aba=${key}&data=${date}`} aria-current={aba === key ? "page" : undefined} className={`rounded-md px-3 py-1.5 text-sm ${aba === key ? "bg-primary text-white" : "underline"}`}>
+      {label}
+    </Link>
+  );
   return (
     <>
-      <PageHeader title="Reservas" lead="Reservas por data, reserva em nome de outra pessoa e cancelamento administrativo com motivo e comunicação." />
+      <PageHeader title="Reservas" lead="Mesas, fila de espera e salas por data. Reserva em nome de outra pessoa, oferta manual e cancelamento administrativo com motivo e comunicação." />
+      <nav aria-label="Abas" className="mb-4 flex flex-wrap gap-2">
+        {tabs.map(([k, l]) => tab(k, l))}
+      </nav>
       <form method="get" className="mb-4 flex flex-wrap items-end gap-3" aria-label="Data">
+        <input type="hidden" name="aba" value={aba} />
         <label htmlFor="data" className="flex flex-col gap-1 text-sm font-medium">
           Data
           <Input id="data" name="data" type="date" defaultValue={date} />
@@ -31,47 +50,186 @@ export default async function ReservasAdminPage({ searchParams }: { searchParams
           Aplicar
         </button>
       </form>
-      <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        <Card title={`Reservas em ${formatLocalDate(date)} (${bookings.length})`}>
-          {bookings.length === 0 ? (
-            <EmptyState title="Nenhuma reserva ativa na data" />
-          ) : (
-            <Table caption="Reservas ativas">
-              <thead>
-                <tr>
-                  <th className={th}>Mesa</th>
-                  <th className={th}>Pessoa</th>
-                  <th className={th}>Origem</th>
-                  <th className={th}>Situação</th>
-                  {p.has("booking.admin.manage") ? <th className={th}>Ação</th> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {bookings.map((b) => (
-                  <tr key={b.id}>
-                    <td className={td}>{b.code}</td>
-                    <td className={td}>{b.employeeName}</td>
-                    <td className={td}>{b.origin}</td>
-                    <td className={td}>{b.status === "held" ? "retida (oferta da fila)" : "confirmada"}</td>
-                    {p.has("booking.admin.manage") ? (
-                      <td className={td}>
-                        <CancelForm bookingId={b.id} admin label="Cancelar com motivo" />
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </Card>
-        <Card title="Reservar em nome de alguém">
-          {p.has("booking.on_behalf.create") ? (
-            <OnBehalfForm people={people} desks={desks.map((d) => ({ id: d.id, code: d.code }))} date={date} idempotencyKey={randomUUID()} />
-          ) : (
-            <p className="text-sm text-text-muted">Exige a permissão própria de reserva em nome (DIR-011).</p>
-          )}
-        </Card>
-      </div>
+      {aba === "mesas" ? await DesksTab({ date, canManage: p.has("booking.admin.manage"), canOnBehalf: p.has("booking.on_behalf.create") }) : null}
+      {aba === "fila" ? await QueueTab({ date }) : null}
+      {aba === "salas" ? await SpacesTab({ date, viewerId: current.employee.id }) : null}
     </>
+  );
+}
+
+async function DesksTab({ date, canManage, canOnBehalf }: { date: string; canManage: boolean; canOnBehalf: boolean }) {
+  const bookings = await listBookingsAdmin(db, { date });
+  const use = await usageOfDeskBookings(db, bookings.map((b) => b.id));
+  const people = canOnBehalf ? await db.select({ id: employee.id, name: employee.fullName }).from(employee).where(eq(employee.status, "active")).orderBy(asc(employee.fullName)) : [];
+  const desks = canOnBehalf ? await listResources(db, { type: "desk" }) : [];
+  return (
+    <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+      <Card title={`Reservas de mesa em ${formatLocalDate(date)} (${bookings.length})`}>
+        {bookings.length === 0 ? (
+          <EmptyState title="Nenhuma reserva ativa na data" />
+        ) : (
+          <Table caption="Reservas de mesa ativas">
+            <thead>
+              <tr>
+                <th className={th}>Mesa</th>
+                <th className={th}>Pessoa</th>
+                <th className={th}>Origem</th>
+                <th className={th}>Situação</th>
+                {canManage ? <th className={th}>Ação</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.map((b) => (
+                <tr key={b.id}>
+                  <td className={td}>{b.code}</td>
+                  <td className={td}>{b.employeeName}</td>
+                  <td className={td}>{ORIGIN[b.origin] ?? b.origin}</td>
+                  <td className={td}>
+                    {b.status === "held" ? `retida para oferta da fila${b.holdExpiresAt ? ` até ${formatLocal(b.holdExpiresAt, "dd/MM HH:mm")}` : ""}` : "confirmada"}
+                    {use.get(b.id) ? <span className="block text-xs text-text-muted">uso declarado {use.get(b.id)!.method === "qr" ? "pelo QR" : "pelo portal"}</span> : null}
+                  </td>
+                  {canManage ? (
+                    <td className={td}>
+                      <CancelForm bookingId={b.id} admin label="Cancelar com motivo" />
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+        <p className="mt-3 text-xs text-text-muted">Uso declarado é declaração da pessoa, não presença física nem ponto.</p>
+      </Card>
+      <Card title="Reservar em nome de alguém">
+        {canOnBehalf ? (
+          <OnBehalfForm people={people} desks={desks.map((d) => ({ id: d.id, code: d.code }))} date={date} idempotencyKey={randomUUID()} />
+        ) : (
+          <p className="text-sm text-text-muted">Exige a permissão própria de reserva em nome (DIR-011).</p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+async function QueueTab({ date }: { date: string }) {
+  const queue = await listQueue(db, { date });
+  const demand = await unmetDemand(db);
+  const live = queue.filter((q) => q.status === "waiting" || (q.status === "offered" && q.offer?.live));
+  const options = new Map<string, Array<{ id: string; code: string }>>();
+  for (const q of live.filter((x) => x.status === "waiting")) options.set(q.entryId, await availableDesksFor(db, q.employeeId, date));
+  const liveOf = (q: (typeof queue)[number]) => q.status === "waiting" || (q.status === "offered" && !!q.offer?.live);
+  const positions = new Map(queue.filter(liveOf).map((q, i) => [q.entryId, i + 1]));
+  return (
+    <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+      <Card title={`Fila de ${formatLocalDate(date)} (${live.length} viva(s))`}>
+        {queue.length === 0 ? (
+          <EmptyState title="Ninguém entrou na fila nesta data" />
+        ) : (
+          <Table caption="Inscrições na fila, por ordem de entrada">
+            <thead>
+              <tr>
+                <th className={th}>Posição</th>
+                <th className={th}>Pessoa</th>
+                <th className={th}>Situação</th>
+                <th className={th}>Oferta</th>
+                <th className={th}>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((q) => {
+                const isLive = liveOf(q);
+                return (
+                  <tr key={q.entryId}>
+                    <td className={td}>{positions.get(q.entryId) ?? "—"}</td>
+                    <td className={td}>
+                      {q.employeeName}
+                      <span className="block text-xs text-text-muted">desde {formatLocal(q.createdAt, "dd/MM HH:mm")}</span>
+                      {q.preferences.zoneCode ? <span className="block text-xs text-text-muted">prefere zona {q.preferences.zoneCode}</span> : null}
+                    </td>
+                    <td className={td}>{q.status === "offered" && !q.offer?.live ? "oferta vencida (expira na próxima escrita)" : (ENTRY[q.status] ?? q.status)}</td>
+                    <td className={td}>{q.offer ? `${q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : "—"}</td>
+                    <td className={td}>
+                      {isLive ? (
+                        <div className="flex min-w-[200px] flex-col gap-3">
+                          {q.status === "waiting" ? <ManualOfferForm entryId={q.entryId} desks={options.get(q.entryId) ?? []} /> : null}
+                          <RemoveFromQueueForm entryId={q.entryId} />
+                        </div>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        )}
+        <p className="mt-3 text-xs text-text-muted">A oferta automática segue a ordem de entrada e a mesma regra de disponibilidade da reserva direta. Mesa de uso exclusivo nunca é oferecida pela fila.</p>
+      </Card>
+      <Card title="Demanda não atendida (próximos 14 dias)">
+        {demand.length === 0 ? (
+          <p className="text-sm text-text-muted">Nenhuma inscrição viva na fila.</p>
+        ) : (
+          <Table caption="Inscrições vivas por data">
+            <thead>
+              <tr>
+                <th className={th}>Data</th>
+                <th className={th}>Em espera</th>
+                <th className={th}>Com oferta</th>
+              </tr>
+            </thead>
+            <tbody>
+              {demand.map((d) => (
+                <tr key={d.date}>
+                  <td className={td}>
+                    <Link href={`?aba=fila&data=${d.date}`} className="underline">
+                      {formatLocalDate(d.date)}
+                    </Link>
+                  </td>
+                  <td className={td}>{d.waiting}</td>
+                  <td className={td}>{d.offered}</td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+        <p className="mt-3 text-xs text-text-muted">Numerador: inscrições em espera ou com oferta, por data, a partir de hoje. Não há denominador: a fila mede pedidos sem mesa, não pessoas que desistiram de pedir. Fonte: tabela da fila na consulta.</p>
+      </Card>
+    </div>
+  );
+}
+
+async function SpacesTab({ date, viewerId }: { date: string; viewerId: string }) {
+  const rows = await listSpaceBookingsAdmin(db, viewerId, { date });
+  return (
+    <Card title={`Salas e cabines em ${formatLocalDate(date)} (${rows.length})`}>
+      {rows.length === 0 ? (
+        <EmptyState title="Nenhuma reserva de sala ou cabine na data" />
+      ) : (
+        <Table caption="Reservas de sala e cabine">
+          <thead>
+            <tr>
+              <th className={th}>Recurso</th>
+              <th className={th}>Horário</th>
+              <th className={th}>Pessoa</th>
+              <th className={th}>Título</th>
+              <th className={th}>Ação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td className={td}>{r.code}</td>
+                <td className={td}>{r.slot}</td>
+                <td className={td}>{r.employeeName}</td>
+                <td className={td}>{r.title ?? <span className="text-text-muted">privado</span>}</td>
+                <td className={td}>
+                  <AdminCancelSpaceForm bookingId={r.id} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+      <p className="mt-3 text-xs text-text-muted">Título privado continua oculto também para a administração. Manutenção, bloqueio e fechamento de dia tratam as reservas de sala no diálogo de conflito, só com cancelamento.</p>
+    </Card>
   );
 }

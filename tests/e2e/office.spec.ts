@@ -60,11 +60,11 @@ test.describe("escritório: mapa, lista e reservas", () => {
     // a página é revalidada após a ação: o estado passa a "Sua reserva" e o botão vira cancelar
     await expect(page.getByText("Sua reserva").first()).toBeVisible();
     await page.goto("/escritorio/minhas-reservas");
-    await expect(page.getByRole("table", { name: "Reservas futuras" })).toContainText(code);
+    await expect(page.getByRole("table", { name: "Reservas de mesa futuras" })).toContainText(code);
     await expectNoA11yViolations(page);
     await page.getByRole("button", { name: "Cancelar reserva" }).first().click();
     // a página é revalidada: a reserva sai da lista de próximas
-    await expect(page.getByRole("table", { name: "Reservas futuras" }).or(page.getByText("Nenhuma reserva futura"))).not.toContainText(code);
+    await expect(page.getByRole("table", { name: "Reservas de mesa futuras" }).or(page.getByText("Nenhuma reserva de mesa futura"))).not.toContainText(code);
   });
 
   test("titular vê a própria mesa habitual no início e como 'Sua mesa de uso exclusivo' no mapa", async ({ page }) => {
@@ -174,8 +174,8 @@ test.describe("administração do escritório", () => {
     await page.goto(`/escritorio/recursos/${code}?data=${date}`);
     await expect(page.getByRole("button", { name: "Reservar" })).toHaveCount(0);
     await page.goto("/escritorio/minhas-reservas");
-    await expect(page.getByRole("table", { name: "Reservas futuras" }).or(page.getByText("Nenhuma reserva futura"))).not.toContainText(code);
-    if (realloc) await expect(page.getByRole("table", { name: "Reservas futuras" })).toContainText(targetCode);
+    await expect(page.getByRole("table", { name: "Reservas de mesa futuras" }).or(page.getByText("Nenhuma reserva de mesa futura"))).not.toContainText(code);
+    if (realloc) await expect(page.getByRole("table", { name: "Reservas de mesa futuras" })).toContainText(targetCode);
   });
 
   test("recursos, planta, reservas administrativas e conflitos pendentes vazios; sem rolagem horizontal", async ({ page }) => {

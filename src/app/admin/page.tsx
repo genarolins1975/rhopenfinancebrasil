@@ -22,9 +22,12 @@ export default async function AdminHome() {
   const cap = await capacityOn(db, localToday());
   const { pendingConflicts } = await import("@/modules/office/conflicts");
   const conflicts = await pendingConflicts(db, localToday());
+  const { unmetDemand } = await import("@/modules/waitlist/service");
+  const demand = await unmetDemand(db);
+  const waitingToday = demand.find((d) => d.date === localToday());
   return (
     <>
-      <PageHeader title="O que precisa de atenção hoje" lead="Números do cadastro, das notificações e do escritório na data de hoje. Fila e atendimentos chegam nas próximas etapas." />
+      <PageHeader title="O que precisa de atenção hoje" lead="Números do cadastro, das notificações, do escritório e da fila na data de hoje. Atendimentos chegam na Etapa 4." />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Pessoas ativas" value={o.employees.active} help="Cadastro com acesso definido e situação ativa." />
         <Stat label="Convidadas sem convite válido" value={o.invitedWithoutActiveInvitation} help="Precisam de reenvio para conseguir entrar." />
@@ -40,6 +43,8 @@ export default async function AdminHome() {
         <Stat label="Mesas exclusivas hoje" value={cap.desks.exclusive} help="Sem reserva não é vaga compartilhada nem ocupação." />
         <Stat label="Indisponíveis hoje" value={cap.desks.maintenance + cap.desks.blocked + cap.desks.retired} help="Manutenção, bloqueio e desativadas." />
         <Stat label="Conflitos pendentes" value={conflicts.length} help="Reservas ativas futuras que deixaram de valer. O normal é zero; qualquer linha é incidente." />
+        <Stat label="Fila de espera hoje" value={(waitingToday?.waiting ?? 0) + (waitingToday?.offered ?? 0)} help="Pedidos de mesa sem atendimento na data de hoje: em espera mais com oferta aberta." />
+        <Stat label="Fila nos próximos 14 dias" value={demand.reduce((n, d) => n + d.waiting + d.offered, 0)} help="Demanda não atendida registrada. Não conta quem desistiu de pedir." />
       </div>
       <details className="mt-4 text-sm">
         <summary className="cursor-pointer underline">Como ler as taxas do escritório (numerador, denominador, período, fonte, limitações)</summary>

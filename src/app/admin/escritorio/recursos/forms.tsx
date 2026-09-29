@@ -38,8 +38,22 @@ export function NewResourceForm({ zones }: { zones: Zone[] }) {
   );
 }
 
-export function AttributesForm({ resourceId, zones, current, zoneId }: { resourceId: string; zones: Zone[]; current: Record<string, unknown>; zoneId: string | null }) {
+const DESK_ATTRS: Array<[string, string]> = [
+  ["monitor", "Monitor"],
+  ["docking", "Docking"],
+  ["altura_regulavel", "Altura regulável"],
+  ["acessivel", "Posição acessível"],
+];
+const SPACE_ATTRS: Array<[string, string]> = [
+  ["videoconferencia", "Videoconferência"],
+  ["tela", "Tela ou TV"],
+  ["quadro", "Quadro"],
+  ["acessivel", "Acessível"],
+];
+
+export function AttributesForm({ resourceId, zones, current, zoneId, type = "desk", capacity = null }: { resourceId: string; zones: Zone[]; current: Record<string, unknown>; zoneId: string | null; type?: "desk" | "room" | "booth"; capacity?: number | null }) {
   const flag = (k: string) => current[k] === true;
+  const attrs = type === "desk" ? DESK_ATTRS : SPACE_ATTRS;
   return (
     <SimpleForm action={updateResourceAction} submitLabel="Gravar atributos" variant="secondary">
       <input type="hidden" name="resourceId" value={resourceId} />
@@ -55,18 +69,24 @@ export function AttributesForm({ resourceId, zones, current, zoneId }: { resourc
       </Field>
       <fieldset className="grid gap-1 text-sm">
         <legend className="text-sm font-medium">Atributos</legend>
-        {[
-          ["monitor", "Monitor"],
-          ["docking", "Docking"],
-          ["altura_regulavel", "Altura regulável"],
-          ["acessivel", "Posição acessível"],
-        ].map(([k, label]) => (
+        {attrs.map(([k, label]) => (
           <label key={k} className="flex min-h-7 items-center gap-2">
             <input type="checkbox" name={k} defaultChecked={flag(k)} className="h-5 w-5" />
             {label}
           </label>
         ))}
       </fieldset>
+      {type !== "desk" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field id={`cap-${resourceId}`} label="Capacidade (pessoas)">
+            <Input id={`cap-${resourceId}`} name="capacity" type="number" min={1} max={200} defaultValue={capacity ?? ""} />
+          </Field>
+          <Field id={`max-${resourceId}`} label="Duração máxima por reserva, em minutos (vazio = sem limite; PAR-18)">
+            <Input id={`max-${resourceId}`} name="max_duration_minutes" type="number" min={15} step={15} max={1440} defaultValue={typeof current.max_duration_minutes === "number" ? current.max_duration_minutes : ""} />
+          </Field>
+        </div>
+      ) : null}
+      <input type="hidden" name="resourceType" value={type} />
       <Field id={`obs-${resourceId}`} label="Observação">
         <Input id={`obs-${resourceId}`} name="observacao" defaultValue={typeof current.observacao === "string" ? current.observacao : ""} />
       </Field>
@@ -194,8 +214,12 @@ export function SettingsForm({ settings }: { settings: Record<string, string> })
   const items: Array<[string, string, string]> = [
     ["booking_open_weekday", "Dia da semana de abertura (1 = segunda, 7 = domingo)", "number"],
     ["booking_open_time", "Hora de abertura (HH:MM, horário de Brasília)", "text"],
-    ["booking_horizon_weeks", "Horizonte máximo em semanas", "number"],
+    ["booking_horizon_weeks", "Horizonte máximo em semanas (mesas e salas)", "number"],
     ["exception_max_days", "Duração máxima de liberação temporária, em dias (PAR-35)", "number"],
+    ["offer_minutes", "Prazo da oferta da fila, em minutos úteis (PAR-05)", "number"],
+    ["business_hours_start", "Início do expediente para contar o prazo da oferta (HH:MM)", "text"],
+    ["business_hours_end", "Fim do expediente para contar o prazo da oferta (HH:MM)", "text"],
+    ["checkin_release_time", "Horário limite da confirmação de uso, se a liberação estiver ativa (HH:MM)", "text"],
   ];
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -207,6 +231,15 @@ export function SettingsForm({ settings }: { settings: Record<string, string> })
           </Field>
         </SimpleForm>
       ))}
+      <SimpleForm action={settingAction} submitLabel="Gravar" variant="secondary">
+        <input type="hidden" name="key" value="checkin_release_enabled" />
+        <Field id="set-checkin_release_enabled" label="Liberar mesa compartilhada sem confirmação de uso (PAR-06). Mesa exclusiva nunca é liberada.">
+          <Select id="set-checkin_release_enabled" name="value" defaultValue={settings.checkin_release_enabled ?? "false"}>
+            <option value="false">Não (padrão até o piloto)</option>
+            <option value="true">Sim</option>
+          </Select>
+        </Field>
+      </SimpleForm>
     </div>
   );
 }

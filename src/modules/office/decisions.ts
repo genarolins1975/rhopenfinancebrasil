@@ -27,7 +27,7 @@ export async function withReallocOptions(db: DbOrTx, conflicts: IncompatibleBook
   const { availableDesksFor } = await import("@/modules/workplace/service");
   const out: ConflictView[] = [];
   for (const c of conflicts) {
-    const options = c.kind === "space" ? [] : await availableDesksFor(db, c.employeeId, c.date, [...excludeResourceIds, c.resourceId], c.bookingId);
+    const options = c.kind === "space" || c.status === "held" ? [] : await availableDesksFor(db, c.employeeId, c.date, [...excludeResourceIds, c.resourceId], c.bookingId);
     out.push({ ...c, options });
   }
   return out;

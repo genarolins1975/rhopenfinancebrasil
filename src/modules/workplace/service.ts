@@ -4,7 +4,7 @@ import { deskBooking, employee, floorPlanPlacement, floorPlanVersion, officeCale
 import { recordAudit } from "@/modules/audit/audit";
 import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ValidationError } from "@/modules/shared/errors";
-import { type Actor, advisoryExclusiveDay, assertIsoDate, assertPermission, assertUuid, lockDaysAndPeople, lockResources, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
+import { type Actor, advisoryExclusiveDay, assertIsoDate, assertPermission, assertUuid, lockDaysAndPeople, lockResources, readSettings, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
 import { applyConflictDecisions, type ConflictDecision, type IncompatibleBooking, listActiveBookingsAll as listActiveBookings } from "@/modules/office/conflicts";
 
 /* Inventário. */
@@ -230,19 +230,41 @@ export async function openDay(db: Db, actor: Actor, input: { date: string; reaso
 
 /* Configurações (PAR-01, PAR-35). */
 
-const SETTING_KEYS = ["booking_open_weekday", "booking_open_time", "booking_horizon_weeks", "exception_max_days"] as const;
+const SETTING_KEYS = [
+  "booking_open_weekday",
+  "booking_open_time",
+  "booking_horizon_weeks",
+  "exception_max_days",
+  "offer_minutes",
+  "business_hours_start",
+  "business_hours_end",
+  "checkin_release_enabled",
+  "checkin_release_time",
+] as const;
+const TIME_KEYS = ["booking_open_time", "business_hours_start", "business_hours_end", "checkin_release_time"];
+const INT_RANGES: Record<string, [number, number]> = { booking_open_weekday: [1, 7], booking_horizon_weeks: [1, 52], exception_max_days: [1, 365], offer_minutes: [15, 1440] };
 
 export async function updateSetting(db: Db, actor: Actor, key: string, value: string) {
   await assertPermission(db, actor, "settings.manage");
   if (!(SETTING_KEYS as readonly string[]).includes(key)) throw new ValidationError("Configuração desconhecida.");
   let parsed: unknown;
-  if (key === "booking_open_time") {
+  if (TIME_KEYS.includes(key)) {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new ValidationError("Hora inválida (HH:MM).");
     parsed = value;
+  } else if (key === "checkin_release_enabled") {
+    if (value !== "true" && value !== "false") throw new ValidationError("Valor inválido: use sim ou não.");
+    parsed = value === "true";
   } else {
     const n = Number(value);
-    if (!Number.isInteger(n) || n < 1 || n > (key === "booking_open_weekday" ? 7 : 365)) throw new ValidationError("Valor inválido.");
+    const [min, max] = INT_RANGES[key];
+    if (!Number.isInteger(n) || n < min || n > max) throw new ValidationError(`Valor inválido: inteiro entre ${min} e ${max}.`);
     parsed = n;
+  }
+  if (key === "business_hours_start" || key === "business_hours_end") {
+    const current = await readSettings(db);
+    const start = key === "business_hours_start" ? String(parsed) : current.businessHoursStart;
+    const end = key === "business_hours_end" ? String(parsed) : current.businessHoursEnd;
+    if (end <= start) throw new ValidationError("O fim do expediente precisa ser depois do início.");
   }
   await withOfficeTx(db, async (tx) => {
     await shareLockEmployee(tx, actor.employeeId);

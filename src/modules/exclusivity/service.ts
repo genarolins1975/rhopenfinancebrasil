@@ -599,16 +599,19 @@ export async function applyDeactivationEffects(tx: Tx, actor: Actor, employeeId:
   const groups = await tx.select({ groupId: accessGroupMember.groupId }).from(accessGroupMember).where(and(eq(accessGroupMember.employeeId, employeeId), or(isNull(accessGroupMember.validTo), gte(accessGroupMember.validTo, localToday()))));
   for (const g of [...new Set(groups.map((x) => x.groupId))].sort()) await tx.execute(sql`select 1 from access_group where id = ${g} for update`);
   await lockResources(tx, [...all.map((b) => b.resourceId), ...preview.assignments.map((a) => a.resourceId)]);
+  // Fila da pessoa primeiro: ofertas abertas recusadas e inscrições encerradas, para que a retenção dela não entre no
+  // diálogo de conflito como "oferta retirada, você continua na fila".
+  const queue = await closeQueueForPerson(tx, actor, employeeId, `desativação: ${reason}`);
   // Releitura depois dos locks: o conjunto pode ter mudado.
   const again = await deactivationOfficePreview(tx, employeeId);
   const decide = (b: IncompatibleBooking) => ({ bookingId: b.bookingId, action: "cancel" as const, reason: b.employeeId === employeeId ? `desativação: ${reason}` : `desativação do titular da mesa: ${reason}` });
   await applyConflictDecisions(tx, actor, again.ownBookings, again.ownBookings.map(decide), { excludeResourceIds: [], notice: "Cancelada em razão da desativação do cadastro." });
   await applyConflictDecisions(tx, actor, again.thirdPartyBookings, again.thirdPartyBookings.map(decide), { excludeResourceIds: [], notice: "A mesa passou a vínculo em revisão pelo RH." });
-  const queue = await closeQueueForPerson(tx, actor, employeeId, `desativação: ${reason}`);
-  for (const b of again.ownBookings) {
-    await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidatesByDate.get(b.date) ?? [], requestId: actor.requestId });
+  // Mesas liberadas (reservas canceladas e retenções da própria pessoa) vão à próxima pessoa elegível da fila.
+  const released = [...again.ownBookings.filter((b) => b.kind !== "space").map((b) => ({ resourceId: b.resourceId, date: b.date })), ...queue.releasedDesks];
+  for (const b of released) {
+    await offerNext(tx, { resourceId: b.resourceId, date: b.date, candidateIds: candidatesByDate.get(b.date) ?? (await lockQueueCandidates(tx, b.date)).filter((c) => c !== employeeId), requestId: actor.requestId });
   }
-  void queue;
   // Integrante de grupo desativado deixa de ser vigente no grupo (DIR-032): vigência encerrada na data de saída.
   const endOn = localToday();
   const memberships = await tx

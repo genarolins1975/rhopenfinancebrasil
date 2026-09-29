@@ -1,2 +1,3 @@
 import { config } from "dotenv";
-config({ path: ".env.test", override: true });
+// TEST_ENV_FILE permite bancos de teste isolados para execuções paralelas (revisão independente); padrão .env.test.
+config({ path: process.env.TEST_ENV_FILE ?? ".env.test", override: true });

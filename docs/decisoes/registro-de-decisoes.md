@@ -43,8 +43,8 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-02` | Unidade de reserva de mesa | Dia inteiro | RH | |
 | `PAR-03` | Diretor sujeito ao limite de uma reserva efetiva de mesa por dia; a unicidade por pessoa e data no banco é requisito (`REQ-13`), não parâmetro | Sim | RH | `DIR-012` |
 | `PAR-04` | Confirmação atômica da semana | Tudo ou nada, com opção de aceitar seleção menor | RH | |
-| `PAR-05` | Prazo de oferta da fila | 2 horas úteis dentro do calendário do escritório | RH e Facilities | Configurável |
-| `PAR-06` | Liberação automática por falta de confirmação de uso | Desativada | RH | Nunca remove exclusividade |
+| `PAR-05` | Prazo de oferta da fila | 2 horas úteis (120 minutos) dentro do calendário do escritório, contadas no expediente de `PAR-43`; nunca além do fim do dia local da reserva | RH e Facilities | Configurável em `office_settings.offer_minutes` (Etapa 3) |
+| `PAR-06` | Liberação automática por falta de confirmação de uso | Desativada | RH | Nunca remove exclusividade nem toca mesa de classe exclusiva; quando ativada, só depois do horário de `PAR-44` (Etapa 3) |
 | `PAR-07` | Validade do convite | 7 dias | RH | |
 | `PAR-08` | Validade do token de recuperação | 60 minutos | RH e ADM | Padrão da biblioteca |
 | `PAR-09` | Sessão | 7 dias com renovação diária; sessões administrativas de 12 horas | ADM | Revogação imediata em eventos críticos |
@@ -81,6 +81,9 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `PAR-40` | Escopo de `role.assign.standard` | Só os perfis Colaborador e Gestor; toda permissão direta exige `role.assign.privileged` | ADM | Revisão da Etapa 1 |
 | `PAR-41` | Limite anti oráculo da importação | 5 prévias e 3.000 linhas por pessoa por hora | RH e encarregado | Revisão da Etapa 1 |
 | `PAR-42` | Sessão de 12 horas para privilegiados | Conferida em toda página e toda action, não só no ambiente administrativo | ADM | Revisão da Etapa 1 |
+| `PAR-43` | Expediente para contar horas úteis da oferta | 09:00 às 18:00, segunda a sexta, exceto dias fechados no calendário do escritório | RH e Facilities | Valor adotado pelo Executor sem fonte oficial; configurável (`business_hours_start`, `business_hours_end`) |
+| `PAR-44` | Horário limite da confirmação de uso, se `PAR-06` for ativado | 11:00 do dia da reserva | RH | Sem efeito enquanto `PAR-06` estiver desativado |
+| `PAR-45` | Grade e limites de salas e cabines | Múltiplos de 15 minutos, intervalo no mesmo dia local, duração mínima de 15 minutos, horizonte igual ao das mesas; limite máximo por recurso opcional (`PAR-18`) | Facilities | Etapa 3 |
 
 ## C. Decisões técnicas propostas
 
@@ -110,6 +113,13 @@ Referência: 28/09/2026. Três categorias: requisito aprovado (vem do prompt com
 | `DEC-22` | Uma única versão de planta publicada por vez; publicar aposenta a anterior; posições vivem por versão e `resource.id` não muda | Várias versões ativas | Adotada na Etapa 2 (DIR-030) |
 | `DEC-23` | Fechar dia do escritório trata reservas só por cancelamento com comunicação, nunca por realocação | Realocação para outro dia | Adotada na Etapa 2 (DIR-033) |
 | `DEC-24` | Dentro da semana corrente as reservas estão sempre abertas para datas de hoje em diante; a semana seguinte abre no instante configurado; semanas posteriores permanecem fechadas até a quinta da semana anterior a elas | Horizonte fixo em dias | Adotada na Etapa 2 (PAR-01) |
+| `DEC-25` | Inscrição na fila só quando não há mesa disponível para a pessoa na data (além de `PAR-30`); escritório fechado ou janela fechada recusam a inscrição | Fila aberta sempre, como lista de interesse | Adotada na Etapa 3 |
+| `DEC-26` | Salas e cabines seguem só o horizonte das mesas; a abertura semanal de quinta às 10h não se aplica a elas | Mesma janela das mesas | Adotada na Etapa 3, sujeita a validação de Facilities |
+| `DEC-27` | Varreduras do escritório (oferta vencida passa à próxima pessoa, mesa livre com fila recebe oferta, liberação de `PAR-06`) rodam no mesmo worker da outbox, a cada minuto; `pg-boss` não foi adotado porque a correção não depende de agendamento (`DIR-034`) | `pg-boss` com job em `expires_at` (`DEC-16`) | Adotada na Etapa 3; revisita `DEC-16` |
+| `DEC-28` | Meu time mostra só subordinados diretos ativos (`manager_employee_id`) e só o conteúdo de quem ativou o compartilhamento no próprio perfil (padrão desativado, alteração auditada); títulos de sala seguem a visibilidade da reserva | Visibilidade automática ao gestor | Adotada na Etapa 3 (matriz de permissões, "Equipe do gestor") |
+| `DEC-29` | O QR carrega só `/escritorio/qr/<código>`; o servidor resolve a reserva confirmada da sessão naquele recurso e dia; sem sessão, o login devolve à própria rota por lista fechada de retorno | QR com id da reserva ou token | Adotada na Etapa 3 (`CHK-02`) |
+| `DEC-30` | Toda transação que libera ou reserva mesa trava `for share` as pessoas em espera na data, antes do recurso; a oferta é gravada em ponto de salvamento por candidata e reivindica a inscrição (`waiting` para `offered`) antes de gravar a retenção; conflito com a candidata (inscrição encerrada ou reserva simultânea) pula para a próxima sem derrubar quem liberou a mesa | Oferta fora da transação, por job | Adotada na Etapa 3 (`DIR-034`, `PAR-37`) |
+| `DEC-31` | Reserva direta que encontra mesa livre com fila em espera confirma a oferta à fila e responde conflito explícito à pessoa; a oferta sobrevive à recusa da reserva direta | Reverter a oferta junto com a recusa | Adotada na Etapa 3 (`PAR-37`) |
 
 ## D. Perguntas bloqueantes
 
@@ -123,6 +133,8 @@ A Etapa 0 e a stack foram validadas pelo responsável em 28/09/2026 ("Pode segui
 | Upload do resultado da pesquisa | Painel com dados históricos | Etapa 4 |
 | Validação da planta (84 ou 90 mesas, códigos, capacidades, atributos, quais cabines entram nas reservas) | Mapa definitivo | Aceite da Etapa 2 |
 | Hospedagem, região e banco gerenciado | Homologação e produção | Etapa 5 |
+| Fonte oficial de calendário corporativo (Outlook, Google ou nenhuma) para salas | Integração de calendário da Etapa 3 (`RSK-06`) | Não iniciada sem a fonte |
+| Expediente para contar horas úteis (`PAR-43`) e prazo da oferta (`PAR-05`) | Piloto da fila | Etapa 5 |
 | Composição do grupo "diretoria" e política de visibilidade do titular | Mesas exclusivas de grupo em homologação | Etapa 2 |
 
 ## E. Histórico de decisões
@@ -141,4 +153,5 @@ A Etapa 0 e a stack foram validadas pelo responsável em 28/09/2026 ("Pode segui
 | 29/09/2026 | Terceira verificação da Etapa 1: aceita com correções (8 residuais); proteção de alvo privilegiado passa a considerar concessão com início futuro, entrega esgotada marca o convite como falho, `DEC-18` registrada | Executor |
 | 29/09/2026 | Etapa 1 validada pelo responsável ("Pode continuar"). Etapa 2 implementada: banco do escritório (15 tabelas, 7 funções, 20 triggers, constraints de exclusão), serviços de disponibilidade, reserva, exclusividade e escritório, telas do portal e administrativas, testes; decisões `DEC-19` a `DEC-24` | Executor |
 | 29/09/2026 | Etapa 2 revisada em três rodadas independentes (15, 7 e 4 achados), todas aceitas com correções; correções aplicadas; `PAR-15` e `PAR-25` revistos; migrações `0005` e `0006` (rede independente do código) | Executor |
+| 29/09/2026 | Etapa 2 validada pelo responsável ("Vamos em frente"). Etapa 3 implementada: fila de espera com oferta transacional e varredura, confirmação de uso pelo portal e pelo QR, liberação por falta de confirmação desativada, salas e cabines por intervalo, Meu time com compartilhamento opt-in, painel de reservas e fila, indicadores de demanda; migrações `0007` e `0008`; decisões `DEC-25` a `DEC-31`, parâmetros `PAR-43` a `PAR-45` | Executor |
 | 28/09/2026 | Planta recebida e extraída; inventário preliminar de 84 mesas, 3 salas, 2 booths, 4 cabines, 1 mesa aberta, marcado como não validado; PDF mantido fora do repositório | Executor |
