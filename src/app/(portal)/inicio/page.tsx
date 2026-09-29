@@ -7,7 +7,7 @@ import { canEnterAdminArea } from "@/modules/access/can";
 import { db } from "@/db/client";
 import { habitualDesk, listMyBookings, weekOverview } from "@/modules/booking/service";
 import { requireCurrent } from "@/modules/identity/session";
-import { TZ, formatLocalDate } from "@/modules/shared/dates";
+import { TZ, formatLocal, formatLocalDate } from "@/modules/shared/dates";
 
 function nextBusinessWeek(now: Date) {
   const local = new TZDate(now, TZ);
@@ -25,7 +25,10 @@ export default async function InicioPage({ searchParams }: { searchParams: Promi
   const week = nextBusinessWeek(new Date());
   const overview = await weekOverview(db, current.employee.id, week.map((d) => d.key));
   const habitual = await habitualDesk(db, current.employee.id);
-  const { upcoming } = await listMyBookings(db, current.employee.id);
+  const { upcoming: all } = await listMyBookings(db, current.employee.id);
+  // Retenção da fila é oferta, não reserva: aparece à parte, com o prazo para aceitar.
+  const upcoming = all.filter((b) => b.status === "confirmed");
+  const offers = all.filter((b) => b.status === "held");
   const planned = overview.some((o) => o.intent !== "not_informed" || o.booking);
   return (
     <>
@@ -35,6 +38,17 @@ export default async function InicioPage({ searchParams }: { searchParams: Promi
           <Alert kind="success">Semana confirmada.</Alert>
         </div>
       ) : null}
+      {offers.map((o) => (
+        <div key={o.id} className="mb-4">
+          <Alert kind="info" title={`Mesa ${o.code} oferecida a você para ${formatLocalDate(o.date)}`}>
+            Aceite ou recuse{o.holdExpiresAt ? ` até ${formatLocal(o.holdExpiresAt)}` : ""} em{" "}
+            <Link href="/escritorio/minhas-reservas" className="underline">
+              Minhas reservas
+            </Link>
+            . Sem resposta, a mesa passa à próxima pessoa da fila.
+          </Alert>
+        </div>
+      ))}
       {habitual ? (
         <div className="mb-4">
           <Alert kind="info" title={`Sua mesa habitual: ${habitual.code}`}>

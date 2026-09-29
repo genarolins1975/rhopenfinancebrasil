@@ -3,7 +3,7 @@
 import { SimpleForm } from "@/components/office-forms";
 import { Field, Input, Select } from "@/components/ui";
 import { cancelSpaceAction } from "@/modules/spaces/actions";
-import { leaveWaitlistAction, offerManuallyAction } from "@/modules/waitlist/actions";
+import { offerManuallyAction, removeFromQueueAction } from "@/modules/waitlist/actions";
 
 export function ManualOfferForm({ entryId, desks }: { entryId: string; desks: Array<{ id: string; code: string }> }) {
   if (desks.length === 0) return <p className="text-xs text-text-muted">Nenhuma mesa compartilhada disponível para a pessoa nesta data.</p>;
@@ -25,7 +25,7 @@ export function ManualOfferForm({ entryId, desks }: { entryId: string; desks: Ar
 
 export function RemoveFromQueueForm({ entryId }: { entryId: string }) {
   return (
-    <SimpleForm action={leaveWaitlistAction} submitLabel="Retirar da fila" variant="secondary" pendingText="Retirando…">
+    <SimpleForm action={removeFromQueueAction} submitLabel="Retirar da fila" variant="secondary" pendingText="Retirando…">
       <input type="hidden" name="entryId" value={entryId} />
       <Field id={`rm-${entryId}`} label="Motivo (registrado na auditoria)">
         <Input id={`rm-${entryId}`} name="reason" required minLength={3} />

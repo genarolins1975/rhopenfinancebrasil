@@ -3,12 +3,15 @@ import Link from "next/link";
 import { Alert, Button, Card, EmptyState, Input, PageHeader } from "@/components/ui";
 import { db } from "@/db/client";
 import { requireCurrent } from "@/modules/identity/session";
-import { ISO_DATE } from "@/modules/office/shared";
-import { formatLocalDate, localToday } from "@/modules/shared/dates";
+import { isValidIsoDate } from "@/modules/office/shared";
+import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
+import { isDomainError } from "@/modules/shared/errors";
+import { suggestedSlot } from "@/modules/spaces/rules";
 import { searchSpaces } from "@/modules/spaces/service";
 import { BookSpaceForm } from "../operation-forms";
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const END = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
 const ATTRS: Array<[string, string]> = [
   ["videoconferencia", "Videoconferência"],
   ["tela", "Tela ou TV"],
@@ -16,20 +19,13 @@ const ATTRS: Array<[string, string]> = [
   ["acessivel", "Acessível"],
 ];
 
-function nextSlot(): { start: string; end: string } {
-  const parts = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
-  const h = Number(parts.find((p) => p.type === "hour")!.value);
-  const start = Math.min(h + 1, 22);
-  return { start: `${String(start).padStart(2, "0")}:00`, end: `${String(start + 1).padStart(2, "0")}:00` };
-}
-
 export default async function SalasPage({ searchParams }: { searchParams: Promise<{ data?: string; inicio?: string; fim?: string; capacidade?: string; atributo?: string | string[] }> }) {
   const current = await requireCurrent();
   const sp = await searchParams;
-  const def = nextSlot();
-  const date = sp.data && ISO_DATE.test(sp.data) ? sp.data : localToday();
+  const def = suggestedSlot(new Date());
+  const date = isValidIsoDate(sp.data) ? sp.data : addDays(localToday(), def.dayOffset);
   const start = sp.inicio && HHMM.test(sp.inicio) ? sp.inicio : def.start;
-  const end = sp.fim && HHMM.test(sp.fim) ? sp.fim : def.end;
+  const end = sp.fim && END.test(sp.fim) ? sp.fim : def.end;
   const capacity = Number(sp.capacidade) > 0 ? Math.min(99, Math.floor(Number(sp.capacidade))) : null;
   const wanted = (Array.isArray(sp.atributo) ? sp.atributo : sp.atributo ? [sp.atributo] : []).filter((a) => ATTRS.some(([k]) => k === a));
   let result: Awaited<ReturnType<typeof searchSpaces>> | null = null;
@@ -37,7 +33,8 @@ export default async function SalasPage({ searchParams }: { searchParams: Promis
   try {
     result = await searchSpaces(db, current.employee.id, { date, start, end, capacity, attributes: wanted });
   } catch (e) {
-    error = e instanceof Error ? e.message : "Busca indisponível.";
+    // Só mensagem de domínio chega à tela; falha técnica vira texto genérico (nunca a consulta).
+    error = isDomainError(e) ? e.message : "Busca indisponível agora. Tente de novo em instantes.";
   }
   const key = randomUUID();
   return (
@@ -54,7 +51,8 @@ export default async function SalasPage({ searchParams }: { searchParams: Promis
         </label>
         <label className="flex flex-col gap-1 text-sm font-medium" htmlFor="fim">
           Fim
-          <Input id="fim" name="fim" type="time" step={900} defaultValue={end} />
+          <Input id="fim" name="fim" type="text" inputMode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]|24:00" placeholder="HH:MM" defaultValue={end} aria-describedby="fim-ajuda" />
+          <span id="fim-ajuda" className="text-xs font-normal text-text-muted">Até 24:00.</span>
         </label>
         <label className="flex flex-col gap-1 text-sm font-medium" htmlFor="capacidade">
           Pessoas

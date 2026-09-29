@@ -102,6 +102,8 @@ export type Availability = {
   opensAt: Date | null;
   publicReason: string | null;
   bookingId: string | null;
+  /** A "minha" reserva é uma oferta da fila ainda não aceita (retenção). */
+  offerPending?: boolean;
 };
 
 const EXCLUSIVE_LABEL = "Uso exclusivo — Diretoria";
@@ -136,6 +138,7 @@ export function explain(person: Person, r: ResourceOnDate, ctx: DayContext): Ava
     return { ...base, code: "exclusive", label: EXCLUSIVE_LABEL, reason: "uso exclusivo da diretoria", canBook: false };
   }
   if (r.booking && r.booking.employeeId !== person.id) return { ...base, code: "reserved", label: "Reservada", reason: "reservada", canBook: false };
+  if (mine && r.booking?.status === "held") return { ...base, code: "mine", label: "Oferecida a você", reason: "oferta da fila: aceite ou recuse em Minhas reservas", canBook: false, offerPending: true };
   if (mine) return { ...base, code: "mine", label: "Sua reserva", reason: "sua reserva", canBook: false };
   if (ctx.personBooking && ctx.personBooking.resourceId !== r.id) return { ...base, code: "daily_limit", label: exclusiveMine ? "Sua mesa de uso exclusivo" : "Disponível", reason: "você já tem reserva neste dia", canBook: false };
   return { ...base, code: "available", label: exclusiveMine ? "Sua mesa de uso exclusivo" : "Disponível", reason: "disponível para você", canBook: true };

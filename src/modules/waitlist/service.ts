@@ -587,9 +587,21 @@ async function preferZone(db: DbOrTx, free: Array<{ id: string; code: string }>,
   return free.find((f) => ids.has(f.id)) ?? null;
 }
 
+/** Inscrições em espera de datas passadas: encerradas como vencidas, com auditoria (T-09). Sem aviso: a data passou. */
+export async function closePastEntries(db: Db): Promise<number> {
+  const rows = await db
+    .update(waitlistEntry)
+    .set({ status: "expired", closedAt: new Date(), closeReason: "data passada" })
+    .where(and(eq(waitlistEntry.status, "waiting"), sql`${waitlistEntry.date} < local_today()`))
+    .returning({ id: waitlistEntry.id, date: waitlistEntry.date });
+  for (const r of rows) await recordAudit(db, { action: "waitlist.expired_past_date", entityType: "waitlist_entry", entityId: r.id, after: { status: "expired", date: r.date } });
+  return rows.length;
+}
+
 /** Varredura completa, chamada pelo worker a cada ciclo. */
-export async function runWaitlistSweep(db: Db): Promise<{ expired: number; offered: number }> {
+export async function runWaitlistSweep(db: Db): Promise<{ expired: number; offered: number; past: number }> {
+  const past = await closePastEntries(db);
   const expired = await expireDueOffers(db);
   const offered = await offerFreeDesks(db);
-  return { expired, offered };
+  return { expired, offered, past };
 }

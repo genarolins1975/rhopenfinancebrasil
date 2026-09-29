@@ -114,6 +114,8 @@ describe("confirmação de uso", () => {
     expect(await releaseUnconfirmed(db)).toBe(0);
     await ownerQuery(`update office_settings set value = 'true' where key = 'checkin_release_enabled'`);
     await ownerQuery(`update office_settings set value = '"00:00"' where key = 'checkin_release_time'`);
+    // Só reserva confirmada antes do limite é liberada (T-03): as reservas do teste passam a ter sido feitas ontem.
+    await ownerQuery(`update desk_booking set created_at = now() - interval '1 day' where booking_date = $1`, [today]);
     const released = await releaseUnconfirmed(db);
     expect(released).toBe(1);
     const rows = await db.select({ id: deskBooking.id, status: deskBooking.status, resourceId: deskBooking.resourceId, employeeId: deskBooking.employeeId }).from(deskBooking).where(eq(deskBooking.bookingDate, today));

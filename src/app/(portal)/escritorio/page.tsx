@@ -5,7 +5,7 @@ import { Legend, OfficeMap, STATE_STYLE } from "@/components/office-map";
 import { db } from "@/db/client";
 import { stateForPerson } from "@/modules/availability/service";
 import { requireCurrent } from "@/modules/identity/session";
-import { ISO_DATE } from "@/modules/office/shared";
+import { isValidIsoDate } from "@/modules/office/shared";
 import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { publishedMap } from "@/modules/workplace/service";
 import { myQueue, zoneOptions } from "@/modules/waitlist/service";
@@ -15,7 +15,7 @@ import { JoinQueueForm, LeaveQueueForm } from "./operation-forms";
 export default async function EscritorioPage({ searchParams }: { searchParams: Promise<{ data?: string; zona?: string; estado?: string; aviso?: string }> }) {
   const current = await requireCurrent();
   const sp = await searchParams;
-  const date = sp.data && ISO_DATE.test(sp.data) ? sp.data : localToday();
+  const date = isValidIsoDate(sp.data) ? sp.data : localToday();
   const holderView = current.access.permissions.has("exclusive.holder.view");
   let loaded: Awaited<ReturnType<typeof stateForPerson>> | null = null;
   let failed = false;
@@ -32,9 +32,10 @@ export default async function EscritorioPage({ searchParams }: { searchParams: P
   const key = randomUUID();
   const ctx = loaded?.ctx;
   // Fila (PAR-30, DEC-25): só quando o dia está aberto, a janela abriu, não há mesa disponível e a pessoa não tem reserva.
-  const queueEntry = (await myQueue(db, current.employee.id, date)).find((q) => q.date === date) ?? null;
+  // Falha na leitura da fila degrada para "sem fila", sem derrubar o mapa.
+  const queueEntry = date >= localToday() ? await myQueue(db, current.employee.id, date).then((q) => q.find((x) => x.date === date) ?? null).catch(() => null) : null;
   const canQueue = !!ctx && !failed && date >= localToday() && ctx.officeOpen && ctx.window.open && !ctx.personBooking && items.length > 0 && !items.some((i) => i.availability.canBook) && !queueEntry;
-  const queueZones = canQueue ? await zoneOptions(db) : [];
+  const queueZones = canQueue ? await zoneOptions(db).catch(() => []) : [];
   return (
     <>
       <PageHeader title="Escritório" lead="Mapa e lista com o estado de cada mesa para você na data escolhida. Tudo é calculado no servidor." actions={<Link href="/escritorio/salas" className="underline">Salas e cabines</Link>} />
@@ -168,7 +169,7 @@ export default async function EscritorioPage({ searchParams }: { searchParams: P
                         {i.holder ? <span className="block text-xs text-text-muted">Titular: {i.holder.name}</span> : null}
                       </td>
                       <td className={td}>
-                        {a.canBook ? <BookForm resourceId={i.resource.id} date={date} idempotencyKey={`${key}:${i.resource.id}`} /> : a.code === "mine" ? <span className="text-xs text-text-muted">Cancelar em Minhas reservas</span> : <span className="text-xs text-text-muted">{a.reason}</span>}
+                        {a.canBook ? <BookForm resourceId={i.resource.id} date={date} idempotencyKey={`${key}:${i.resource.id}`} /> : a.code === "mine" ? <span className="text-xs text-text-muted">{a.offerPending ? "Aceitar ou recusar em Minhas reservas" : "Cancelar em Minhas reservas"}</span> : <span className="text-xs text-text-muted">{a.reason}</span>}
                       </td>
                     </tr>
                   );

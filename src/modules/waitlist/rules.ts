@@ -63,7 +63,11 @@ export const MIN_OFFER_MINUTES = 15;
  * da reserva. Devolve null quando não há tempo mínimo (oferta feita no fim do próprio dia).
  */
 export function offerExpiresAt(from: Date, date: string, minutes: number, cfg: BusinessHours): Date | null {
-  const computed = addBusinessMinutes(from, minutes, cfg);
+  // Reserva para data que não é dia útil (fim de semana aberto ou dia sem expediente): minutos corridos, para a fila
+  // continuar andando no próprio dia (PAR-43, T-08).
+  const [y, m, d] = date.split("-").map(Number);
+  const businessDate = isBusinessDay(new TZDate(y, m - 1, d, 12, 0, 0, 0, TZ), cfg.closedDates);
+  const computed = businessDate ? addBusinessMinutes(from, minutes, cfg) : new Date(from.getTime() + minutes * 60_000);
   const cap = endOfLocalDay(date);
   const result = computed.getTime() < cap.getTime() ? computed : cap;
   if (result.getTime() - from.getTime() < MIN_OFFER_MINUTES * 60_000) return null;

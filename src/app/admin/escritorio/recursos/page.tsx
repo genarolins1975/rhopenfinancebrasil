@@ -3,7 +3,7 @@ import { Alert, Card, EmptyState, Input, PageHeader, Table, td, th } from "@/com
 import { db } from "@/db/client";
 import { capacityOn, stateForPerson } from "@/modules/availability/service";
 import { requireAnyPermission } from "@/modules/identity/session";
-import { ISO_DATE, readSettings } from "@/modules/office/shared";
+import { isValidIsoDate, readSettings } from "@/modules/office/shared";
 import { addDays, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { getResourceByCode, listCalendar, listResources, listStatusPeriods, listZones } from "@/modules/workplace/service";
 import { AttributesForm, CalendarForm, NewResourceForm, ReleasePeriodForm, RetireForm, SettingsForm, StatusPeriodForm } from "./forms";
@@ -24,7 +24,7 @@ export default async function RecursosPage({ searchParams }: { searchParams: Pro
   const p = current.access.permissions;
   const sp = await searchParams;
   const today = localToday();
-  const date = sp.data && ISO_DATE.test(sp.data) ? sp.data : today;
+  const date = isValidIsoDate(sp.data) ? sp.data : today;
   const aba = ["recursos", "calendario", "configuracoes"].includes(sp.aba ?? "") ? sp.aba! : "recursos";
   const holderView = p.has("exclusive.holder.view");
   const { items } = await stateForPerson(db, current.employee.id, date, { holderView, types: ["desk", "room", "booth"] });

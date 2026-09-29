@@ -3,14 +3,13 @@ import type { Db, DbOrTx } from "@/db/client";
 import { employee, resource, spaceBooking } from "@/db/schema";
 import { loadAccess } from "@/modules/access/can";
 import { recordAudit } from "@/modules/audit/audit";
-import { bookingWindow, weekStartOf } from "@/modules/availability/rules";
 import { loadDayContext, loadResourcesOnDate } from "@/modules/availability/service";
 import { enqueueOutbox } from "@/modules/notifications/outbox";
 import { spaceBookingChangedEmail } from "@/modules/notifications/templates";
 import { formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConflictError, ForbiddenError, ValidationError } from "@/modules/shared/errors";
 import { type Actor, advisoryShareDay, assertIsoDate, assertUuid, lockResources, readSettings, shareLockEmployee, withOfficeTx } from "@/modules/office/shared";
-import { canSeeTitle, formatSlot, type Interval, intervalOf, intervalProblem, maxMinutesOf, overlaps, type TitleVisibility } from "./rules";
+import { canSeeTitle, formatSlot, type Interval, intervalOf, intervalProblem, maxMinutesOf, overlaps, type TitleVisibility, weeksAhead } from "./rules";
 
 /*
  * Salas e cabines por intervalo (BKG-03, PAR-18). Intervalo semiaberto `[início, fim)` no mesmo dia local; adjacência
@@ -41,13 +40,12 @@ function parseSearch(input: SpaceSearchInput): { date: string; interval: Interva
   return { date: input.date, interval };
 }
 
+/** Horizonte das salas (DEC-26): de hoje até `booking_horizon_weeks` semanas à frente; a abertura semanal das mesas não se aplica. */
 async function horizonOk(db: DbOrTx, date: string, now: Date): Promise<{ ok: boolean; reason: string | null }> {
   const settings = await readSettings(db);
   const today = localToday(now);
   if (date < today) return { ok: false, reason: "data passada" };
-  const w = bookingWindow(date, now, { ...settings, bookingOpenWeekday: 1, bookingOpenTime: "00:00" });
-  // Só o horizonte conta para salas: a janela semanal foi neutralizada acima (abre segunda 00:00 da semana anterior).
-  if (!w.open && weekStartOf(date) > weekStartOf(today)) return { ok: false, reason: `além do horizonte de ${settings.bookingHorizonWeeks} semana(s)` };
+  if (weeksAhead(today, date) > settings.bookingHorizonWeeks) return { ok: false, reason: `além do horizonte de ${settings.bookingHorizonWeeks} semana(s)` };
   return { ok: true, reason: null };
 }
 
@@ -235,6 +233,6 @@ export async function listSpaceBookingsAdmin(db: DbOrTx, viewerId: string, filte
   return rows.map((r) => {
     const start = new Date(r.lower);
     const end = new Date(r.upper);
-    return { id: r.id, code: r.code, type: r.type, employeeId: r.employeeId, employeeName: r.employeeName, slot: formatSlot({ start, end }), title: canSeeTitle({ employeeId: r.employeeId, titleVisibility: r.titleVisibility as TitleVisibility }, viewer) ? r.title : null };
+    return { id: r.id, code: r.code, type: r.type, employeeId: r.employeeId, employeeName: r.employeeName, slot: formatSlot({ start, end }), ended: end.getTime() <= Date.now(), title: canSeeTitle({ employeeId: r.employeeId, titleVisibility: r.titleVisibility as TitleVisibility }, viewer) ? r.title : null };
   });
 }

@@ -45,3 +45,14 @@ describe("vencimento da oferta limitado ao dia da reserva", () => {
     expect(offerExpiresAt(local(2026, 10, 6, 23, 50), "2026-10-06", 120, cfg)).toBeNull();
   });
 });
+
+describe("oferta para data que não é dia útil (PAR-43, T-08)", () => {
+  it("sábado: minutos corridos, limitados ao fim do dia", () => {
+    // 10/10/2026 é sábado
+    expect(fmt(offerExpiresAt(local(2026, 10, 10, 8, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 10, 10, 0)));
+    expect(fmt(offerExpiresAt(local(2026, 10, 10, 23, 0), "2026-10-10", 120, cfg)!)).toBe(fmt(local(2026, 10, 11, 0, 0)));
+  });
+  it("dia fechado no calendário também conta minutos corridos", () => {
+    expect(fmt(offerExpiresAt(local(2026, 10, 12, 8, 0), "2026-10-12", 120, cfg)!)).toBe(fmt(local(2026, 10, 12, 10, 0)));
+  });
+});

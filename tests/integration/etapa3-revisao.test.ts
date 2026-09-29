@@ -137,6 +137,7 @@ describe("revisão independente da Etapa 3: regressão", () => {
     const p = await seedEmployee();
     const desk = await seedDesk("Q001");
     const b = await bookDesk(db, actorOf(p), { employeeId: p.id, resourceId: desk.id, date: today, idempotencyKey: randomUUID() });
+    await ownerQuery("update desk_booking set created_at = now() - interval '1 day' where id = $1", [b.bookingId]);
     const ext = await owner.connect();
     try {
       await ext.query("begin");
@@ -381,5 +382,88 @@ describe("revisão independente da Etapa 3: regressão", () => {
     expect(JSON.stringify(mail[0].payload)).toContain("pedido por telefone");
     void taker;
     void booking;
+  });
+
+  it("T-01: salas seguem o horizonte configurado das mesas, sem a abertura semanal: semanas +2 a +4 aceitas, +5 recusada", async () => {
+    const a = await seedEmployee();
+    const room = await seedDesk("SALA1", "room");
+    const monday = (n: number) => {
+      const [y, m, dd] = today.split("-").map(Number);
+      const wd = (new Date(Date.UTC(y, m - 1, dd)).getUTCDay() + 6) % 7;
+      return addDays(today, 7 * n - wd + 2);
+    };
+    for (const w of [2, 3, 4]) await expect(bookSpace(db, actorOf(a), { resourceId: room.id, date: monday(w), start: "10:00", end: "11:00", idempotencyKey: randomUUID() })).resolves.toMatchObject({ created: true });
+    await expect(bookSpace(db, actorOf(a), { resourceId: room.id, date: monday(5), start: "10:00", end: "11:00", idempotencyKey: randomUUID() })).rejects.toThrow(/além do horizonte de 4 semana/);
+  });
+
+  it("T-02: fechar o dia de hoje não esbarra em reserva de sala já encerrada", async () => {
+    const a = await seedEmployee();
+    const room = await seedDesk("SALA1", "room");
+    await ownerQuery("insert into space_booking (resource_id, employee_id, actor_employee_id, period, status) values ($1, $2, $2, tstzrange(now() - interval '3 hours', now() - interval '2 hours', '[)'), 'confirmed')", [room.id, a.id]);
+    const fac = await privilegedActor({ roles: ["facilities"] });
+    const now = new Date();
+    const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(now));
+    if (h < 3) return; // a reserva encerrada precisa cair no dia de hoje; antes das 03:00 ela seria de ontem
+    expect((await previewCloseDay(db, fac.actor, today)).conflicts).toHaveLength(0);
+    await expect(closeDay(db, fac.actor, { date: today, reason: "queda de energia" })).resolves.toBeUndefined();
+  });
+
+  it("T-03 e T-04: com PAR-06 ativo, reserva feita depois do limite e reserva realocada de quem já confirmou não são liberadas", async () => {
+    await ownerQuery(`update office_settings set value = 'true' where key = 'checkin_release_enabled'`);
+    await ownerQuery(`update office_settings set value = '"00:00"' where key = 'checkin_release_time'`);
+    const late = await seedEmployee();
+    const moved = await seedEmployee();
+    const d1 = await seedDesk("L001");
+    const d2 = await seedDesk("L002");
+    const d3 = await seedDesk("L003");
+    // reserva feita agora, depois do limite (00:00): nunca liberada hoje
+    const lateB = await bookDesk(db, actorOf(late), { employeeId: late.id, resourceId: d1.id, date: today, idempotencyKey: randomUUID() });
+    // quem confirmou e foi realocado: a reserva nova, sem confirmação própria, também não é liberada
+    const mb = await bookDesk(db, actorOf(moved), { employeeId: moved.id, resourceId: d2.id, date: today, idempotencyKey: randomUUID() });
+    await ownerQuery("update desk_booking set created_at = now() - interval '1 day' where id = $1", [mb.bookingId]);
+    await confirmUse(db, actorOf(moved), { bookingId: mb.bookingId, method: "portal" });
+    const fac = await privilegedActor({ roles: ["facilities"] });
+    await createStatusPeriod(db, fac.actor, { resourceId: d2.id, status: "maintenance", startsOn: today, endsOn: today, reason: "reparo" }, [{ bookingId: mb.bookingId, action: "realloc", reason: "reparo", targetResourceId: d3.id }]);
+    await ownerQuery("update desk_booking set created_at = now() - interval '1 day' where resource_id = $1 and booking_date = $2", [d3.id, today]);
+    expect(await releaseUnconfirmed(db)).toBe(0);
+    expect((await db.select().from(deskBooking).where(eq(deskBooking.id, lateB.bookingId)))[0].status).toBe("confirmed");
+    expect((await db.select().from(deskBooking).where(and(eq(deskBooking.resourceId, d3.id), eq(deskBooking.bookingDate, today))))[0].status).toBe("confirmed");
+  });
+
+  it("T-05: QR de sala confirma a reserva em andamento ou a próxima, nunca a já encerrada", async () => {
+    const a = await seedEmployee();
+    const room = await seedDesk("SALA1", "room");
+    const now = new Date();
+    const h = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(now));
+    if (h < 2 || h > 21) return; // precisa de uma reserva encerrada e de outra futura no mesmo dia local
+    await ownerQuery("insert into space_booking (resource_id, employee_id, actor_employee_id, period, status) values ($1, $2, $2, tstzrange(now() - interval '2 hours', now() - interval '1 hour', '[)'), 'confirmed')", [room.id, a.id]);
+    const start = `${String(h + 1).padStart(2, "0")}:00`;
+    const end = `${String(h + 1).padStart(2, "0")}:30`;
+    const future = await bookSpace(db, actorOf(a), { resourceId: room.id, date: today, start, end, idempotencyKey: randomUUID() });
+    const r = await confirmUse(db, actorOf(a), { resourceCode: "SALA1", method: "qr" });
+    expect(r.bookingId).toBe(future.bookingId);
+  });
+
+  it("T-06: data inexistente é recusada como validação, nunca como erro de banco", async () => {
+    const a = await seedEmployee();
+    const room = await seedDesk("SALA1", "room");
+    await expect(bookSpace(db, actorOf(a), { resourceId: room.id, date: "2026-02-30", start: "10:00", end: "11:00", idempotencyKey: randomUUID() })).rejects.toThrow(/Data inválida/);
+    await expect(joinWaitlist(db, actorOf(a), { date: "2026-02-30" })).rejects.toThrow(/Data inválida/);
+    await expect(searchSpaces(db, a.id, { date: "2026-11-31", start: "10:00", end: "11:00" })).rejects.toThrow(/Data inválida/);
+  });
+
+  it("T-07: reserva de sala pode terminar às 24:00", async () => {
+    const a = await seedEmployee();
+    const room = await seedDesk("SALA1", "room");
+    const r = await bookSpace(db, actorOf(a), { resourceId: room.id, date: d(1), start: "23:00", end: "24:00", idempotencyKey: randomUUID() });
+    expect(r.slot).toBe("23:00 às 24:00");
+  });
+
+  it("T-09: inscrição em espera de data passada é encerrada pela varredura", async () => {
+    const a = await seedEmployee();
+    await ownerQuery("insert into waitlist_entry (employee_id, date, status) values ($1, $2::date, 'waiting')", [a.id, d(-1)]);
+    const { closePastEntries } = await import("@/modules/waitlist/service");
+    expect(await closePastEntries(db)).toBe(1);
+    expect((await entryOf(a.id)).status).toBe("expired");
   });
 });

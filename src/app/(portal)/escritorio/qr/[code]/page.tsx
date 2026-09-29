@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Alert, Card, PageHeader } from "@/components/ui";
 import { db } from "@/db/client";
 import { ownBookingTodayOn } from "@/modules/checkin/service";
+import { getResourceByCode } from "@/modules/workplace/service";
 import { getCurrentResult } from "@/modules/identity/session";
 import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { ConfirmUseForm } from "../../operation-forms";
@@ -18,6 +19,8 @@ export default async function QrPage({ params }: { params: Promise<{ code: strin
   const r = await getCurrentResult();
   if (!r.current) redirect(`/entrar?volta=${encodeURIComponent(`/escritorio/qr/${upper}`)}`);
   const booking = await ownBookingTodayOn(db, r.current.employee.id, upper);
+  const res = await getResourceByCode(db, upper);
+  const kind = res?.type ?? "desk";
   return (
     <>
       <PageHeader title={`Confirmar uso de ${upper}`} lead={`Hoje, ${formatLocalDate(localToday())}.`} />
@@ -26,8 +29,8 @@ export default async function QrPage({ params }: { params: Promise<{ code: strin
           <>
             <Alert kind="info">Você não tem reserva confirmada em {upper} hoje.</Alert>
             <p className="mt-3 text-sm">
-              <Link href={`/escritorio/recursos/${upper}`} className="underline">
-                Ver a situação de {upper}
+              <Link href={kind === "desk" ? `/escritorio/recursos/${upper}` : `/escritorio/salas?data=${localToday()}`} className="underline">
+                {kind === "desk" ? `Ver a situação de ${upper}` : "Buscar sala ou cabine"}
               </Link>{" "}
               ou{" "}
               <Link href="/escritorio/minhas-reservas" className="underline">

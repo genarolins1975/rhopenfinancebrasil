@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { Db, DbOrTx, Tx } from "@/db/client";
 import { deskBooking, employee, presenceIntent, resource, weekPlanRequest } from "@/db/schema";
 import { loadAccess } from "@/modules/access/can";
@@ -297,6 +297,6 @@ export async function listBookingsAdmin(db: DbOrTx, filter: { date: string }) {
     .from(deskBooking)
     .innerJoin(resource, eq(resource.id, deskBooking.resourceId))
     .innerJoin(employee, eq(employee.id, deskBooking.employeeId))
-    .where(and(eq(deskBooking.bookingDate, filter.date), inArray(deskBooking.status, ["confirmed", "held"])))
+    .where(and(eq(deskBooking.bookingDate, filter.date), or(eq(deskBooking.status, "confirmed"), and(eq(deskBooking.status, "held"), sql`${deskBooking.holdExpiresAt} > now()`))))
     .orderBy(asc(resource.code));
 }

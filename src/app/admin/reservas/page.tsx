@@ -7,7 +7,7 @@ import { employee } from "@/db/schema";
 import { listBookingsAdmin } from "@/modules/booking/service";
 import { usageOfDeskBookings } from "@/modules/checkin/service";
 import { requireAnyPermission } from "@/modules/identity/session";
-import { ISO_DATE } from "@/modules/office/shared";
+import { isValidIsoDate } from "@/modules/office/shared";
 import { formatLocal, formatLocalDate, localToday } from "@/modules/shared/dates";
 import { listSpaceBookingsAdmin } from "@/modules/spaces/service";
 import { listQueue, manualOfferOptions, unmetDemand } from "@/modules/waitlist/service";
@@ -17,13 +17,14 @@ import { OnBehalfForm } from "./on-behalf-form";
 import { AdminCancelSpaceForm, ManualOfferForm, RemoveFromQueueForm } from "./queue-forms";
 
 const ORIGIN: Record<string, string> = { self: "própria", week_plan: "semana", on_behalf: "em nome", waitlist_offer: "fila", admin_realloc: "realocação" };
+const OFFER: Record<string, string> = { open: "vencida", expired: "vencida ou retirada", declined: "recusada", accepted: "aceita" };
 const ENTRY: Record<string, string> = { waiting: "em espera", offered: "com oferta", accepted: "aceitou", expired: "oferta vencida", cancelled: "saiu ou foi retirada" };
 
 export default async function ReservasAdminPage({ searchParams }: { searchParams: Promise<{ data?: string; aba?: string }> }) {
   const current = await requireAnyPermission(["booking.admin.manage", "booking.on_behalf.create", "waitlist.admin"]);
   const p = current.access.permissions;
   const sp = await searchParams;
-  const date = sp.data && ISO_DATE.test(sp.data) ? sp.data : localToday();
+  const date = isValidIsoDate(sp.data) ? sp.data : localToday();
   const tabs: Array<[string, string]> = [];
   if (p.has("booking.admin.manage") || p.has("booking.on_behalf.create")) tabs.push(["mesas", "Mesas"]);
   if (p.has("waitlist.admin")) tabs.push(["fila", "Fila de espera"]);
@@ -117,7 +118,8 @@ async function QueueTab({ date, holderView }: { date: string; holderView: boolea
   const live = queue.filter((q) => q.status === "waiting" || (q.status === "offered" && q.offer?.live));
   const options = new Map<string, Array<{ id: string; code: string }>>();
   for (const q of live.filter((x) => x.status === "waiting")) options.set(q.entryId, await manualOfferOptions(db, q.employeeId, date));
-  const liveOf = (q: (typeof queue)[number]) => q.status === "waiting" || (q.status === "offered" && !!q.offer?.live);
+  // Data passada não tem fila viva: a varredura encerra essas inscrições.
+  const liveOf = (q: (typeof queue)[number]) => date >= localToday() && (q.status === "waiting" || (q.status === "offered" && !!q.offer?.live));
   const positions = new Map(queue.filter(liveOf).map((q, i) => [q.entryId, i + 1]));
   return (
     <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
@@ -147,7 +149,9 @@ async function QueueTab({ date, holderView }: { date: string; holderView: boolea
                       {q.preferences.zoneCode ? <span className="block text-xs text-text-muted">prefere zona {q.preferences.zoneCode}</span> : null}
                     </td>
                     <td className={td}>{q.status === "offered" && !q.offer?.live ? "oferta vencida (expira na próxima escrita)" : (ENTRY[q.status] ?? q.status)}</td>
-                    <td className={td}>{q.offer ? `${q.offer.exclusive && !holderView ? "mesa elegível para a pessoa" : q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : "—"}</td>
+                    <td className={td}>
+                      {q.offer && q.offer.live ? `${q.offer.exclusive && !holderView ? "mesa elegível para a pessoa" : q.offer.resourceCode} até ${formatLocal(q.offer.expiresAt, "dd/MM HH:mm")}` : q.offer ? <span className="text-text-muted">última oferta {OFFER[q.offer.status] ?? q.offer.status}</span> : "—"}
+                    </td>
                     <td className={td}>
                       {isLive ? (
                         <div className="flex min-w-[200px] flex-col gap-3">
@@ -221,9 +225,7 @@ async function SpacesTab({ date, viewerId }: { date: string; viewerId: string })
                 <td className={td}>{r.slot}</td>
                 <td className={td}>{r.employeeName}</td>
                 <td className={td}>{r.title ?? <span className="text-text-muted">privado</span>}</td>
-                <td className={td}>
-                  <AdminCancelSpaceForm bookingId={r.id} />
-                </td>
+                <td className={td}>{r.ended ? <span className="text-xs text-text-muted">encerrada</span> : <AdminCancelSpaceForm bookingId={r.id} />}</td>
               </tr>
             ))}
           </tbody>

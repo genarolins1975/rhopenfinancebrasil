@@ -12,9 +12,11 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export type Interval = { start: Date; end: Date };
 
-/** Constrói o intervalo local `[start, end)` de uma data com horas HH:MM. */
+const END = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/;
+
+/** Constrói o intervalo local `[start, end)` de uma data com horas HH:MM; o fim aceita 24:00 (meia-noite ao fim do dia). */
 export function intervalOf(isoDate: string, startHHMM: string, endHHMM: string): Interval {
-  if (!HHMM.test(startHHMM) || !HHMM.test(endHHMM)) throw new Error("hora inválida");
+  if (!HHMM.test(startHHMM) || !END.test(endHHMM)) throw new Error("hora inválida");
   const [y, m, d] = isoDate.split("-").map(Number);
   const [sh, sm] = startHHMM.split(":").map(Number);
   const [eh, em] = endHHMM.split(":").map(Number);
@@ -44,7 +46,10 @@ export function overlaps(a: Interval, b: Interval): boolean {
 }
 
 export function formatSlot(i: Interval): string {
-  return `${format(new TZDate(i.start, TZ), "HH:mm")} às ${format(new TZDate(i.end, TZ), "HH:mm")}`;
+  const end = format(new TZDate(i.end, TZ), "HH:mm");
+  // Fim à meia-noite do dia seguinte é exibido como 24:00, o fim do próprio dia.
+  const endLabel = end === "00:00" && i.end.getTime() > i.start.getTime() ? "24:00" : end;
+  return `${format(new TZDate(i.start, TZ), "HH:mm")} às ${endLabel}`;
 }
 
 export type TitleVisibility = "private" | "manager" | "all";
@@ -61,4 +66,25 @@ export function canSeeTitle(b: { employeeId: string; titleVisibility: TitleVisib
 export function maxMinutesOf(attributes: Record<string, unknown>): number | null {
   const v = attributes.max_duration_minutes;
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v) : null;
+}
+
+/** Semanas inteiras entre a semana de hoje e a da data (segunda a domingo, dia local). */
+export function weeksAhead(today: string, date: string): number {
+  const monday = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    const wd = (dt.getUTCDay() + 6) % 7;
+    return Date.UTC(y, m - 1, d) - wd * 86_400_000;
+  };
+  return Math.round((monday(date) - monday(today)) / (7 * 86_400_000));
+}
+
+/** Próximo trecho sugerido na busca: o próximo múltiplo de 15 minutos por uma hora; depois das 23:00, amanhã às 09:00. */
+export function suggestedSlot(now: Date): { dayOffset: 0 | 1; start: string; end: string } {
+  const local = new TZDate(now, TZ);
+  const minutes = local.getHours() * 60 + local.getMinutes();
+  const start = Math.ceil(minutes / SLOT_MINUTES) * SLOT_MINUTES;
+  if (start + 60 > 24 * 60) return { dayOffset: 1, start: "09:00", end: "10:00" };
+  const hhmm = (n: number) => (n === 24 * 60 ? "24:00" : `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`);
+  return { dayOffset: 0, start: hhmm(start), end: hhmm(start + 60) };
 }

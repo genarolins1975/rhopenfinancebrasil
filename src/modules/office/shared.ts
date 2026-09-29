@@ -16,8 +16,16 @@ export type Actor = { employeeId: string; userId: string; requestId?: string };
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Data ISO que existe no calendário (2026-02-30 não passa: `Date.parse` normalizaria para março). */
+export function isValidIsoDate(value: unknown): value is string {
+  if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
 export function assertIsoDate(value: string, label = "Data"): string {
-  if (!ISO_DATE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new ValidationError(`${label} inválida.`);
+  if (!isValidIsoDate(value)) throw new ValidationError(`${label} inválida.`);
   return value;
 }
 

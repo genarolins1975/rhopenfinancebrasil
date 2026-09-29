@@ -79,3 +79,16 @@ export async function offerManuallyAction(_prev: ActionState, fd: FormData): Pro
     return unexpected(e, "oferta manual", actor.requestId);
   }
 }
+
+/** Retirada da fila pela administração (aba Fila): motivo obrigatório, a pessoa é avisada; mensagem própria ao operador. */
+export async function removeFromQueueAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const current = await requireCurrent();
+  const actor = actorOf(current);
+  try {
+    const r = await leaveWaitlist(db, actor, str(fd, "entryId"), { reason: str(fd, "reason") || undefined });
+    refresh();
+    return { ok: true, message: `Pessoa retirada da fila de ${formatLocalDate(r.date)}${r.declined ? " (a oferta aberta foi retirada)" : ""}. Ela foi avisada por email.` };
+  } catch (e) {
+    return unexpected(e, "retirar da fila", actor.requestId);
+  }
+}

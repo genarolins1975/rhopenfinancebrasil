@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/db/client";
 import { checkin, deskBooking, employee, resource, spaceBooking } from "@/db/schema";
 import { loadAccess } from "@/modules/access/can";
@@ -56,12 +56,13 @@ async function resolveOwnBookingToday(db: DbOrTx, employeeId: string, input: Con
       .innerJoin(resource, eq(resource.id, deskBooking.resourceId))
       .where(and(eq(resource.code, code), eq(deskBooking.employeeId, employeeId), eq(deskBooking.status, "confirmed"), eq(deskBooking.bookingDate, today)));
     if (b) return { kind: "desk", id: b.id, code: b.code };
+    // Sala pelo QR: a reserva em andamento ou a próxima do dia, ainda não encerrada; a sem confirmação vem antes (T-05).
     const [s] = await db
       .select({ id: spaceBooking.id, code: resource.code })
       .from(spaceBooking)
       .innerJoin(resource, eq(resource.id, spaceBooking.resourceId))
-      .where(and(eq(resource.code, code), eq(spaceBooking.employeeId, employeeId), eq(spaceBooking.status, "confirmed"), sql`${spaceBooking.period} && local_day_range(local_today())`))
-      .orderBy(asc(sql`lower(${spaceBooking.period})`));
+      .where(and(eq(resource.code, code), eq(spaceBooking.employeeId, employeeId), eq(spaceBooking.status, "confirmed"), sql`${spaceBooking.period} && local_day_range(local_today())`, sql`upper(${spaceBooking.period}) > now()`))
+      .orderBy(asc(sql`exists (select 1 from checkin c where c.space_booking_id = ${spaceBooking.id})`), asc(sql`lower(${spaceBooking.period})`));
     if (s) return { kind: "space", id: s.id, code: s.code };
     throw new ValidationError(`Você não tem reserva confirmada em ${code} hoje.`);
   }
@@ -134,12 +135,27 @@ export async function releaseUnconfirmed(db: Db, now = new Date()): Promise<numb
   const local = new TZDate(now, TZ);
   if (format(local, "HH:mm") < settings.checkinReleaseTime) return 0;
   const today = localToday(now);
+  const [h, m] = settings.checkinReleaseTime.split(":").map(Number);
+  const [y, mo, d] = today.split("-").map(Number);
+  // Instante limite do dia: só reserva que já estava confirmada antes dele pode ser liberada (T-03). Oferta aceita conta
+  // do aceite; reserva feita ou aceita depois do limite nunca é liberada nesse dia.
+  const deadline = new TZDate(y, mo - 1, d, h, m, 0, 0, TZ);
   const due = await db
     .select({ id: deskBooking.id, resourceId: deskBooking.resourceId, employeeId: deskBooking.employeeId, code: resource.code })
     .from(deskBooking)
     .innerJoin(resource, eq(resource.id, deskBooking.resourceId))
     .leftJoin(checkin, eq(checkin.deskBookingId, deskBooking.id))
-    .where(and(eq(deskBooking.bookingDate, today), eq(deskBooking.status, "confirmed"), isNull(checkin.id), sql`desk_class(${deskBooking.resourceId}, ${today}::date) = 'shared'`, gte(deskBooking.createdAt, sql`'-infinity'::timestamptz`), lte(deskBooking.createdAt, sql`now()`)))
+    .where(
+      and(
+        eq(deskBooking.bookingDate, today),
+        eq(deskBooking.status, "confirmed"),
+        isNull(checkin.id),
+        sql`desk_class(${deskBooking.resourceId}, ${today}::date) = 'shared'`,
+        sql`coalesce((select o.decided_at from waitlist_offer o where o.hold_booking_id = ${deskBooking.id} and o.status = 'accepted'), ${deskBooking.createdAt}) < ${deadline.toISOString()}::timestamptz`,
+        // Quem já declarou uso em outra reserva de mesa do dia (realocação depois da confirmação) não perde a mesa (T-04).
+        sql`not exists (select 1 from checkin c join desk_booking o on o.id = c.desk_booking_id where o.employee_id = ${deskBooking.employeeId} and o.booking_date = ${today}::date)`,
+      ),
+    )
     .limit(100);
   let n = 0;
   for (const b of due) {
@@ -150,7 +166,7 @@ export async function releaseUnconfirmed(db: Db, now = new Date()): Promise<numb
         const candidates = (await lockQueueCandidates(tx, today)).filter((c) => c !== b.employeeId);
         await lockResources(tx, [b.resourceId]);
         const [again] = await tx.select({ status: deskBooking.status }).from(deskBooking).where(eq(deskBooking.id, b.id)).for("update");
-        const [confirmed] = await tx.select({ id: checkin.id }).from(checkin).where(eq(checkin.deskBookingId, b.id));
+        const [confirmed] = await tx.execute(sql`select c.id from checkin c join desk_booking o on o.id = c.desk_booking_id where o.employee_id = ${b.employeeId}::uuid and o.booking_date = ${today}::date limit 1`).then((r) => r.rows as Array<{ id: string }>);
         const cls = await tx.execute(sql`select desk_class(${b.resourceId}::uuid, ${today}::date) as c`);
         if (again?.status !== "confirmed" || confirmed || (cls.rows[0] as { c: string }).c !== "shared") return;
         const reason = `sem confirmação de uso até ${settings.checkinReleaseTime} (liberação automática, PAR-06)`;

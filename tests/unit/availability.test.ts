@@ -158,3 +158,12 @@ describe("janela de abertura (PAR-01)", () => {
     expect(bookingWindow("2026-10-12", new Date("2026-10-08T02:30:00Z"), settings).open).toBe(false);
   });
 });
+
+describe("oferta da fila como estado próprio (INT-03)", () => {
+  it("retenção da própria pessoa aparece como oferta, não como reserva", () => {
+    const person = { id: "p1", status: "active", canBookSelf: true };
+    const r = { id: "r1", code: "F001", type: "desk" as const, zoneCode: null, zoneName: null, capacity: null, attributes: {}, retired: false, period: null, policy: SHARED_POLICY, booking: { id: "b1", employeeId: "p1", status: "held" as const, holdExpiresAt: new Date(Date.now() + 60_000), origin: "waitlist_offer" } };
+    const a = explain(person, r, { date: "2026-10-06", now: new Date(), officeOpen: true, closedReason: null, window: { open: true, opensAt: null }, personBooking: { id: "b1", resourceId: "r1" } });
+    expect(a).toMatchObject({ code: "mine", label: "Oferecida a você", offerPending: true, canBook: false });
+  });
+});
