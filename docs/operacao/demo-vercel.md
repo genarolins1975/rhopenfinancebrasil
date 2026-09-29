@@ -23,7 +23,7 @@ Roteiro para publicar o portal como demonstração do conceito, com dados fictí
    Troque as partes em maiúsculas pelos valores reais, sem deixar sinais de `<`, `>`, parênteses, espaços ou `:` depois do servidor. Um sinal desses faz o build parar com `ERR_INVALID_URL`. Para montar sem erro de digitação, rode no Terminal do Mac a linha abaixo (uma vez para cada URL, trocando `rh_owner` por `rh_app` na segunda): ela pede a senha sem mostrá-la, pede o servidor, limpa sinais indevidos e copia a URL pronta para colar na Vercel.
 
    ```
-   read -rs 'P?Senha (não aparece ao digitar): '; echo; read -r 'H?Servidor: '; P=${P//[<> ]/}; H=${H//[<> ]/}; print -rn -- "postgresql://rh_owner:${P}@${H}/rh_demo?sslmode=require" | pbcopy; echo "URL copiada. Servidor usado: ${H}"; unset P
+   read -rs 'P?Senha (cole e tecle Enter; ela não aparece): '; echo; read -r 'H?Servidor (cole e tecle Enter): '; P=${P//[<> ]/}; H=${H//[<> ]/}; print -rn -- "postgresql://rh_owner:${P}@${H}/rh_demo?sslmode=require" | pbcopy; echo "Senha com ${#P} caracteres (o certo é 64). Servidor usado: ${H}"; unset P
    ```
 
 Cota do plano gratuito do Neon (documentação do Neon consultada em 29/09/2026): 100 CU-horas por projeto por mês; esgotada a cota, o banco fica suspenso até o ciclo seguinte. O banco dorme depois de 5 minutos sem consulta. Com a tarefa a cada 15 minutos só em horário comercial e uso de demonstração, o consumo fica dentro da cota. Se a demonstração for usada o dia todo, avalie o plano pago por uso.
