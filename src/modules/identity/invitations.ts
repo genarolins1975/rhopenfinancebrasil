@@ -11,7 +11,7 @@ import { newToken, sha256Hex } from "@/modules/shared/ids";
 import { safeErrorInfo } from "@/modules/shared/db-errors";
 import { logger } from "@/modules/shared/logger";
 import { authContext } from "./auth";
-import { checkPasswordPolicy, isPasswordBreached } from "./password";
+import { checkPasswordPolicy, hashPassword, isPasswordBreached } from "./password";
 
 /** PAR-07: convite vale sete dias. */
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -109,7 +109,10 @@ export async function acceptInvitation(db: Db, token: string, password: string, 
     throw new ValidationError("Esta senha apareceu em vazamentos conhecidos. Escolha outra.");
   }
   const ctx = await authContext();
-  const passwordHash = await ctx.password.hash(password);
+  // Mesmo hash configurado no Better Auth (emailAndPassword.password.hash), chamado direto: o complemento de senhas
+  // vazadas envolve ctx.password.hash e exige contexto de requisição, que ação de servidor e script não têm. A consulta
+  // de vazamento deste fluxo já foi feita acima.
+  const passwordHash = await hashPassword(password);
 
   // A identidade nasce fora da transação do portal (adaptador do Better Auth). Se a transação falhar, a identidade é removida.
   const user = await ctx.internalAdapter.createUser({ email: found.email, name: found.name, emailVerified: true }, { method: "invitation" });
