@@ -60,6 +60,8 @@ No GitHub, no repositório `genarolins1975/rhopenfinancebrasil`, crie a branch `
 | `DEMO_ADMIN_PASSWORD` | Senha da conta de administração (regras abaixo) | sim |
 | `DEMO_PASSWORD` | Senha das demais contas de demonstração, diferente da anterior (regras abaixo) | sim |
 | `DEMO_EMAIL_DOMAIN` | `demo.rhopenfinancebrasil.com` (opcional; é o padrão) | não |
+| `DEMO_MFA_OPTIONAL` | `on` dispensa o segundo fator da administração; `off` ou ausente o exige (`DEC-46`) | não |
+| `DEMO_ADMIN_RESET_PASSWORD` | Só para redefinir a senha da administração (seção 5.1) | sim |
 
 Gere as chaves no Terminal do Mac com os comandos indicados; cada chave é diferente das outras. Regras das senhas de demonstração (política de senha do portal): frase de 15 a 128 caracteres; no máximo 10 dígitos no total; sem as palavras admin, administração, demonstração, colaboradora, gestor, diretor ou diretora; fora de listas de senhas vazadas e de senhas comuns. Os algarismos contam no total, em qualquer posição (uma senha com 11 algarismos espalhados é recusada). Para conferir as duas senhas antes de cadastrar, rode no Terminal do Mac a linha abaixo: ela pede as senhas sem mostrá-las e informa tamanho, algarismos, palavras proibidas e presença em vazamentos (só os cinco primeiros caracteres do resumo SHA1 saem do computador).
 
@@ -67,7 +69,7 @@ Gere as chaves no Terminal do Mac com os comandos indicados; cada chave é difer
 read -rs 'A?Senha da administração (cole; ela não aparece) e Enter: '; echo; read -rs 'D?Senha das demais contas (cole; ela não aparece) e Enter: '; echo; for n in A D; do p=${(P)n}; d=${p//[^0-9]/}; low=${(L)p}; bad=""; for w in admin administração demonstração colaboradora gestor diretora diretor; do [[ $low == *$w* ]] && bad="$bad $w"; done; h=$(print -rn -- "$p" | shasum -a 1 | awk '{print toupper($1)}'); r=$(curl -fsS "https://api.pwnedpasswords.com/range/${h:0:5}" 2>/dev/null) && { print -r -- "$r" | grep -q "^${h:5}:" && v="SIM, troque" || v="não"; } || v="não verificado"; [[ $n == A ]] && t="Administração" || t="Demais contas"; echo "$t: ${#p} caracteres (precisa de 15 a 128); ${#d} algarismos (no máximo 10); palavras proibidas:${bad:- nenhuma}; vazada: $v"; done; [[ "$A" == "$D" ]] && echo "As duas são iguais: precisam ser diferentes."; unset A D p
 ```
 
-4. No log do build do deploy de `demo` devem aparecer, nesta ordem: `migrações aplicadas`, `banco conferido: papel rh_app, banco rh_demo, fuso America/Sao_Paulo, btree_gist presente, auditoria só de inserção` e `dados de demonstração criados: 5 contas, N reservas`. Qualquer falha interrompe o deploy e diz o que ajustar. Atenção: se a falha acontecer depois de `migrações aplicadas`, o banco já foi migrado; a versão no ar continua a anterior. Por isso, toda migração da demonstração precisa ser compatível com o código anterior.
+4. No log do build do deploy de `demo` devem aparecer, nesta ordem: `migrações aplicadas`, `banco conferido: papel rh_app, banco rh_demo, fuso America/Sao_Paulo, btree_gist presente, auditoria só de inserção`, `dados de demonstração criados: 5 contas, N reservas` (ou `não criados`, quando já existem), `senha da administração não alterada` (ou `redefinida`, seção 5.1) e a situação do segundo fator (`dispensado` ou `obrigatório`). Qualquer falha interrompe o deploy e diz o que ajustar. Atenção: se a falha acontecer depois de `migrações aplicadas`, o banco já foi migrado; a versão no ar continua a anterior. Por isso, toda migração da demonstração precisa ser compatível com o código anterior.
 5. Em **Settings, Cron Jobs**, confira a tarefa `/api/cron/operacao`. Em **Logs**, confira uma execução com resposta 200 no horário da agenda. Resposta 401 indica `CRON_SECRET` ausente ou diferente.
 6. Depois do primeiro deploy com os dados criados, apague `DEMO_ADMIN_PASSWORD`, `DEMO_PASSWORD` e `DATABASE_OWNER_URL` das variáveis da Vercel. Sem a URL do dono, os deploys seguintes não migram o banco e dizem isso no log. Quando uma atualização autorizada trouxer migração nova, cadastre a URL do dono de novo, publique e apague em seguida.
 
@@ -82,7 +84,7 @@ Contas criadas (emails no domínio de demonstração; senhas das variáveis `DEM
 
 | Conta | Perfil | Serve para mostrar |
 |---|---|---|
-| `admin@demo.rhopenfinancebrasil.com` | Administração, RH e Facilities | Cadastro, acessos, auditoria, planta, exclusividade, reservas e fila. No primeiro acesso, o portal exige o cadastro do segundo fator num aplicativo autenticador; só então as telas administrativas abrem |
+| `admin@demo.rhopenfinancebrasil.com` | Administração, RH e Facilities | Cadastro, acessos, auditoria, planta, exclusividade, reservas e fila. Com `DEMO_MFA_OPTIONAL=on`, entra só com a senha; sem ela, o portal exige no primeiro acesso o cadastro do segundo fator num aplicativo autenticador, e só então as telas administrativas abrem |
 | `colaboradora@demo.rhopenfinancebrasil.com` | Colaboradora | Mapa, reserva, semana, fila de espera, salas, confirmação de uso, perfil |
 | `gestor@demo.rhopenfinancebrasil.com` | Gestor da colaboradora | Meu time, depois que a colaboradora autorizar no perfil |
 | `diretora@demo.rhopenfinancebrasil.com` | Diretora, titular da mesa M001 | Mesa de uso exclusivo |
@@ -95,6 +97,17 @@ Cuidados na apresentação:
 * A mesma `DEMO_PASSWORD` vale para quatro contas. Quem a tiver pode trocar a senha de uma delas; sem email, não há recuperação, e a saída é recomeçar do zero (seção 6, alguns minutos).
 * Nenhum email é enviado: uma pessoa cadastrada ao vivo recebe convite registrado como "não enviado" e não consegue entrar. Mostre o cadastro e use as contas de demonstração para o restante.
 * A demonstração não tem as funções da Etapa 4, e a Etapa 3 ainda aguarda validação.
+
+### 5.1. Redefinir a senha da administração
+
+Serve para senha esquecida, senha que circulou fora do cofre ou segundo fator perdido. Não apaga dados.
+
+1. Na Vercel, em **Settings, Environment Variables**, só em **Production**, cadastre `DEMO_ADMIN_RESET_PASSWORD` como **Secret**, com a senha nova pelas regras da seção 3 e diferente da `DEMO_PASSWORD`. Para dispensar o segundo fator, cadastre também `DEMO_MFA_OPTIONAL` com o valor `on`, como **Config**.
+2. Publique um deploy de produção: junção autorizada na `demo` ou **Redeploy** do último deploy de produção (variável nova só vale em deploy novo).
+3. No log do build deve aparecer `senha da administração redefinida (admin@...); segundo fator e sessões zerados`. Se a senha estiver fora da política ou vazada, o build para, diz o motivo e nada é alterado.
+4. Entre com `admin@demo.rhopenfinancebrasil.com` e a senha nova. Depois, apague `DEMO_ADMIN_RESET_PASSWORD` da Vercel. Se ela ficar, os deploys seguintes conferem que a senha já é aquela e não alteram nada.
+
+Para voltar a exigir o segundo fator, troque `DEMO_MFA_OPTIONAL` para `off` (ou apague) e refaça o deploy.
 
 ## 6. Recomeçar do zero
 

@@ -2,6 +2,7 @@ import { and, eq, isNull, lte, or, sql, inArray, gte } from "drizzle-orm";
 import type { DbOrTx } from "@/db/client";
 import { authUser, employee, employeePermission, employeeRole, rolePermission } from "@/db/schema";
 import { localToday } from "@/modules/shared/dates";
+import { mfaWaived } from "@/modules/shared/env";
 import { ADMIN_AREA_PERMISSIONS, PRIVILEGED_ROLES, isSensitivePermission, type Permission, type Role } from "./permissions";
 
 export type Access = {
@@ -55,12 +56,14 @@ export async function loadAccess(db: DbOrTx, employeeId: string, today = localTo
   const hasSensitiveDirect = directRows.some((d) => isSensitivePermission(d.code as Permission));
   // Segundo fator obrigatório para perfil privilegiado ou permissão sensível direta (PAR-33).
   const hasPrivilegedGrant = grantedRoles.some((r) => PRIVILEGED_ROLES.includes(r)) || hasSensitiveDirect;
+  // Demonstração com o segundo fator dispensado (DEC-46): o privilégio vale sem ele e nada exige o cadastro.
+  const privilegedAllowed = twoFactorEnabled || mfaWaived();
+  const mfaRequired = hasPrivilegedGrant && !privilegedAllowed;
 
   if (emp.status !== "active") {
-    return { ...empty(emp.status, twoFactorEnabled), grantedRoles, hasPrivilegedGrant, mfaRequired: hasPrivilegedGrant && !twoFactorEnabled };
+    return { ...empty(emp.status, twoFactorEnabled), grantedRoles, hasPrivilegedGrant, mfaRequired };
   }
 
-  const privilegedAllowed = twoFactorEnabled;
   // Toda pessoa ativa é colaboradora: o perfil básico é implícito e não depende de concessão nem de segundo fator.
   const effectiveRoles = Array.from(new Set<Role>(["employee", ...grantedRoles.filter((r) => privilegedAllowed || !PRIVILEGED_ROLES.includes(r))]));
 
@@ -86,7 +89,7 @@ export async function loadAccess(db: DbOrTx, employeeId: string, today = localTo
     effectiveRoles,
     permissions,
     hasPrivilegedGrant,
-    mfaRequired: hasPrivilegedGrant && !twoFactorEnabled,
+    mfaRequired,
   };
 }
 

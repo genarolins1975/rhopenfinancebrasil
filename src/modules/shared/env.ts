@@ -30,7 +30,9 @@ const schema = z.object({
   LOG_LEVEL: z.string().default("info"),
   /** Segredo da rota agendada de operação (outbox e varreduras); a Vercel o envia no cabeçalho Authorization. */
   CRON_SECRET: z.string().min(32).optional(),
-});
+  /** Demonstração (DEC-46): "on" dispensa o segundo fator dos perfis privilegiados. Recusado fora de APP_ENV=demo. */
+  DEMO_MFA_OPTIONAL: z.enum(["on", "off"]).default("off"),
+}).refine((e) => e.DEMO_MFA_OPTIONAL === "off" || e.APP_ENV === "demo", { path: ["DEMO_MFA_OPTIONAL"], message: "só vale em APP_ENV=demo" });
 
 export type Env = z.infer<typeof schema>;
 
@@ -50,3 +52,9 @@ export function env(): Env {
 
 export const isProduction = () => env().APP_ENV === "production";
 export const isTest = () => env().APP_ENV === "test";
+
+/**
+ * Segundo fator dispensado para perfis privilegiados (DEC-46). Lido do processo a cada chamada e só com APP_ENV=demo:
+ * fora da demonstração nenhuma combinação de variáveis dispensa o segundo fator (PAR-33).
+ */
+export const mfaWaived = () => process.env.APP_ENV === "demo" && process.env.DEMO_MFA_OPTIONAL === "on";
