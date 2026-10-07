@@ -7,11 +7,12 @@ import { safeErrorText } from "@/modules/shared/db-errors";
 /*
  * Redefinição da senha da administração da demonstração (DEC-46). Só com APP_ENV=demo e DEMO_ADMIN_RESET_PASSWORD
  * preenchida. Troca o hash da senha, apaga o segundo fator cadastrado, encerra as sessões, zera as falhas de login e os
- * links de recuperação pendentes e registra auditoria, tudo numa transação. Se a senha atual já for a informada, nada é
- * alterado: a variável esquecida no ambiente não derruba sessões a cada deploy. Senha e hash nunca vão para o log.
+ * links de recuperação pendentes e registra auditoria, tudo numa transação. Se a senha atual já for a informada, a senha
+ * fica e só o segundo fator cadastrado é apagado; sem ele, nada é alterado: a variável esquecida no ambiente não derruba
+ * sessões a cada deploy. Senha e hash nunca vão para o log.
  */
 
-export type DemoAdminResetResult = { changed: false; reason: string } | { changed: true; email: string };
+export type DemoAdminResetResult = { changed: false; reason: string } | { changed: true; email: string; passwordChanged: boolean };
 
 export async function resetDemoAdmin(): Promise<DemoAdminResetResult> {
   if (process.env.APP_ENV !== "demo") return { changed: false, reason: "APP_ENV não é demo" };
@@ -37,17 +38,22 @@ export async function resetDemoAdmin(): Promise<DemoAdminResetResult> {
     .from(authAccount)
     .where(and(eq(authAccount.userId, admin.userId), eq(authAccount.providerId, "credential")));
   if (!account) throw new Error(`conta ${email} sem senha cadastrada: recrie o banco de demonstração`);
-  if (account.hash && (await verifyPassword({ hash: account.hash, password }))) {
-    return { changed: false, reason: "a senha da administração já é a de DEMO_ADMIN_RESET_PASSWORD; nada foi alterado" };
-  }
-  if (await isPasswordBreached(password)) throw new Error("DEMO_ADMIN_RESET_PASSWORD aparece em vazamentos conhecidos de senhas; escolha outra");
-
-  const hash = await hashPassword(password);
   const userId = admin.userId;
+  // Mesma senha: só apaga o segundo fator que ainda estiver cadastrado (manter a senha e sair do código); sem ele, nada muda.
+  const samePassword = !!account.hash && (await verifyPassword({ hash: account.hash, password }));
+  if (samePassword) {
+    const [u] = await db.select({ tf: authUser.twoFactorEnabled }).from(authUser).where(eq(authUser.id, userId));
+    const [tf] = await db.select({ id: authTwoFactor.id }).from(authTwoFactor).where(eq(authTwoFactor.userId, userId));
+    if (!u?.tf && !tf) return { changed: false, reason: "a senha da administração já é a de DEMO_ADMIN_RESET_PASSWORD e não há segundo fator cadastrado; nada foi alterado" };
+  } else if (await isPasswordBreached(password)) {
+    throw new Error("DEMO_ADMIN_RESET_PASSWORD aparece em vazamentos conhecidos de senhas; escolha outra");
+  }
+
+  const hash = samePassword ? null : await hashPassword(password);
   const { emailKey } = await import("@/modules/identity/throttle");
   const { recordAudit } = await import("@/modules/audit/audit");
   await db.transaction(async (tx) => {
-    await tx.update(authAccount).set({ password: hash, updatedAt: new Date() }).where(eq(authAccount.id, account.id));
+    if (hash) await tx.update(authAccount).set({ password: hash, updatedAt: new Date() }).where(eq(authAccount.id, account.id));
     const removed = await tx.delete(authTwoFactor).where(eq(authTwoFactor.userId, userId)).returning({ id: authTwoFactor.id });
     await tx.update(authUser).set({ twoFactorEnabled: false }).where(eq(authUser.id, userId));
     await tx.delete(authSession).where(eq(authSession.userId, userId));
@@ -57,18 +63,18 @@ export async function resetDemoAdmin(): Promise<DemoAdminResetResult> {
       action: "demo.admin_password_reset",
       entityType: "employee",
       entityId: admin.employeeId,
-      after: { secondFactorRemoved: removed.length > 0, sessionsRevoked: true },
+      after: { credentialChanged: !!hash, secondFactorRemoved: removed.length > 0, sessionsRevoked: true },
       reason: "redefinição pelo build da demonstração (DEC-46)",
     });
   });
-  return { changed: true, email };
+  return { changed: true, email, passwordChanged: !!hash };
 }
 
 // Execução direta: `APP_ENV=demo pnpm exec tsx scripts/demo-admin-reset.ts` (com as variáveis de banco e a senha no ambiente).
 if (process.argv[1]?.endsWith("demo-admin-reset.ts")) {
   (async () => {
     const r = await resetDemoAdmin();
-    console.log(r.changed ? `senha da administração redefinida (${r.email}); segundo fator e sessões zerados` : `senha da administração não alterada: ${r.reason}`);
+    console.log(r.changed ? `administração ${r.email}: ${r.passwordChanged ? "senha redefinida" : "senha mantida"}; segundo fator e sessões zerados` : `senha da administração não alterada: ${r.reason}`);
     process.exit(0);
   })().catch((e) => {
     console.error("falha na redefinição da senha da administração:", safeErrorText(e));

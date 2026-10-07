@@ -42,7 +42,7 @@ async function main() {
     console.log(r.skipped ? `dados de demonstração não criados: ${r.reason}` : `dados de demonstração criados: ${r.accounts.length} contas, ${r.bookings} reservas`);
     const { resetDemoAdmin } = await import("./demo-admin-reset");
     const reset = await resetDemoAdmin();
-    console.log(reset.changed ? `senha da administração redefinida (${reset.email}); segundo fator e sessões zerados` : `senha da administração não alterada: ${reset.reason}`);
+    console.log(reset.changed ? `administração ${reset.email}: ${reset.passwordChanged ? "senha redefinida" : "senha mantida"}; segundo fator e sessões zerados` : `senha da administração não alterada: ${reset.reason}`);
     const { mfaWaived } = await import("@/modules/shared/env");
     console.log(mfaWaived() ? "segundo fator dispensado para perfis privilegiados (DEMO_MFA_OPTIONAL=on, DEC-46)" : "segundo fator obrigatório para perfis privilegiados (PAR-33)");
   }

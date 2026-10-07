@@ -396,14 +396,14 @@ Preparação pronta no repositório; publicação, branch `demo` e DNS dependem 
 
 Pedido do responsável: "reset a senha de adm do painel, nesta fase de teste nao precisa ter codigo com dois fatores"; confirmado: "Manter a dispensa do segundo fator".
 
-Entregue: `DEMO_MFA_OPTIONAL=on` faz o privilégio valer sem segundo fator, só com `APP_ENV=demo` (lida a cada requisição; em qualquer outro ambiente, a variável ligada impede o processo de subir). `DEMO_ADMIN_RESET_PASSWORD` faz o build da demonstração redefinir a senha da administração (`scripts/demo-admin-reset.ts`): política e consulta de vazamentos antes de gravar; numa transação, troca do hash, segundo fator apagado, sessões encerradas, falhas de login e links de recuperação zerados, auditoria sem senha nem hash; sem efeito quando a senha já é a informada. Roteiro na seção 5.1 de `operacao/demo-vercel.md`.
+Entregue: `DEMO_MFA_OPTIONAL=on` faz o privilégio valer sem segundo fator, só com `APP_ENV=demo` (lida a cada requisição; em qualquer outro ambiente, a variável ligada impede o processo de subir). `DEMO_ADMIN_RESET_PASSWORD` faz o build da demonstração redefinir a senha da administração (`scripts/demo-admin-reset.ts`): política e consulta de vazamentos antes de gravar; numa transação, troca do hash, segundo fator apagado, sessões encerradas, falhas de login e links de recuperação zerados, auditoria sem senha nem hash; com a senha já informada, mantém a senha e só apaga o segundo fator cadastrado (sem ele, nada muda). Roteiro na seção 5.1 de `operacao/demo-vercel.md`.
 
 Testes executados em 07/10/2026 no ambiente desta sessão (PostgreSQL 16 local):
 
 | Bateria | Comando | Resultado |
 |---|---|---|
 | Unidade | `pnpm test:unit` | 84 testes, 84 aprovados (3 novos em `tests/unit/mfa-waiver.test.ts`) |
-| Integração com banco | `pnpm test:integration` | 240 testes, 240 aprovados (5 novos em `tests/integration/demo-admin.test.ts`) |
+| Integração com banco | `pnpm test:integration` | 241 testes, 241 aprovados (6 novos em `tests/integration/demo-admin.test.ts`) |
 | Tipos e lint | `pnpm typecheck && pnpm lint` | sem erros |
 
 Não executados nesta entrega: `pnpm build`, ponta a ponta e revisão independente. Publicação depende da junção na `demo`, ato do responsável (`DEC-45`).

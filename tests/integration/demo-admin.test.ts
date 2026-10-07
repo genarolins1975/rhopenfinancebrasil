@@ -90,7 +90,7 @@ describe("redefinição da senha da administração da demonstração", () => {
     expect(await count("select count(*)::int as n from auth_two_factor")).toBe(1);
 
     process.env.DEMO_ADMIN_RESET_PASSWORD = NEW;
-    expect(await resetDemoAdmin()).toEqual({ changed: true, email: ADMIN });
+    expect(await resetDemoAdmin()).toEqual({ changed: true, email: ADMIN, passwordChanged: true });
 
     const [admin] = await db.select({ userId: authUser.id, tf: authUser.twoFactorEnabled }).from(authUser).where(eq(authUser.email, ADMIN));
     expect(admin.tf).toBe(false);
@@ -112,6 +112,26 @@ describe("redefinição da senha da administração da demonstração", () => {
     expect(await resetDemoAdmin()).toMatchObject({ changed: false });
     expect(await count("select count(*)::int as n from audit_event")).toBe(before);
     expect(await count(`select count(*)::int as n from auth_session where user_id = '${admin.userId}'`)).toBe(sessions);
+  });
+
+  it("mesma senha: mantém a senha e só apaga o segundo fator cadastrado; sem segundo fator, nada muda", async () => {
+    process.env.DEMO_ADMIN_RESET_PASSWORD = OLD;
+    expect(await resetDemoAdmin()).toMatchObject({ changed: false, reason: expect.stringMatching(/não há segundo fator/) });
+    expect(await count("select count(*)::int as n from audit_event where action = 'demo.admin_password_reset'")).toBe(0);
+
+    const first = await signIn(ADMIN, OLD);
+    const headers = cookieHeader(first.cookies);
+    const enrolled = (await auth.api.enableTwoFactor({ body: { password: OLD }, headers })) as { totpURI: string };
+    await auth.api.verifyTOTP({ body: { code: totpFromUri(enrolled.totpURI) }, headers });
+    expect((await signIn(ADMIN, OLD)).body?.twoFactorRedirect).toBe(true);
+
+    expect(await resetDemoAdmin()).toEqual({ changed: true, email: ADMIN, passwordChanged: false });
+    expect(await count("select count(*)::int as n from auth_two_factor")).toBe(0);
+    const ok = await signIn(ADMIN, OLD);
+    expect(ok.status).toBe(200);
+    expect(ok.body?.twoFactorRedirect).toBeUndefined();
+    const [ev] = (await db.execute(sql`select after::text as a from audit_event where action = 'demo.admin_password_reset'`)).rows as Array<{ a: string }>;
+    expect(JSON.parse(ev.a)).toMatchObject({ credentialChanged: false, secondFactorRemoved: true });
   });
 
   it("sem a variável ou fora da demonstração, nada muda", async () => {
